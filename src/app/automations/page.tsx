@@ -97,7 +97,7 @@ export default function AutomationsPage() {
       <header style={{ borderBottom: "1px solid #1E293B", padding: "0 32px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", height: "56px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <a href="/" style={{ width: "28px", height: "28px", borderRadius: "6px", background: "linear-gradient(135deg, #3B82F6, #8B5CF6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: 800, color: "white", textDecoration: "none" }}>A</a>
+            <a href="/"><img src="/acb-logo.png" alt="ACB" style={{ height: "28px", objectFit: "contain" }} /></a>
             <h1 style={{ fontSize: "14px", fontWeight: 600, margin: 0, color: "white" }}>Customer Journey</h1>
           </div>
           <a href="/" style={{ fontSize: "12px", color: "#64748B", textDecoration: "none" }}>← Dashboard</a>

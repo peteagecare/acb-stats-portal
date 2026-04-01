@@ -346,6 +346,7 @@ export default function Dashboard() {
   const [wonValue, setWonValue] = useState<number | null>(null);
   const [sourceBreakdown, setSourceBreakdown] = useState<Record<string, { prospects: number; leads: number }>>({});
   const [loading, setLoading] = useState(false);
+  const [loadProgress, setLoadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [goals, setGoals] = useState<Goals>(DEFAULT_GOALS);
@@ -365,46 +366,50 @@ export default function Dashboard() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setLoadProgress(0);
     try {
       const gaRes = await fetch(`/api/ga/active-users?from=${from}&to=${to}`);
-      if (gaRes.ok) {
-        const gaData = await gaRes.json();
-        setActiveUsers(gaData.activeUsers);
-      }
+      if (gaRes.ok) setActiveUsers((await gaRes.json()).activeUsers);
+      setLoadProgress(15);
 
-      // Batch 1: Core data (these are the fastest — few HubSpot calls each)
+      // Batch 1: Core data
       const [sourcesRes, actionsRes, visitsRes] = await Promise.all([
         fetch(`/api/hubspot/lead-sources?from=${from}&to=${to}`),
         fetch(`/api/hubspot/conversion-actions?from=${from}&to=${to}`),
         fetch(`/api/hubspot/home-visits?from=${from}&to=${to}`),
       ]);
-
       if (sourcesRes.ok) setSources((await sourcesRes.json()).sources);
       if (actionsRes.ok) setConversionActions((await actionsRes.json()).actions);
       if (visitsRes.ok) setHomeVisits((await visitsRes.json()).total);
+      setLoadProgress(40);
 
-      // Batch 2: Won jobs (2 HubSpot calls)
+      // Batch 2: Won jobs
       const wonRes = await fetch(`/api/hubspot/won-deals?from=${from}&to=${to}`);
       if (wonRes.ok) {
         const wonData = await wonRes.json();
         setWonJobs(wonData.total);
         setWonValue(wonData.totalValue);
       }
+      setLoadProgress(55);
 
-      // Batch 3: Source breakdown (8 HubSpot calls, staggered internally)
+      // Batch 3: Source breakdown
       const breakdownRes = await fetch(`/api/hubspot/source-breakdown?from=${from}&to=${to}`);
       if (breakdownRes.ok) setSourceBreakdown((await breakdownRes.json()).breakdown);
+      setLoadProgress(70);
 
-      // Batch 4: Lifecycle period + timeline (heavy, run sequentially)
+      // Batch 4: Lifecycle period
       const lcPeriodRes = await fetch(`/api/hubspot/lifecycle-stages-period?from=${from}&to=${to}`);
       if (lcPeriodRes.ok) setLifecyclePeriod((await lcPeriodRes.json()).stages);
+      setLoadProgress(85);
 
+      // Batch 5: Timeline
       const timelineRes = await fetch(`/api/hubspot/contacts-daily?from=${from}&to=${to}`);
       if (timelineRes.ok) {
         const timelineJson = await timelineRes.json();
         setTimelineData(timelineJson.data);
         setTimelineGranularity(timelineJson.granularity);
       }
+      setLoadProgress(100);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -458,22 +463,7 @@ export default function Dashboard() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <div
-              style={{
-                width: "32px",
-                height: "32px",
-                borderRadius: "8px",
-                background: "linear-gradient(135deg, #3B82F6, #8B5CF6)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: "14px",
-                fontWeight: 800,
-                color: "white",
-              }}
-            >
-              A
-            </div>
+            <img src="/acb-logo.png" alt="ACB" style={{ height: "36px", objectFit: "contain" }} />
             <div>
               <h1 style={{ fontSize: "15px", fontWeight: 700, margin: 0, color: "white", letterSpacing: "-0.3px" }}>
                 ACB Stats
@@ -598,53 +588,57 @@ export default function Dashboard() {
         )}
 
         {/* Full-screen loader — hides everything until data is ready */}
-        {!hasData && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 2000,
-              background: "#0F172A",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "24px",
-            }}
-          >
+        {!hasData && (() => {
+          const radius = 62;
+          const circumference = 2 * Math.PI * radius;
+          const offset = circumference - (loadProgress / 100) * circumference;
+          return (
             <div
               style={{
-                width: "72px",
-                height: "72px",
-                borderRadius: "18px",
-                background: "linear-gradient(135deg, #3B82F6, #8B5CF6)",
+                position: "fixed",
+                inset: 0,
+                zIndex: 2000,
+                background: "white",
                 display: "flex",
+                flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: "28px",
-                fontWeight: 800,
-                color: "white",
-                animation: "pulse 1.5s ease-in-out infinite",
+                gap: "24px",
               }}
             >
-              A
+              {/* Circular progress ring with logo inside */}
+              <div style={{ position: "relative", width: "148px", height: "148px" }}>
+                <svg width="148" height="148" style={{ position: "absolute", top: 0, left: 0, transform: "rotate(-90deg)" }}>
+                  {/* Background ring */}
+                  <circle cx="74" cy="74" r={radius} fill="none" stroke="#F1F5F9" strokeWidth="5" />
+                  {/* Progress ring */}
+                  <circle
+                    cx="74" cy="74" r={radius} fill="none"
+                    stroke="#3B82F6"
+                    strokeWidth="5"
+                    strokeLinecap="round"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={offset}
+                    style={{ transition: "stroke-dashoffset 0.4s ease" }}
+                  />
+                </svg>
+                {/* Logo centred inside the ring */}
+                <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <img src="/acb-logo.png" alt="Age Care Bathrooms" style={{ height: "60px", objectFit: "contain" }} />
+                </div>
+              </div>
+
+              <div style={{ textAlign: "center" }}>
+                <p style={{ fontSize: "24px", fontWeight: 800, color: "#0F172A", margin: "0 0 4px" }}>
+                  {loadProgress}%
+                </p>
+                <p style={{ fontSize: "13px", color: "#94A3B8", margin: 0 }}>
+                  {loadProgress < 15 ? "Connecting..." : loadProgress < 55 ? "Loading contacts..." : loadProgress < 85 ? "Analysing sources..." : "Almost there..."}
+                </p>
+              </div>
             </div>
-            <div style={{ textAlign: "center" }}>
-              <p style={{ fontSize: "18px", fontWeight: 700, color: "white", margin: "0 0 6px" }}>
-                Age Care Bathrooms
-              </p>
-              <p style={{ fontSize: "13px", color: "#64748B", margin: 0 }}>
-                {loading ? "Loading dashboard data..." : "Connecting to HubSpot..."}
-              </p>
-            </div>
-            <style>{`
-              @keyframes pulse {
-                0%, 100% { transform: scale(1); opacity: 1; }
-                50% { transform: scale(1.08); opacity: 0.8; }
-              }
-            `}</style>
-          </div>
-        )}
+          );
+        })()}
 
         {hasData && (
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
