@@ -9,8 +9,11 @@ async function getAccessToken(): Promise<string> {
   let auth: GoogleAuth;
 
   if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-    // Vercel: JSON credentials passed as env var
-    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+    // Env var may have: literal newlines (from .env.local), trailing \n, or escaped \\n
+    const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
+      .replace(/\n/g, "\\n")   // literal newlines → escaped for JSON.parse
+      .replace(/\\n$/, "");     // strip trailing \n after closing brace
+    const credentials = JSON.parse(raw);
     auth = new GoogleAuth({
       credentials,
       scopes: ["https://www.googleapis.com/auth/analytics.readonly"],
