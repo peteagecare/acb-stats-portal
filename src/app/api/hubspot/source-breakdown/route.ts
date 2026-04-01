@@ -29,66 +29,33 @@ function londonDateToUtcMs(dateStr: string, time: string): number {
   return Date.UTC(y, m - 1, d, hh - offsetHours, mm, ss);
 }
 
-async function hubspotFetch(path: string, token: string, options?: RequestInit) {
+async function hubspotSearch(token: string, filters: Record<string, unknown>[]): Promise<number> {
   const MAX_RETRIES = 3;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const res = await fetch(`${HUBSPOT_API}${path}`, {
-      ...options,
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...options?.headers },
+    const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts/search`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ filterGroups: [{ filters }], properties: ["conversion_action"], limit: 1 }),
     });
     if (res.status === 429 && attempt < MAX_RETRIES) {
-      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+      await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
       continue;
     }
-    if (!res.ok) throw new Error(`HubSpot API error: ${res.status} ${await res.text()}`);
-    return res.json();
+    if (!res.ok) throw new Error(`HubSpot API error: ${res.status}`);
+    const data = await res.json();
+    return data.total ?? 0;
   }
+  return 0;
 }
 
 const SOURCE_CATEGORIES: Record<string, string> = {
-  "Google Ads": "PPC",
-  "Bing Ads": "PPC",
-  "Facebook Ads": "PPC",
-  "Organic Search": "SEO",
-  "AI": "SEO",
-  "Directory Referral": "SEO",
-  "Organic Social": "Content",
-  "Organic YouTube": "Content",
+  "Google Ads": "PPC", "Bing Ads": "PPC", "Facebook Ads": "PPC",
+  "Organic Search": "SEO", "AI": "SEO", "Directory Referral": "SEO",
+  "Organic Social": "Content", "Organic YouTube": "Content",
 };
 
 function getCategory(value: string): string {
   return SOURCE_CATEGORIES[value] ?? "Other";
-}
-
-async function countSourceAction(
-  token: string,
-  fromMs: number,
-  toMs: number,
-  sourceValue: string | null,
-  actionValues: string[]
-): Promise<number> {
-  const filters: { propertyName: string; operator: string; value?: string; values?: string[] }[] = [
-    { propertyName: "createdate", operator: "GTE", value: fromMs.toString() },
-    { propertyName: "createdate", operator: "LTE", value: toMs.toString() },
-    { propertyName: "conversion_action", operator: "IN", values: actionValues },
-  ];
-
-  if (sourceValue !== null) {
-    filters.push({ propertyName: "original_lead_source", operator: "EQ", value: sourceValue });
-  }
-
-  const body = {
-    filterGroups: [{ filters }],
-    properties: ["conversion_action"],
-    limit: 1,
-  };
-
-  const data = await hubspotFetch("/crm/v3/objects/contacts/search", token, {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-
-  return data.total ?? 0;
 }
 
 export async function GET(request: NextRequest) {
@@ -103,49 +70,54 @@ export async function GET(request: NextRequest) {
   const fromMs = londonDateToUtcMs(from, "00:00:00");
   const toMs = londonDateToUtcMs(to, "23:59:59");
 
-  // Get all source options
-  const propData = await hubspotFetch("/crm/v3/properties/contacts/original_lead_source", token);
-  const options: { value: string; label: string }[] = propData.options ?? [];
+  // Get source options
+  const propRes = await fetch(`${HUBSPOT_API}/crm/v3/properties/contacts/original_lead_source`, {
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+  });
+  const propData = await propRes.json();
+  const options: { value: string }[] = propData.options ?? [];
 
   // Group sources by category
-  const categories = ["PPC", "SEO", "Content", "Other"] as const;
   const categorySourceValues: Record<string, string[]> = { PPC: [], SEO: [], Content: [], Other: [] };
   for (const opt of options) {
-    const cat = getCategory(opt.value);
-    categorySourceValues[cat].push(opt.value);
+    categorySourceValues[getCategory(opt.value)].push(opt.value);
   }
 
-  // For each category, count prospects and leads (2 queries per category = 8 total)
-  const BATCH_SIZE = 4;
-  type Query = { category: string; type: "prospects" | "leads"; sourceValues: string[]; actions: string[] };
-  const queries: Query[] = [];
-  for (const cat of categories) {
-    if (categorySourceValues[cat].length === 0) continue;
-    queries.push({ category: cat, type: "prospects", sourceValues: categorySourceValues[cat], actions: PROSPECT_ACTIONS });
-    queries.push({ category: cat, type: "leads", sourceValues: categorySourceValues[cat], actions: LEAD_ACTIONS });
-  }
+  const results: Record<string, { prospects: number; leads: number }> = {
+    PPC: { prospects: 0, leads: 0 },
+    SEO: { prospects: 0, leads: 0 },
+    Content: { prospects: 0, leads: 0 },
+    Other: { prospects: 0, leads: 0 },
+  };
 
-  const results: Record<string, { prospects: number; leads: number }> = {};
-  for (const cat of categories) results[cat] = { prospects: 0, leads: 0 };
+  const dateFilters = [
+    { propertyName: "createdate", operator: "GTE", value: fromMs.toString() },
+    { propertyName: "createdate", operator: "LTE", value: toMs.toString() },
+  ];
 
-  for (let i = 0; i < queries.length; i += BATCH_SIZE) {
-    const batch = queries.slice(i, i + BATCH_SIZE);
-    const counts = await Promise.all(
-      batch.map(async (q) => {
-        // Sum across all sources in this category
-        let total = 0;
-        for (const sv of q.sourceValues) {
-          total += await countSourceAction(token, fromMs, toMs, sv, q.actions);
-        }
-        return { category: q.category, type: q.type, count: total };
-      })
-    );
-    for (const c of counts) {
-      results[c.category][c.type] = c.count;
-    }
-    if (i + BATCH_SIZE < queries.length) {
-      await new Promise((r) => setTimeout(r, 1000));
-    }
+  // 8 queries total: 4 categories x 2 types (prospect/lead)
+  // Run them one at a time with delays to avoid rate limits
+  for (const cat of ["PPC", "SEO", "Content", "Other"] as const) {
+    const sourceValues = categorySourceValues[cat];
+    if (sourceValues.length === 0) continue;
+
+    // Prospects for this category
+    results[cat].prospects = await hubspotSearch(token, [
+      ...dateFilters,
+      { propertyName: "original_lead_source", operator: "IN", values: sourceValues },
+      { propertyName: "conversion_action", operator: "IN", values: PROSPECT_ACTIONS },
+    ]);
+
+    await new Promise((r) => setTimeout(r, 500));
+
+    // Leads for this category
+    results[cat].leads = await hubspotSearch(token, [
+      ...dateFilters,
+      { propertyName: "original_lead_source", operator: "IN", values: sourceValues },
+      { propertyName: "conversion_action", operator: "IN", values: LEAD_ACTIONS },
+    ]);
+
+    await new Promise((r) => setTimeout(r, 500));
   }
 
   return Response.json({ breakdown: results });

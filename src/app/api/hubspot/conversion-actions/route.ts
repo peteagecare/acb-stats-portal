@@ -130,7 +130,7 @@ export async function GET(request: NextRequest) {
     );
     allCounts.push(...results);
     if (i + BATCH_SIZE < allQueries.length) {
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, 1500));
     }
   }
 

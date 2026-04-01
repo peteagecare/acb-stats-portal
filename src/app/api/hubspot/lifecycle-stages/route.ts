@@ -71,7 +71,7 @@ export async function GET() {
     );
     counts.push(...results);
     if (i + BATCH_SIZE < options.length) {
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, 1500));
     }
   }
 

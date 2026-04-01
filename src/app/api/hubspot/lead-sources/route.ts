@@ -138,7 +138,7 @@ export async function GET(request: NextRequest) {
     allCounts.push(...results);
     // Wait 1s between batches to stay within HubSpot's secondly limit
     if (i + BATCH_SIZE < allQueries.length) {
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, 1500));
     }
   }
 

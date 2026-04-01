@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     const batch = options.slice(i, i + BATCH_SIZE);
     const results = await Promise.all(batch.map((opt) => countByStageInPeriod(token, opt.value, fromMs, toMs)));
     counts.push(...results);
-    if (i + BATCH_SIZE < options.length) await new Promise((r) => setTimeout(r, 1000));
+    if (i + BATCH_SIZE < options.length) await new Promise((r) => setTimeout(r, 1500));
   }
 
   const stages = options

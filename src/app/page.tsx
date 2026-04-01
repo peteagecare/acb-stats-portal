@@ -372,38 +372,18 @@ export default function Dashboard() {
         setActiveUsers(gaData.activeUsers);
       }
 
-      const sourcesRes = await fetch(`/api/hubspot/lead-sources?from=${from}&to=${to}`);
-      if (!sourcesRes.ok) {
-        const text = await sourcesRes.text();
-        throw new Error(text || "Failed to fetch sources");
-      }
-      const sourcesData = await sourcesRes.json();
-      setSources(sourcesData.sources);
+      // Batch 1: Core data (these are the fastest — few HubSpot calls each)
+      const [sourcesRes, actionsRes, visitsRes] = await Promise.all([
+        fetch(`/api/hubspot/lead-sources?from=${from}&to=${to}`),
+        fetch(`/api/hubspot/conversion-actions?from=${from}&to=${to}`),
+        fetch(`/api/hubspot/home-visits?from=${from}&to=${to}`),
+      ]);
 
-      const actionsRes = await fetch(`/api/hubspot/conversion-actions?from=${from}&to=${to}`);
-      if (!actionsRes.ok) {
-        const text = await actionsRes.text();
-        throw new Error(text || "Failed to fetch conversion actions");
-      }
-      const actionsData = await actionsRes.json();
-      setConversionActions(actionsData.actions);
+      if (sourcesRes.ok) setSources((await sourcesRes.json()).sources);
+      if (actionsRes.ok) setConversionActions((await actionsRes.json()).actions);
+      if (visitsRes.ok) setHomeVisits((await visitsRes.json()).total);
 
-      const visitsRes = await fetch(`/api/hubspot/home-visits?from=${from}&to=${to}`);
-      if (!visitsRes.ok) {
-        const text = await visitsRes.text();
-        throw new Error(text || "Failed to fetch home visits");
-      }
-      const visitsData = await visitsRes.json();
-      setHomeVisits(visitsData.total);
-
-      // Source breakdown (prospects vs leads per category)
-      const breakdownRes = await fetch(`/api/hubspot/source-breakdown?from=${from}&to=${to}`);
-      if (breakdownRes.ok) {
-        const breakdownData = await breakdownRes.json();
-        setSourceBreakdown(breakdownData.breakdown);
-      }
-
-      // Won jobs
+      // Batch 2: Won jobs (2 HubSpot calls)
       const wonRes = await fetch(`/api/hubspot/won-deals?from=${from}&to=${to}`);
       if (wonRes.ok) {
         const wonData = await wonRes.json();
@@ -411,14 +391,14 @@ export default function Dashboard() {
         setWonValue(wonData.totalValue);
       }
 
-      // Lifecycle stages for period
-      const lcPeriodRes = await fetch(`/api/hubspot/lifecycle-stages-period?from=${from}&to=${to}`);
-      if (lcPeriodRes.ok) {
-        const lcData = await lcPeriodRes.json();
-        setLifecyclePeriod(lcData.stages);
-      }
+      // Batch 3: Source breakdown (8 HubSpot calls, staggered internally)
+      const breakdownRes = await fetch(`/api/hubspot/source-breakdown?from=${from}&to=${to}`);
+      if (breakdownRes.ok) setSourceBreakdown((await breakdownRes.json()).breakdown);
 
-      // Contacts timeline (auto-buckets by day/week/month)
+      // Batch 4: Lifecycle period + timeline (heavy, run sequentially)
+      const lcPeriodRes = await fetch(`/api/hubspot/lifecycle-stages-period?from=${from}&to=${to}`);
+      if (lcPeriodRes.ok) setLifecyclePeriod((await lcPeriodRes.json()).stages);
+
       const timelineRes = await fetch(`/api/hubspot/contacts-daily?from=${from}&to=${to}`);
       if (timelineRes.ok) {
         const timelineJson = await timelineRes.json();
@@ -617,11 +597,52 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Loading */}
-        {loading && !hasData && (
-          <div style={{ textAlign: "center", padding: "80px 0", color: "#94A3B8" }}>
-            <div style={{ fontSize: "32px", marginBottom: "12px", opacity: 0.5 }}>...</div>
-            <p style={{ fontSize: "14px", margin: 0 }}>Fetching data</p>
+        {/* Full-screen loader — hides everything until data is ready */}
+        {!hasData && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 2000,
+              background: "#0F172A",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "24px",
+            }}
+          >
+            <div
+              style={{
+                width: "72px",
+                height: "72px",
+                borderRadius: "18px",
+                background: "linear-gradient(135deg, #3B82F6, #8B5CF6)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "28px",
+                fontWeight: 800,
+                color: "white",
+                animation: "pulse 1.5s ease-in-out infinite",
+              }}
+            >
+              A
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <p style={{ fontSize: "18px", fontWeight: 700, color: "white", margin: "0 0 6px" }}>
+                Age Care Bathrooms
+              </p>
+              <p style={{ fontSize: "13px", color: "#64748B", margin: 0 }}>
+                {loading ? "Loading dashboard data..." : "Connecting to HubSpot..."}
+              </p>
+            </div>
+            <style>{`
+              @keyframes pulse {
+                0%, 100% { transform: scale(1); opacity: 1; }
+                50% { transform: scale(1.08); opacity: 0.8; }
+              }
+            `}</style>
           </div>
         )}
 

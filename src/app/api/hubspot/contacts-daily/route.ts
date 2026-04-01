@@ -179,7 +179,7 @@ export async function GET(request: NextRequest) {
       results.push({ label: batch[j].label, count: counts[j] });
     }
     if (i + BATCH_SIZE < buckets.length) {
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, 1500));
     }
   }
 
