@@ -617,7 +617,9 @@ export default function Dashboard() {
 
         {/* Full-screen loader — hides everything until data is ready */}
         {!dataReady && (() => {
-          const radius = 62;
+          const size = 220;
+          const centre = size / 2;
+          const radius = 100;
           const circumference = 2 * Math.PI * radius;
           const offset = circumference - (loadProgress / 100) * circumference;
           return (
@@ -635,24 +637,21 @@ export default function Dashboard() {
               }}
             >
               {/* Circular progress ring with logo inside */}
-              <div style={{ position: "relative", width: "148px", height: "148px" }}>
-                <svg width="148" height="148" style={{ position: "absolute", top: 0, left: 0, transform: "rotate(-90deg)" }}>
-                  {/* Background ring */}
-                  <circle cx="74" cy="74" r={radius} fill="none" stroke="#F1F5F9" strokeWidth="5" />
-                  {/* Progress ring */}
+              <div style={{ position: "relative", width: `${size}px`, height: `${size}px` }}>
+                <svg width={size} height={size} style={{ position: "absolute", top: 0, left: 0, transform: "rotate(-90deg)" }}>
+                  <circle cx={centre} cy={centre} r={radius} fill="none" stroke="#F1F5F9" strokeWidth="4" />
                   <circle
-                    cx="74" cy="74" r={radius} fill="none"
+                    cx={centre} cy={centre} r={radius} fill="none"
                     stroke="#3B82F6"
-                    strokeWidth="5"
+                    strokeWidth="4"
                     strokeLinecap="round"
                     strokeDasharray={circumference}
                     strokeDashoffset={offset}
                     style={{ transition: "stroke-dashoffset 0.4s ease" }}
                   />
                 </svg>
-                {/* Logo centred inside the ring */}
                 <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <img src="/acb-logo.png" alt="Age Care Bathrooms" style={{ height: "60px", objectFit: "contain" }} />
+                  <img src="/acb-logo.png" alt="Age Care Bathrooms" style={{ height: "70px", objectFit: "contain" }} />
                 </div>
               </div>
 
