@@ -34,8 +34,10 @@ async function hubspotFetch(path: string, token: string, options?: RequestInit) 
   }
 }
 
-// Won-Waiting lifecycle stage value (from the lifecycle stages API)
+// Won-Waiting lifecycle stage value
 const WON_WAITING_STAGE = "151694551";
+// Completed lifecycle stage value
+const COMPLETED_STAGE = "151694559";
 
 export async function GET(request: NextRequest) {
   const token = process.env.HUBSPOT_ACCESS_TOKEN;
@@ -44,29 +46,43 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const from = searchParams.get("from");
   const to = searchParams.get("to");
-
   if (!from || !to) return Response.json({ error: "Missing required params: from, to" }, { status: 400 });
 
   const fromMs = londonDateToUtcMs(from, "00:00:00");
   const toMs = londonDateToUtcMs(to, "23:59:59");
 
-  // Count contacts that entered Won-Waiting lifecycle stage in the date range
-  const body = {
-    filterGroups: [{
-      filters: [
-        { propertyName: "lifecyclestage", operator: "EQ", value: WON_WAITING_STAGE },
-        { propertyName: "createdate", operator: "GTE", value: fromMs.toString() },
-        { propertyName: "createdate", operator: "LTE", value: toMs.toString() },
-      ],
-    }],
-    properties: ["lifecyclestage"],
-    limit: 1,
-  };
+  // Count contacts whose deal was created in the date range AND are in Won-Waiting or Completed stage
+  // Using first_deal_created_date as the date the deal was won
+  const stages = [WON_WAITING_STAGE, COMPLETED_STAGE];
+  let total = 0;
+  let totalValue = 0;
 
-  const data = await hubspotFetch("/crm/v3/objects/contacts/search", token, {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  for (const stage of stages) {
+    const body = {
+      filterGroups: [{
+        filters: [
+          { propertyName: "lifecyclestage", operator: "EQ", value: stage },
+          { propertyName: "first_deal_created_date", operator: "GTE", value: fromMs.toString() },
+          { propertyName: "first_deal_created_date", operator: "LTE", value: toMs.toString() },
+        ],
+      }],
+      properties: ["lifecyclestage", "recent_deal_amount", "first_deal_created_date"],
+      limit: 100,
+    };
 
-  return Response.json({ total: data.total ?? 0 });
+    const data = await hubspotFetch("/crm/v3/objects/contacts/search", token, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+
+    total += data.total ?? 0;
+
+    // Sum deal values
+    for (const contact of data.results ?? []) {
+      const amt = parseFloat(contact.properties?.recent_deal_amount ?? "0");
+      if (!isNaN(amt)) totalValue += amt;
+    }
+  }
+
+  return Response.json({ total, totalValue: Math.round(totalValue) });
 }

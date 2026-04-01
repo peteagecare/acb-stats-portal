@@ -290,6 +290,7 @@ export default function Dashboard() {
   const [lifecycleStages, setLifecycleStages] = useState<{ label: string; value: string; count: number }[]>([]);
   const [lifecyclePeriod, setLifecyclePeriod] = useState<{ label: string; value: string; count: number }[]>([]);
   const [wonJobs, setWonJobs] = useState<number | null>(null);
+  const [wonValue, setWonValue] = useState<number | null>(null);
   const [sourceBreakdown, setSourceBreakdown] = useState<Record<string, { prospects: number; leads: number }>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -354,6 +355,7 @@ export default function Dashboard() {
       if (wonRes.ok) {
         const wonData = await wonRes.json();
         setWonJobs(wonData.total);
+        setWonValue(wonData.totalValue);
       }
 
       // Lifecycle stages for period
@@ -600,7 +602,7 @@ export default function Dashboard() {
                 rate={(homeVisits ?? 0) > 0 ? (((wonJobs ?? 0) / (homeVisits ?? 1)) * 100).toFixed(1) : "0"}
                 label="Visit → Won"
               />
-              <KpiCard label="Won Jobs" value={wonJobs} colour="#059669" subtitle={(homeVisits ?? 0) > 0 ? `${(((wonJobs ?? 0) / (homeVisits ?? 1)) * 100).toFixed(1)}% of visits` : undefined} />
+              <KpiCard label="Won Jobs" value={wonJobs} colour="#059669" subtitle={wonValue ? `£${wonValue.toLocaleString()} value` : undefined} />
             </div>
 
             {/* === LIFECYCLE STAGES === */}
@@ -928,10 +930,15 @@ export default function Dashboard() {
                 bg="#ECFDF5"
                 rate={(homeVisits ?? 0) > 0 ? `${(((wonJobs ?? 0) / (homeVisits ?? 1)) * 100).toFixed(1)}% of visits` : undefined}
               >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 0" }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "16px 0", gap: "8px" }}>
                   <span style={{ fontSize: "48px", fontWeight: 800, color: "#059669", lineHeight: 1 }}>
                     {(wonJobs ?? 0).toLocaleString()}
                   </span>
+                  {wonValue !== null && wonValue > 0 && (
+                    <span style={{ fontSize: "18px", fontWeight: 700, color: "#047857" }}>
+                      £{wonValue.toLocaleString()}
+                    </span>
+                  )}
                 </div>
               </FunnelCard>
             </div>
