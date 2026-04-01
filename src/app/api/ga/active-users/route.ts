@@ -6,13 +6,26 @@ const GA4_PROPERTY_ID = process.env.GA4_PROPERTY_ID;
 const GA4_API = "https://analyticsdata.googleapis.com/v1beta";
 
 async function getAccessToken(): Promise<string> {
-  const keyPath = path.resolve(
-    process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH || "./ga-service-account.json"
-  );
-  const auth = new GoogleAuth({
-    keyFile: keyPath,
-    scopes: ["https://www.googleapis.com/auth/analytics.readonly"],
-  });
+  let auth: GoogleAuth;
+
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+    // Vercel: JSON credentials passed as env var
+    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+    auth = new GoogleAuth({
+      credentials,
+      scopes: ["https://www.googleapis.com/auth/analytics.readonly"],
+    });
+  } else {
+    // Local: read from file
+    const keyPath = path.resolve(
+      process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH || "./ga-service-account.json"
+    );
+    auth = new GoogleAuth({
+      keyFile: keyPath,
+      scopes: ["https://www.googleapis.com/auth/analytics.readonly"],
+    });
+  }
+
   const client = await auth.getClient();
   const tokenResponse = await client.getAccessToken();
   return tokenResponse.token!;
