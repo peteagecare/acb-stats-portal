@@ -12,21 +12,33 @@ interface LeadSource {
 interface Goals {
   leadGoalPerMonth: number | null;
   visitsGoalPerMonth: number | null;
+  ppcPercentGoal: number | null;
+  seoPercentGoal: number | null;
+  contentPercentGoal: number | null;
 }
 
-const DEFAULT_GOALS: Goals = { leadGoalPerMonth: null, visitsGoalPerMonth: null };
+const DEFAULT_GOALS: Goals = {
+  leadGoalPerMonth: null,
+  visitsGoalPerMonth: null,
+  ppcPercentGoal: null,
+  seoPercentGoal: null,
+  contentPercentGoal: null,
+};
 
-function loadGoals(): Goals {
-  if (typeof window === "undefined") return DEFAULT_GOALS;
+async function loadGoalsFromServer(): Promise<Goals> {
   try {
-    const raw = localStorage.getItem("acb_goals");
-    if (raw) return { ...DEFAULT_GOALS, ...JSON.parse(raw) };
+    const res = await fetch("/api/goals");
+    if (res.ok) return { ...DEFAULT_GOALS, ...(await res.json()) };
   } catch {}
   return DEFAULT_GOALS;
 }
 
-function saveGoals(goals: Goals) {
-  localStorage.setItem("acb_goals", JSON.stringify(goals));
+async function saveGoalsToServer(goals: Goals) {
+  await fetch("/api/goals", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(goals),
+  });
 }
 
 /* ── Constants ── */
@@ -74,22 +86,25 @@ function parseGoalDraft(val: string): number | null {
   return n !== null && !isNaN(n) && n > 0 ? n : null;
 }
 
-function SettingsModal({ onClose }: { onClose: () => void }) {
-  const [goals, setGoals] = useState<Goals>(loadGoals);
-  const [draftLead, setDraftLead] = useState<string>(
-    goals.leadGoalPerMonth !== null ? String(goals.leadGoalPerMonth) : ""
-  );
-  const [draftVisitsMonth, setDraftVisitsMonth] = useState<string>(
-    goals.visitsGoalPerMonth !== null ? String(goals.visitsGoalPerMonth) : ""
-  );
-  function handleSave() {
+function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initialGoals: Goals }) {
+  const [draftLead, setDraftLead] = useState(initialGoals.leadGoalPerMonth !== null ? String(initialGoals.leadGoalPerMonth) : "");
+  const [draftVisitsMonth, setDraftVisitsMonth] = useState(initialGoals.visitsGoalPerMonth !== null ? String(initialGoals.visitsGoalPerMonth) : "");
+  const [draftPpc, setDraftPpc] = useState(initialGoals.ppcPercentGoal !== null ? String(initialGoals.ppcPercentGoal) : "");
+  const [draftSeo, setDraftSeo] = useState(initialGoals.seoPercentGoal !== null ? String(initialGoals.seoPercentGoal) : "");
+  const [draftContent, setDraftContent] = useState(initialGoals.contentPercentGoal !== null ? String(initialGoals.contentPercentGoal) : "");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
     const updated: Goals = {
-      ...goals,
       leadGoalPerMonth: parseGoalDraft(draftLead),
       visitsGoalPerMonth: parseGoalDraft(draftVisitsMonth),
+      ppcPercentGoal: parseGoalDraft(draftPpc),
+      seoPercentGoal: parseGoalDraft(draftSeo),
+      contentPercentGoal: parseGoalDraft(draftContent),
     };
-    setGoals(updated);
-    saveGoals(updated);
+    await saveGoalsToServer(updated);
+    setSaving(false);
     onClose();
   }
 
@@ -215,6 +230,43 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
               }}
             />
           </div>
+
+          <div style={{ borderTop: "1px solid #F1F5F9" }} />
+
+          <div>
+            <p style={{ fontSize: "13px", fontWeight: 600, color: "#0F172A", marginBottom: "6px" }}>
+              Source Channel Goals (%)
+            </p>
+            <p style={{ fontSize: "12px", color: "#94A3B8", margin: "0 0 12px" }}>
+              Target percentage of leads + prospects from each channel.
+            </p>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <div style={{ flex: 1 }}>
+                <label htmlFor="ppcGoal" style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#EF4444", marginBottom: "4px" }}>PPC %</label>
+                <input id="ppcGoal" type="number" min="0" max="100" placeholder="e.g. 60" value={draftPpc} onChange={(e) => setDraftPpc(e.target.value)}
+                  style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label htmlFor="seoGoal" style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#10B981", marginBottom: "4px" }}>SEO %</label>
+                <input id="seoGoal" type="number" min="0" max="100" placeholder="e.g. 25" value={draftSeo} onChange={(e) => setDraftSeo(e.target.value)}
+                  style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label htmlFor="contentGoal" style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#8B5CF6", marginBottom: "4px" }}>Content %</label>
+                <input id="contentGoal" type="number" min="0" max="100" placeholder="e.g. 15" value={draftContent} onChange={(e) => setDraftContent(e.target.value)}
+                  style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
+              </div>
+            </div>
+            {(() => {
+              const total = (parseGoalDraft(draftPpc) ?? 0) + (parseGoalDraft(draftSeo) ?? 0) + (parseGoalDraft(draftContent) ?? 0);
+              if (total > 0) return (
+                <p style={{ fontSize: "11px", color: total > 100 ? "#DC2626" : "#94A3B8", margin: "8px 0 0" }}>
+                  Total: {total}% {total > 100 ? "(exceeds 100%)" : `(${100 - total}% other)`}
+                </p>
+              );
+              return null;
+            })()}
+          </div>
         </div>
 
         <div
@@ -243,18 +295,19 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           </button>
           <button
             onClick={handleSave}
+            disabled={saving}
             style={{
               padding: "9px 20px",
               fontSize: "13px",
               fontWeight: 600,
               borderRadius: "10px",
               border: "none",
-              background: "#0F172A",
+              background: saving ? "#64748B" : "#0F172A",
               color: "white",
               cursor: "pointer",
             }}
           >
-            Save
+            {saving ? "Saving..." : "Save"}
           </button>
         </div>
       </div>
@@ -298,7 +351,7 @@ export default function Dashboard() {
   const [goals, setGoals] = useState<Goals>(DEFAULT_GOALS);
 
   useEffect(() => {
-    setGoals(loadGoals());
+    loadGoalsFromServer().then(setGoals);
   }, [showSettings]);
 
   // Lifecycle stages — live count, not date-filtered
@@ -842,9 +895,15 @@ export default function Dashboard() {
                 </span>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                {categoryCards.map((cat) => (
-                  <SourcePanel key={cat.title} {...cat} sourcesTotal={sourcesTotal} breakdown={sourceBreakdown[cat.title]} />
-                ))}
+                {categoryCards.map((cat) => {
+                  const goalPct = cat.title === "PPC" ? goals.ppcPercentGoal
+                    : cat.title === "SEO" ? goals.seoPercentGoal
+                    : cat.title === "Content" ? goals.contentPercentGoal
+                    : null;
+                  return (
+                    <SourcePanel key={cat.title} {...cat} sourcesTotal={sourcesTotal} breakdown={sourceBreakdown[cat.title]} goalPercent={goalPct} />
+                  );
+                })}
               </div>
             </div>
 
@@ -947,7 +1006,7 @@ export default function Dashboard() {
         )}
       </main>
 
-      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {showSettings && <SettingsModal initialGoals={goals} onClose={() => setShowSettings(false)} />}
     </div>
   );
 }
@@ -1096,6 +1155,7 @@ function SourcePanel({
   icon,
   sourcesTotal,
   breakdown,
+  goalPercent,
 }: {
   title: string;
   total: number;
@@ -1105,9 +1165,11 @@ function SourcePanel({
   icon: string;
   sourcesTotal: number;
   breakdown?: { prospects: number; leads: number };
+  goalPercent?: number | null;
 }) {
   const filtered = sources.filter((s) => s.count > 0).sort((a, b) => b.count - a.count);
-  const pct = sourcesTotal > 0 ? ((total / sourcesTotal) * 100).toFixed(1) : "0";
+  const pct = sourcesTotal > 0 ? ((total / sourcesTotal) * 100) : 0;
+  const pctStr = pct.toFixed(1);
 
   return (
     <div
@@ -1146,7 +1208,7 @@ function SourcePanel({
           <p style={{ fontSize: "24px", fontWeight: 800, color: colour, margin: 0, lineHeight: 1 }}>
             {total.toLocaleString()}
           </p>
-          <p style={{ fontSize: "11px", color: "#94A3B8", margin: "2px 0 0" }}>{pct}%</p>
+          <p style={{ fontSize: "11px", color: "#94A3B8", margin: "2px 0 0" }}>{pctStr}%</p>
         </div>
       </div>
 
@@ -1164,8 +1226,27 @@ function SourcePanel({
         </div>
       )}
 
+      {/* Goal vs actual */}
+      {goalPercent && goalPercent > 0 && (
+        <div style={{ background: "#F8FAFC", borderRadius: "8px", padding: "8px 12px", border: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: "11px", color: "#64748B" }}>
+            Goal: <strong>{goalPercent}%</strong> of contacts
+          </span>
+          <span style={{
+            fontSize: "11px",
+            fontWeight: 700,
+            color: pct >= goalPercent ? "#059669" : "#DC2626",
+            background: pct >= goalPercent ? "#ECFDF5" : "#FEF2F2",
+            borderRadius: "6px",
+            padding: "2px 8px",
+          }}>
+            {pct >= goalPercent ? "On target" : `${(goalPercent - pct).toFixed(1)}% below`}
+          </span>
+        </div>
+      )}
+
       {/* Share bar */}
-      <div style={{ background: "#F1F5F9", borderRadius: "4px", height: "4px", overflow: "hidden" }}>
+      <div style={{ background: "#F1F5F9", borderRadius: "4px", height: "4px", overflow: "hidden", position: "relative" }}>
         <div
           style={{
             width: `${sourcesTotal > 0 ? (total / sourcesTotal) * 100 : 0}%`,
@@ -1175,6 +1256,9 @@ function SourcePanel({
             transition: "width 0.4s ease",
           }}
         />
+        {goalPercent && goalPercent > 0 && (
+          <div style={{ position: "absolute", left: `${goalPercent}%`, top: "-2px", width: "2px", height: "8px", background: "#0F172A", borderRadius: "1px", opacity: 0.5 }} title={`Goal: ${goalPercent}%`} />
+        )}
       </div>
 
       {/* Breakdown rows */}
