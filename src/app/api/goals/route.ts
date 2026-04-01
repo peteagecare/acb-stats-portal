@@ -6,10 +6,12 @@ const GOALS_PATH = path.join(process.cwd(), "goals.json");
 
 const DEFAULT_GOALS = {
   leadGoalPerMonth: null as number | null,
+  prospectsGoalPerMonth: null as number | null,
   visitsGoalPerMonth: null as number | null,
   ppcPercentGoal: null as number | null,
   seoPercentGoal: null as number | null,
   contentPercentGoal: null as number | null,
+  otherPercentGoal: null as number | null,
 };
 
 async function loadGoals() {

@@ -11,18 +11,22 @@ interface LeadSource {
 
 interface Goals {
   leadGoalPerMonth: number | null;
+  prospectsGoalPerMonth: number | null;
   visitsGoalPerMonth: number | null;
   ppcPercentGoal: number | null;
   seoPercentGoal: number | null;
   contentPercentGoal: number | null;
+  otherPercentGoal: number | null;
 }
 
 const DEFAULT_GOALS: Goals = {
   leadGoalPerMonth: null,
+  prospectsGoalPerMonth: null,
   visitsGoalPerMonth: null,
   ppcPercentGoal: null,
   seoPercentGoal: null,
   contentPercentGoal: null,
+  otherPercentGoal: null,
 };
 
 async function loadGoalsFromServer(): Promise<Goals> {
@@ -88,20 +92,24 @@ function parseGoalDraft(val: string): number | null {
 
 function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initialGoals: Goals }) {
   const [draftLead, setDraftLead] = useState(initialGoals.leadGoalPerMonth !== null ? String(initialGoals.leadGoalPerMonth) : "");
+  const [draftProspects, setDraftProspects] = useState(initialGoals.prospectsGoalPerMonth !== null ? String(initialGoals.prospectsGoalPerMonth) : "");
   const [draftVisitsMonth, setDraftVisitsMonth] = useState(initialGoals.visitsGoalPerMonth !== null ? String(initialGoals.visitsGoalPerMonth) : "");
   const [draftPpc, setDraftPpc] = useState(initialGoals.ppcPercentGoal !== null ? String(initialGoals.ppcPercentGoal) : "");
   const [draftSeo, setDraftSeo] = useState(initialGoals.seoPercentGoal !== null ? String(initialGoals.seoPercentGoal) : "");
   const [draftContent, setDraftContent] = useState(initialGoals.contentPercentGoal !== null ? String(initialGoals.contentPercentGoal) : "");
+  const [draftOther, setDraftOther] = useState(initialGoals.otherPercentGoal !== null ? String(initialGoals.otherPercentGoal) : "");
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
     setSaving(true);
     const updated: Goals = {
       leadGoalPerMonth: parseGoalDraft(draftLead),
+      prospectsGoalPerMonth: parseGoalDraft(draftProspects),
       visitsGoalPerMonth: parseGoalDraft(draftVisitsMonth),
       ppcPercentGoal: parseGoalDraft(draftPpc),
       seoPercentGoal: parseGoalDraft(draftSeo),
       contentPercentGoal: parseGoalDraft(draftContent),
+      otherPercentGoal: parseGoalDraft(draftOther),
     };
     await saveGoalsToServer(updated);
     setSaving(false);
@@ -169,67 +177,79 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
         </div>
 
         <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "20px" }}>
-          <div>
+          {/* LEAD GOAL — hero style */}
+          <div style={{ background: "#EFF6FF", borderRadius: "12px", padding: "20px", border: "2px solid #3B82F6" }}>
             <label
               htmlFor="leadGoal"
-              style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#0F172A", marginBottom: "6px" }}
+              style={{ display: "block", fontSize: "15px", fontWeight: 700, color: "#1D4ED8", marginBottom: "4px" }}
             >
               Lead Goal Per Month
             </label>
-            <p style={{ fontSize: "12px", color: "#94A3B8", margin: "0 0 10px" }}>
-              Auto-adjusts to your selected date range.
+            <p style={{ fontSize: "12px", color: "#64748B", margin: "0 0 12px" }}>
+              Your primary KPI. How many leads should we generate each month?
             </p>
             <input
               id="leadGoal"
               type="number"
               min="1"
-              placeholder="e.g. 50"
+              placeholder="e.g. 150"
               value={draftLead}
               onChange={(e) => setDraftLead(e.target.value)}
               style={{
                 width: "100%",
-                border: "1px solid #E2E8F0",
+                border: "2px solid #3B82F6",
                 borderRadius: "10px",
-                padding: "10px 14px",
-                fontSize: "14px",
-                color: "#0F172A",
+                padding: "12px 14px",
+                fontSize: "18px",
+                fontWeight: 700,
+                color: "#1D4ED8",
                 boxSizing: "border-box",
-                background: "#F8FAFC",
+                background: "white",
               }}
             />
           </div>
 
-          <div style={{ borderTop: "1px solid #F1F5F9" }} />
-
-          <div>
-            <label
-              htmlFor="visitsMonthGoal"
-              style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#0F172A", marginBottom: "6px" }}
-            >
-              Site Visits Booked Per Month
-            </label>
-            <p style={{ fontSize: "12px", color: "#94A3B8", margin: "0 0 10px" }}>
-              Auto-adjusts to your selected date range.
-            </p>
-            <input
-              id="visitsMonthGoal"
-              type="number"
-              min="1"
-              placeholder="e.g. 20"
-              value={draftVisitsMonth}
-              onChange={(e) => setDraftVisitsMonth(e.target.value)}
-              style={{
-                width: "100%",
-                border: "1px solid #E2E8F0",
-                borderRadius: "10px",
-                padding: "10px 14px",
-                fontSize: "14px",
-                color: "#0F172A",
-                boxSizing: "border-box",
-                background: "#F8FAFC",
-              }}
-            />
+          {/* Prospects + Visits side by side */}
+          <div style={{ display: "flex", gap: "12px" }}>
+            <div style={{ flex: 1 }}>
+              <label htmlFor="prospectsGoal" style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#B45309", marginBottom: "4px" }}>
+                Prospects / Month
+              </label>
+              <p style={{ fontSize: "11px", color: "#94A3B8", margin: "0 0 8px" }}>
+                Target prospect actions
+              </p>
+              <input
+                id="prospectsGoal"
+                type="number"
+                min="1"
+                placeholder="e.g. 120"
+                value={draftProspects}
+                onChange={(e) => setDraftProspects(e.target.value)}
+                style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label htmlFor="visitsMonthGoal" style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#047857", marginBottom: "4px" }}>
+                Home Visits / Month
+              </label>
+              <p style={{ fontSize: "11px", color: "#94A3B8", margin: "0 0 8px" }}>
+                Target visits booked
+              </p>
+              <input
+                id="visitsMonthGoal"
+                type="number"
+                min="1"
+                placeholder="e.g. 20"
+                value={draftVisitsMonth}
+                onChange={(e) => setDraftVisitsMonth(e.target.value)}
+                style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }}
+              />
+            </div>
           </div>
+
+          <p style={{ fontSize: "11px", color: "#94A3B8", margin: "-8px 0 0", textAlign: "center" }}>
+            All goals auto-adjust to your selected date range
+          </p>
 
           <div style={{ borderTop: "1px solid #F1F5F9" }} />
 
@@ -256,9 +276,14 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
                 <input id="contentGoal" type="number" min="0" max="100" placeholder="e.g. 15" value={draftContent} onChange={(e) => setDraftContent(e.target.value)}
                   style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
               </div>
+              <div style={{ flex: 1 }}>
+                <label htmlFor="otherGoal" style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#64748B", marginBottom: "4px" }}>Other %</label>
+                <input id="otherGoal" type="number" min="0" max="100" placeholder="e.g. 15" value={draftOther} onChange={(e) => setDraftOther(e.target.value)}
+                  style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
+              </div>
             </div>
             {(() => {
-              const total = (parseGoalDraft(draftPpc) ?? 0) + (parseGoalDraft(draftSeo) ?? 0) + (parseGoalDraft(draftContent) ?? 0);
+              const total = (parseGoalDraft(draftPpc) ?? 0) + (parseGoalDraft(draftSeo) ?? 0) + (parseGoalDraft(draftContent) ?? 0) + (parseGoalDraft(draftOther) ?? 0);
               if (total > 0) return (
                 <p style={{ fontSize: "11px", color: total > 100 ? "#DC2626" : "#94A3B8", margin: "8px 0 0" }}>
                   Total: {total}% {total > 100 ? "(exceeds 100%)" : `(${100 - total}% other)`}
@@ -748,8 +773,18 @@ export default function Dashboard() {
             )}
 
             {/* === GOAL BARS === */}
-            {(goals.leadGoalPerMonth || goals.visitsGoalPerMonth) && (
-              <div style={{ display: "grid", gridTemplateColumns: goals.leadGoalPerMonth && goals.visitsGoalPerMonth ? "1fr 1fr" : "1fr", gap: "16px" }}>
+            {(goals.leadGoalPerMonth || goals.prospectsGoalPerMonth || goals.visitsGoalPerMonth) && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
+                {goals.prospectsGoalPerMonth !== null && goals.prospectsGoalPerMonth > 0 && (
+                  <GoalBar
+                    current={prospectsTotal}
+                    monthlyGoal={goals.prospectsGoalPerMonth}
+                    label="Prospect Goal"
+                    colour="#F59E0B"
+                    from={from}
+                    to={to}
+                  />
+                )}
                 {goals.leadGoalPerMonth !== null && goals.leadGoalPerMonth > 0 && (
                   <GoalBar
                     current={leadsTotal}
@@ -915,6 +950,7 @@ export default function Dashboard() {
                   const goalPct = cat.title === "PPC" ? goals.ppcPercentGoal
                     : cat.title === "SEO" ? goals.seoPercentGoal
                     : cat.title === "Content" ? goals.contentPercentGoal
+                    : cat.title === "Other" ? goals.otherPercentGoal
                     : null;
                   return (
                     <SourcePanel key={cat.title} {...cat} sourcesTotal={sourcesTotal} breakdown={sourceBreakdown[cat.title]} goalPercent={goalPct} />

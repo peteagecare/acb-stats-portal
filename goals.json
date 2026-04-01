@@ -1,7 +1,9 @@
 {
   "leadGoalPerMonth": 50,
+  "prospectsGoalPerMonth": null,
   "visitsGoalPerMonth": 20,
   "ppcPercentGoal": 60,
   "seoPercentGoal": 25,
-  "contentPercentGoal": 15
+  "contentPercentGoal": 15,
+  "otherPercentGoal": 15
 }
