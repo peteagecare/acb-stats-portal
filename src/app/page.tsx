@@ -367,6 +367,7 @@ export default function Dashboard() {
     setLoading(true);
     setError(null);
     setLoadProgress(0);
+    setSources([]);
     try {
       const gaRes = await fetch(`/api/ga/active-users?from=${from}&to=${to}`);
       if (gaRes.ok) setActiveUsers((await gaRes.json()).activeUsers);
