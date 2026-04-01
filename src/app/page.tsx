@@ -372,6 +372,7 @@ export default function Dashboard() {
   const [sourceBreakdown, setSourceBreakdown] = useState<Record<string, { prospects: number; leads: number }>>({});
   const [loading, setLoading] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
+  const [dataReady, setDataReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [goals, setGoals] = useState<Goals>(DEFAULT_GOALS);
@@ -391,8 +392,8 @@ export default function Dashboard() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
-    setLoadProgress(0);
-    setSources([]);
+    setLoadProgress(5);
+    setDataReady(false);
     try {
       const gaRes = await fetch(`/api/ga/active-users?from=${from}&to=${to}`);
       if (gaRes.ok) setActiveUsers((await gaRes.json()).activeUsers);
@@ -436,8 +437,10 @@ export default function Dashboard() {
         setTimelineGranularity(timelineJson.granularity);
       }
       setLoadProgress(100);
+      setDataReady(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
+      setDataReady(true);
     } finally {
       setLoading(false);
     }
@@ -465,7 +468,6 @@ export default function Dashboard() {
   );
   const leadsTotal = leads.reduce((sum, a) => sum + a.count, 0);
 
-  const hasData = sources.length > 0;
 
   const categoryCards: { title: string; total: number; sources: LeadSource[]; colour: string; bg: string; icon: string }[] = [
     { title: "PPC", total: ppcTotal, sources: ppcSources, colour: "#EF4444", bg: "#FEF2F2", icon: "Paid ads" },
@@ -614,7 +616,7 @@ export default function Dashboard() {
         )}
 
         {/* Full-screen loader — hides everything until data is ready */}
-        {!hasData && (() => {
+        {!dataReady && (() => {
           const radius = 62;
           const circumference = 2 * Math.PI * radius;
           const offset = circumference - (loadProgress / 100) * circumference;
@@ -666,7 +668,7 @@ export default function Dashboard() {
           );
         })()}
 
-        {hasData && (
+        {dataReady && (
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
 
             {/* === TOP ROW: Active Users → Contacts === */}

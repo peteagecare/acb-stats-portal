@@ -1,7 +1,7 @@
 {
-  "leadGoalPerMonth": 50,
-  "prospectsGoalPerMonth": null,
-  "visitsGoalPerMonth": 20,
+  "leadGoalPerMonth": 400,
+  "prospectsGoalPerMonth": 600,
+  "visitsGoalPerMonth": 264,
   "ppcPercentGoal": 60,
   "seoPercentGoal": 25,
   "contentPercentGoal": 15,
