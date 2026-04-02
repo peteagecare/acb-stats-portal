@@ -1,0 +1,44 @@
+{
+  "platforms": [
+    {
+      "name": "Facebook",
+      "url": "https://www.facebook.com/agecarebathrooms",
+      "colour": "#1877F2",
+      "current": 1584,
+      "auto": true,
+      "history": []
+    },
+    {
+      "name": "Instagram",
+      "url": "https://www.instagram.com/agecarebathrooms",
+      "colour": "#E4405F",
+      "current": 0,
+      "auto": false,
+      "history": []
+    },
+    {
+      "name": "LinkedIn (Business)",
+      "url": "https://www.linkedin.com/company/age-care-bathrooms/",
+      "colour": "#0A66C2",
+      "current": 277,
+      "auto": true,
+      "history": []
+    },
+    {
+      "name": "LinkedIn (Sam)",
+      "url": "https://www.linkedin.com/in/samdaviesacb/",
+      "colour": "#0A66C2",
+      "current": 347,
+      "auto": false,
+      "history": []
+    },
+    {
+      "name": "TikTok",
+      "url": "https://www.tiktok.com/@agecaregroup",
+      "colour": "#000000",
+      "current": 428,
+      "auto": true,
+      "history": []
+    }
+  ]
+}

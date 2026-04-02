@@ -1,0 +1,25 @@
+{
+  "platforms": [
+    {
+      "name": "Google Ads",
+      "colour": "#4285F4",
+      "spend": 0,
+      "clicks": 0,
+      "auto": false
+    },
+    {
+      "name": "Meta Ads",
+      "colour": "#1877F2",
+      "spend": 0,
+      "clicks": 0,
+      "auto": false
+    },
+    {
+      "name": "Bing Ads",
+      "colour": "#00809D",
+      "spend": 0,
+      "clicks": 0,
+      "auto": false
+    }
+  ]
+}

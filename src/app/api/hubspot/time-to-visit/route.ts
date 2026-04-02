@@ -48,20 +48,24 @@ export async function GET(request: NextRequest) {
       {
         filters: [
           {
-            propertyName: "date_that_initial_visit_booked_is_set_to_yes",
+            propertyName: "createdate",
             operator: "GTE",
             value: fromMs.toString(),
           },
           {
-            propertyName: "date_that_initial_visit_booked_is_set_to_yes",
+            propertyName: "createdate",
             operator: "LTE",
             value: toMs.toString(),
+          },
+          {
+            propertyName: "date_that_initial_visit_booked_is_set_to_yes",
+            operator: "HAS_PROPERTY",
           },
         ],
       },
     ],
-    properties: ["date_that_initial_visit_booked_is_set_to_yes"],
-    limit: 1,
+    properties: ["createdate", "date_that_initial_visit_booked_is_set_to_yes"],
+    limit: 100,
   };
 
   const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts/search`, {
@@ -80,6 +84,35 @@ export async function GET(request: NextRequest) {
   }
 
   const data = await res.json();
+  const results = data.results ?? [];
 
-  return Response.json({ total: data.total ?? 0 });
+  if (results.length === 0) {
+    return Response.json({ averageDays: 0, count: 0 });
+  }
+
+  const MS_PER_DAY = 1000 * 60 * 60 * 24;
+  let totalDays = 0;
+  let validCount = 0;
+
+  for (const contact of results) {
+    const created = contact.properties.createdate;
+    const visitBooked =
+      contact.properties.date_that_initial_visit_booked_is_set_to_yes;
+
+    if (created && visitBooked) {
+      const createdMs = new Date(created).getTime();
+      const visitMs = new Date(visitBooked).getTime();
+      const days = (visitMs - createdMs) / MS_PER_DAY;
+
+      if (days >= 0) {
+        totalDays += days;
+        validCount++;
+      }
+    }
+  }
+
+  const averageDays =
+    validCount > 0 ? Math.round((totalDays / validCount) * 10) / 10 : 0;
+
+  return Response.json({ averageDays, count: validCount });
 }

@@ -1,0 +1,36 @@
+{
+  "platforms": [
+    {
+      "name": "Trustpilot",
+      "url": "https://uk.trustpilot.com/review/agecare-bathrooms.co.uk",
+      "colour": "#00B67A",
+      "current": 235,
+      "rating": 4.8,
+      "history": []
+    },
+    {
+      "name": "Google",
+      "url": "https://g.page/r/CVVjCGN-78fvEBM/review",
+      "colour": "#4285F4",
+      "current": 149,
+      "rating": 4.8,
+      "history": []
+    },
+    {
+      "name": "Reviews.io",
+      "url": "https://www.reviews.io/company-reviews/store/www.agecare-bathrooms.co.uk",
+      "colour": "#5B2D8E",
+      "current": 22,
+      "rating": 5,
+      "history": []
+    },
+    {
+      "name": "Facebook",
+      "url": "https://www.facebook.com/agecarebathrooms",
+      "colour": "#1877F2",
+      "current": 3,
+      "rating": 0,
+      "history": []
+    }
+  ]
+}

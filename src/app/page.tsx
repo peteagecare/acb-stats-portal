@@ -13,6 +13,11 @@ interface Goals {
   leadGoalPerMonth: number | null;
   prospectsGoalPerMonth: number | null;
   visitsGoalPerMonth: number | null;
+  contactsGoalPerMonth: number | null;
+  ppcGoalPerMonth: number | null;
+  seoGoalPerMonth: number | null;
+  contentGoalPerMonth: number | null;
+  otherGoalPerMonth: number | null;
   ppcPercentGoal: number | null;
   seoPercentGoal: number | null;
   contentPercentGoal: number | null;
@@ -23,6 +28,11 @@ const DEFAULT_GOALS: Goals = {
   leadGoalPerMonth: null,
   prospectsGoalPerMonth: null,
   visitsGoalPerMonth: null,
+  contactsGoalPerMonth: null,
+  ppcGoalPerMonth: null,
+  seoGoalPerMonth: null,
+  contentGoalPerMonth: null,
+  otherGoalPerMonth: null,
   ppcPercentGoal: null,
   seoPercentGoal: null,
   contentPercentGoal: null,
@@ -94,6 +104,38 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
   const [draftLead, setDraftLead] = useState(initialGoals.leadGoalPerMonth !== null ? String(initialGoals.leadGoalPerMonth) : "");
   const [draftProspects, setDraftProspects] = useState(initialGoals.prospectsGoalPerMonth !== null ? String(initialGoals.prospectsGoalPerMonth) : "");
   const [draftVisitsMonth, setDraftVisitsMonth] = useState(initialGoals.visitsGoalPerMonth !== null ? String(initialGoals.visitsGoalPerMonth) : "");
+  const [draftFbReviews, setDraftFbReviews] = useState("");
+  const [draftLinkedInSam, setDraftLinkedInSam] = useState("");
+  const [draftGoogleSpend, setDraftGoogleSpend] = useState("");
+  const [draftGoogleClicks, setDraftGoogleClicks] = useState("");
+  const [draftMetaSpend, setDraftMetaSpend] = useState("");
+  const [draftMetaClicks, setDraftMetaClicks] = useState("");
+  const [draftBingSpend, setDraftBingSpend] = useState("");
+  const [draftBingClicks, setDraftBingClicks] = useState("");
+  useEffect(() => {
+    fetch("/api/reviews").then((r) => r.ok ? r.json() : null).then((data) => {
+      const fb = data?.platforms?.find((p: { name: string }) => p.name === "Facebook");
+      if (fb?.total) setDraftFbReviews(String(fb.total));
+    }).catch(() => {});
+    fetch("/api/social").then((r) => r.ok ? r.json() : null).then((data) => {
+      const sam = data?.platforms?.find((p: { name: string }) => p.name === "LinkedIn (Sam)");
+      if (sam?.total) setDraftLinkedInSam(String(sam.total));
+    }).catch(() => {});
+    fetch("/api/ad-spend").then((r) => r.ok ? r.json() : null).then((data) => {
+      if (data?.platforms) {
+        for (const p of data.platforms) {
+          if (p.name === "Google Ads") { setDraftGoogleSpend(String(p.spend || "")); setDraftGoogleClicks(String(p.clicks || "")); }
+          if (p.name === "Meta Ads") { setDraftMetaSpend(String(p.spend || "")); setDraftMetaClicks(String(p.clicks || "")); }
+          if (p.name === "Bing Ads") { setDraftBingSpend(String(p.spend || "")); setDraftBingClicks(String(p.clicks || "")); }
+        }
+      }
+    }).catch(() => {});
+  }, []);
+  const [draftContacts, setDraftContacts] = useState(initialGoals.contactsGoalPerMonth !== null ? String(initialGoals.contactsGoalPerMonth) : "");
+  const [draftPpcNum, setDraftPpcNum] = useState(initialGoals.ppcGoalPerMonth !== null ? String(initialGoals.ppcGoalPerMonth) : "");
+  const [draftSeoNum, setDraftSeoNum] = useState(initialGoals.seoGoalPerMonth !== null ? String(initialGoals.seoGoalPerMonth) : "");
+  const [draftContentNum, setDraftContentNum] = useState(initialGoals.contentGoalPerMonth !== null ? String(initialGoals.contentGoalPerMonth) : "");
+  const [draftOtherNum, setDraftOtherNum] = useState(initialGoals.otherGoalPerMonth !== null ? String(initialGoals.otherGoalPerMonth) : "");
   const [draftPpc, setDraftPpc] = useState(initialGoals.ppcPercentGoal !== null ? String(initialGoals.ppcPercentGoal) : "");
   const [draftSeo, setDraftSeo] = useState(initialGoals.seoPercentGoal !== null ? String(initialGoals.seoPercentGoal) : "");
   const [draftContent, setDraftContent] = useState(initialGoals.contentPercentGoal !== null ? String(initialGoals.contentPercentGoal) : "");
@@ -106,12 +148,47 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
       leadGoalPerMonth: parseGoalDraft(draftLead),
       prospectsGoalPerMonth: parseGoalDraft(draftProspects),
       visitsGoalPerMonth: parseGoalDraft(draftVisitsMonth),
+      contactsGoalPerMonth: parseGoalDraft(draftContacts),
+      ppcGoalPerMonth: parseGoalDraft(draftPpcNum),
+      seoGoalPerMonth: parseGoalDraft(draftSeoNum),
+      contentGoalPerMonth: parseGoalDraft(draftContentNum),
+      otherGoalPerMonth: parseGoalDraft(draftOtherNum),
       ppcPercentGoal: parseGoalDraft(draftPpc),
       seoPercentGoal: parseGoalDraft(draftSeo),
       contentPercentGoal: parseGoalDraft(draftContent),
       otherPercentGoal: parseGoalDraft(draftOther),
     };
     await saveGoalsToServer(updated);
+    // Update manual values
+    const fbCount = parseGoalDraft(draftFbReviews);
+    if (fbCount !== null && fbCount >= 0) {
+      await fetch("/api/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Facebook", current: fbCount }),
+      });
+    }
+    const samCount = parseGoalDraft(draftLinkedInSam);
+    if (samCount !== null && samCount >= 0) {
+      await fetch("/api/social", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "LinkedIn (Sam)", current: samCount }),
+      });
+    }
+    // Save ad spend
+    const adSpendUpdates = [
+      { name: "Google Ads", spend: parseFloat(draftGoogleSpend) || 0, clicks: parseInt(draftGoogleClicks) || 0 },
+      { name: "Meta Ads", spend: parseFloat(draftMetaSpend) || 0, clicks: parseInt(draftMetaClicks) || 0 },
+      { name: "Bing Ads", spend: parseFloat(draftBingSpend) || 0, clicks: parseInt(draftBingClicks) || 0 },
+    ];
+    for (const u of adSpendUpdates) {
+      await fetch("/api/ad-spend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(u),
+      });
+    }
     setSaving(false);
     onClose();
   }
@@ -253,6 +330,69 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
 
           <div style={{ borderTop: "1px solid #F1F5F9" }} />
 
+          {/* Contacts goal */}
+          <div>
+            <label htmlFor="contactsGoal" style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#6366F1", marginBottom: "4px" }}>
+              Contacts / Month (overall)
+            </label>
+            <input id="contactsGoal" type="number" min="1" placeholder="e.g. 800" value={draftContacts} onChange={(e) => setDraftContacts(e.target.value)}
+              style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
+          </div>
+
+          <div style={{ borderTop: "1px solid #F1F5F9" }} />
+
+          {/* Manual overrides */}
+          <div>
+            <p style={{ fontSize: "13px", fontWeight: 600, color: "#0F172A", marginBottom: "6px" }}>
+              Manual Updates
+            </p>
+            <p style={{ fontSize: "11px", color: "#94A3B8", margin: "0 0 12px" }}>
+              These can{"'"}t be fetched automatically — update when they change.
+            </p>
+            <div style={{ display: "flex", gap: "12px" }}>
+              <div style={{ flex: 1 }}>
+                <label htmlFor="fbReviews" style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#1877F2", marginBottom: "4px" }}>Facebook Reviews</label>
+                <input id="fbReviews" type="number" min="0" placeholder="e.g. 3" value={draftFbReviews} onChange={(e) => setDraftFbReviews(e.target.value)}
+                  style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label htmlFor="liSam" style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#0A66C2", marginBottom: "4px" }}>LinkedIn (Sam) Followers</label>
+                <input id="liSam" type="number" min="0" placeholder="e.g. 500" value={draftLinkedInSam} onChange={(e) => setDraftLinkedInSam(e.target.value)}
+                  style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
+              </div>
+            </div>
+          </div>
+
+          <div style={{ borderTop: "1px solid #F1F5F9" }} />
+
+          {/* Ad Spend */}
+          <div>
+            <p style={{ fontSize: "13px", fontWeight: 600, color: "#0F172A", marginBottom: "6px" }}>
+              Ad Spend (for selected period)
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {[
+                { label: "Google Ads", colour: "#4285F4", spend: draftGoogleSpend, setSpend: setDraftGoogleSpend, clicks: draftGoogleClicks, setClicks: setDraftGoogleClicks },
+                { label: "Meta Ads", colour: "#1877F2", spend: draftMetaSpend, setSpend: setDraftMetaSpend, clicks: draftMetaClicks, setClicks: setDraftMetaClicks },
+                { label: "Bing Ads", colour: "#00809D", spend: draftBingSpend, setSpend: setDraftBingSpend, clicks: draftBingClicks, setClicks: setDraftBingClicks },
+              ].map((ad) => (
+                <div key={ad.label} style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <span style={{ fontSize: "11px", fontWeight: 700, color: ad.colour, minWidth: "80px" }}>{ad.label}</span>
+                  <div style={{ flex: 1 }}>
+                    <input type="number" min="0" step="0.01" placeholder="£ spend" value={ad.spend} onChange={(e) => ad.setSpend(e.target.value)}
+                      style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "8px 10px", fontSize: "13px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <input type="number" min="0" placeholder="clicks" value={ad.clicks} onChange={(e) => ad.setClicks(e.target.value)}
+                      style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "8px 10px", fontSize: "13px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ borderTop: "1px solid #F1F5F9" }} />
+
           <div>
             <p style={{ fontSize: "13px", fontWeight: 600, color: "#0F172A", marginBottom: "6px" }}>
               Source Channel Goals (%)
@@ -284,12 +424,21 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
             </div>
             {(() => {
               const total = (parseGoalDraft(draftPpc) ?? 0) + (parseGoalDraft(draftSeo) ?? 0) + (parseGoalDraft(draftContent) ?? 0) + (parseGoalDraft(draftOther) ?? 0);
-              if (total > 0) return (
-                <p style={{ fontSize: "11px", color: total > 100 ? "#DC2626" : "#94A3B8", margin: "8px 0 0" }}>
-                  Total: {total}% {total > 100 ? "(exceeds 100%)" : `(${100 - total}% other)`}
-                </p>
+              const contactsNum = parseGoalDraft(draftContacts);
+              return (
+                <>
+                  {total > 0 && (
+                    <p style={{ fontSize: "11px", color: total > 100 ? "#DC2626" : "#94A3B8", margin: "8px 0 0" }}>
+                      Total: {total}% {total > 100 ? "(exceeds 100%)" : ""}
+                    </p>
+                  )}
+                  {contactsNum && contactsNum > 0 && total > 0 && (
+                    <p style={{ fontSize: "11px", color: "#64748B", margin: "6px 0 0" }}>
+                      = PPC <strong>{Math.round(contactsNum * (parseGoalDraft(draftPpc) ?? 0) / 100)}</strong> / SEO <strong>{Math.round(contactsNum * (parseGoalDraft(draftSeo) ?? 0) / 100)}</strong> / Content <strong>{Math.round(contactsNum * (parseGoalDraft(draftContent) ?? 0) / 100)}</strong> / Other <strong>{Math.round(contactsNum * (parseGoalDraft(draftOther) ?? 0) / 100)}</strong> per month
+                    </p>
+                  )}
+                </>
               );
-              return null;
             })()}
           </div>
         </div>
@@ -359,7 +508,15 @@ export default function Dashboard() {
   const defaults = getDefaultDates();
   const [from, setFrom] = useState(defaults.from);
   const [to, setTo] = useState(defaults.to);
+  const [autoFetchTrigger, setAutoFetchTrigger] = useState(0);
+
+  function applyQuickRange(fromDate: string, toDate: string) {
+    setFrom(fromDate);
+    setTo(toDate);
+    setAutoFetchTrigger((n) => n + 1);
+  }
   const [activeUsers, setActiveUsers] = useState<number | null>(null);
+  const [liveNow, setLiveNow] = useState<number | null>(null);
   const [sources, setSources] = useState<LeadSource[]>([]);
   const [conversionActions, setConversionActions] = useState<LeadSource[]>([]);
   const [homeVisits, setHomeVisits] = useState<number | null>(null);
@@ -367,25 +524,116 @@ export default function Dashboard() {
   const [timelineGranularity, setTimelineGranularity] = useState<string>("day");
   const [lifecycleStages, setLifecycleStages] = useState<{ label: string; value: string; count: number }[]>([]);
   const [lifecyclePeriod, setLifecyclePeriod] = useState<{ label: string; value: string; count: number }[]>([]);
+  const [organicLeads, setOrganicLeads] = useState<number>(0);
   const [wonJobs, setWonJobs] = useState<number | null>(null);
   const [wonValue, setWonValue] = useState<number | null>(null);
   const [sourceBreakdown, setSourceBreakdown] = useState<Record<string, { prospects: number; leads: number }>>({});
+  const [reviews, setReviews] = useState<{ name: string; url: string; colour: string; total: number; rating: number; increase: number | null }[]>([]);
+  const [reviewsTotal, setReviewsTotal] = useState(0);
+  const [adSpend, setAdSpend] = useState<{ name: string; colour: string; spend: number; clicks: number }[]>([]);
+  const [adSpendTotal, setAdSpendTotal] = useState(0);
+  const [unattributed, setUnattributed] = useState<{ contactsWithoutSource: number; visitsWithoutSource: number }>({ contactsWithoutSource: 0, visitsWithoutSource: 0 });
+  const [aiInsights, setAiInsights] = useState<string[]>([]);
+  const [aiDismissed, setAiDismissed] = useState<Set<number>>(new Set());
+  const [aiRejectingIdx, setAiRejectingIdx] = useState<number | null>(null);
+  const [aiRejectReason, setAiRejectReason] = useState("");
+  const [aiRejected, setAiRejected] = useState<string[]>([]);
+  const [aiAccepted, setAiAccepted] = useState<string[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiChatMessages, setAiChatMessages] = useState<{ role: "user" | "ai"; text: string }[]>([]);
+  const [aiChatInput, setAiChatInput] = useState("");
+  const [aiChatLoading, setAiChatLoading] = useState(false);
+
+  // Load rejected insights from server
+  useEffect(() => {
+    fetch("/api/ai-feedback").then((r) => r.ok ? r.json() : null).then((data) => {
+      if (data?.rejected) setAiRejected(data.rejected);
+      if (data?.accepted) setAiAccepted(data.accepted);
+    }).catch(() => {});
+  }, []);
+  const [social, setSocial] = useState<{ name: string; url: string; colour: string; total: number; auto: boolean; increase: number | null }[]>([]);
+  const [socialTotal, setSocialTotal] = useState(0);
+  const [selectedMetric, setSelectedMetric] = useState<string>("contacts");
+  const [timelineLoading, setTimelineLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
   const [dataReady, setDataReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [goals, setGoals] = useState<Goals>(DEFAULT_GOALS);
+  const [previousPeriod, setPreviousPeriod] = useState<{ contacts: number; prospects: number; leads: number; homeVisits: number } | null>(null);
+  const [recentContacts, setRecentContacts] = useState<{ name: string; email: string; date: string; action: string; source: string; stage: string }[]>([]);
+  const [pipelineCount, setPipelineCount] = useState<number>(0);
+  const [timeToVisit, setTimeToVisit] = useState<{ averageDays: number; count: number } | null>(null);
 
   useEffect(() => {
     loadGoalsFromServer().then(setGoals);
   }, [showSettings]);
+
+  // Realtime visitors — poll every 30s
+  useEffect(() => {
+    const fetchRealtime = () => {
+      fetch("/api/ga/realtime")
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => { if (data?.activeNow != null) setLiveNow(data.activeNow); })
+        .catch(() => {});
+    };
+    fetchRealtime();
+    const interval = setInterval(fetchRealtime, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Reviews & Social — fetch on load
+  useEffect(() => {
+    fetch(`/api/reviews?from=${from}&to=${to}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.platforms) setReviews(data.platforms);
+        if (data?.totalReviews) setReviewsTotal(data.totalReviews);
+      })
+      .catch(() => {});
+    fetch(`/api/social?from=${from}&to=${to}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.platforms) setSocial(data.platforms);
+        if (data?.totalFollowers) setSocialTotal(data.totalFollowers);
+      })
+      .catch(() => {});
+    fetch("/api/ad-spend")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.platforms) setAdSpend(data.platforms);
+        if (data?.totalSpend != null) setAdSpendTotal(data.totalSpend);
+      })
+      .catch(() => {});
+    // Previous period comparison
+    fetch(`/api/hubspot/previous-period?from=${from}&to=${to}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data) setPreviousPeriod(data); })
+      .catch(() => {});
+    // Time to visit
+    fetch(`/api/hubspot/time-to-visit?from=${from}&to=${to}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data) setTimeToVisit(data); })
+      .catch(() => {});
+  }, [from, to]);
 
   // Lifecycle stages — live count, not date-filtered
   useEffect(() => {
     fetch("/api/hubspot/lifecycle-stages")
       .then((r) => r.ok ? r.json() : null)
       .then((data) => { if (data?.stages) setLifecycleStages(data.stages); })
+      .catch(() => {});
+    // Recent contacts
+    fetch("/api/hubspot/recent-contacts")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data?.contacts) setRecentContacts(data.contacts); })
+      .catch(() => {});
+    // Pipeline value
+    fetch("/api/hubspot/pipeline-value")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data?.count != null) setPipelineCount(data.count); })
       .catch(() => {});
   }, []);
 
@@ -410,13 +658,17 @@ export default function Dashboard() {
       if (visitsRes.ok) setHomeVisits((await visitsRes.json()).total);
       setLoadProgress(40);
 
-      // Batch 2: Won jobs
-      const wonRes = await fetch(`/api/hubspot/won-deals?from=${from}&to=${to}`);
+      // Batch 2: Won jobs + organic leads
+      const [wonRes, organicRes] = await Promise.all([
+        fetch(`/api/hubspot/won-deals?from=${from}&to=${to}`),
+        fetch(`/api/hubspot/organic-leads?from=${from}&to=${to}`),
+      ]);
       if (wonRes.ok) {
         const wonData = await wonRes.json();
         setWonJobs(wonData.total);
         setWonValue(wonData.totalValue);
       }
+      if (organicRes.ok) setOrganicLeads((await organicRes.json()).total);
       setLoadProgress(55);
 
       // Batch 3: Source breakdown
@@ -429,8 +681,13 @@ export default function Dashboard() {
       if (lcPeriodRes.ok) setLifecyclePeriod((await lcPeriodRes.json()).stages);
       setLoadProgress(85);
 
-      // Batch 5: Timeline
-      const timelineRes = await fetch(`/api/hubspot/contacts-daily?from=${from}&to=${to}`);
+      // Batch 5: Timeline + unattributed
+      setSelectedMetric("contacts");
+      const [timelineRes, unattribRes] = await Promise.all([
+        fetch(`/api/hubspot/contacts-daily?from=${from}&to=${to}&metric=contacts`),
+        fetch(`/api/hubspot/unattributed?from=${from}&to=${to}`),
+      ]);
+      if (unattribRes.ok) setUnattributed(await unattribRes.json());
       if (timelineRes.ok) {
         const timelineJson = await timelineRes.json();
         setTimelineData(timelineJson.data);
@@ -450,6 +707,114 @@ export default function Dashboard() {
     fetchData();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (autoFetchTrigger > 0) fetchData();
+  }, [autoFetchTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const switchMetric = useCallback(async (metric: string) => {
+    if (metric === selectedMetric) return;
+    setSelectedMetric(metric);
+    setTimelineLoading(true);
+    try {
+      const res = await fetch(`/api/hubspot/contacts-daily?from=${from}&to=${to}&metric=${metric}`);
+      if (res.ok) {
+        const json = await res.json();
+        setTimelineData(json.data);
+        setTimelineGranularity(json.granularity);
+      }
+    } finally {
+      setTimelineLoading(false);
+    }
+  }, [from, to, selectedMetric]);
+
+  async function fetchAiInsights() {
+    setAiLoading(true);
+    try {
+      const bestDay = timelineData.length > 0 ? timelineData.reduce((b, d) => d.count > b.count ? d : b, timelineData[0]) : null;
+      const res = await fetch("/api/ai-insights", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          visitors: activeUsers,
+          contacts: sourcesTotal,
+          prospects: prospectsTotal,
+          leads: leadsTotal,
+          homeVisits: homeVisits ?? 0,
+          wonJobs: wonJobs ?? 0,
+          wonValue: wonValue ?? 0,
+          unattributedContacts: unattributed.contactsWithoutSource,
+          organicLeads,
+          sources: sources.filter((s) => s.count > 0),
+          prospectActions: conversionActions.filter((a) => a.value in PROSPECT_ACTIONS && a.count > 0),
+          leadActions: conversionActions.filter((a) => a.value in LEAD_ACTIONS && a.count > 0),
+          prevContacts: previousPeriod?.contacts,
+          prevLeads: previousPeriod?.leads,
+          bestDay: bestDay ? `${bestDay.count} contacts on ${bestDay.label}` : null,
+          rejectedInsights: aiRejected,
+          acceptedInsights: aiAccepted,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const parsed = (data.insights as string)
+          .split(/\n/)
+          .map((l: string) => l.replace(/^\d+\.\s*/, "").trim())
+          .filter((l: string) => l.length > 10);
+        setAiInsights(parsed);
+        setAiDismissed(new Set());
+        setAiOpen(true);
+      }
+    } catch {} finally {
+      setAiLoading(false);
+    }
+  }
+
+  async function sendAiChat() {
+    if (!aiChatInput.trim()) return;
+    const question = aiChatInput.trim();
+    setAiChatMessages((prev) => [...prev, { role: "user", text: question }]);
+    setAiChatInput("");
+    setAiChatLoading(true);
+    try {
+      const bestDay = timelineData.length > 0 ? timelineData.reduce((b, d) => d.count > b.count ? d : b, timelineData[0]) : null;
+      const res = await fetch("/api/ai-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question,
+          dashboardData: {
+            visitors: activeUsers,
+            contacts: sourcesTotal,
+            prospects: prospectsTotal,
+            leads: leadsTotal,
+            homeVisits: homeVisits ?? 0,
+            wonJobs: wonJobs ?? 0,
+            wonValue: wonValue ?? 0,
+            unattributedContacts: unattributed.contactsWithoutSource,
+            organicLeads,
+            sources: sources.filter((s) => s.count > 0),
+            prevContacts: previousPeriod?.contacts,
+            prevLeads: previousPeriod?.leads,
+          },
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAiChatMessages((prev) => [...prev, { role: "ai", text: data.answer }]);
+      }
+    } catch {} finally {
+      setAiChatLoading(false);
+    }
+  }
+
+  function proratedGoal(monthlyGoal: number | null): number | null {
+    if (!monthlyGoal || monthlyGoal <= 0) return null;
+    const fromDate = new Date(from + "T00:00:00");
+    const toDate = new Date(to + "T23:59:59");
+    const rangeDays = Math.max(1, Math.round((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+    return Math.max(1, Math.round((monthlyGoal / 30.44) * rangeDays));
+  }
+
   const sourcesTotal = sources.reduce((sum, s) => sum + s.count, 0);
   const ppcSources = sources.filter((s) => getSourceCategory(s.value) === "PPC");
   const seoSources = sources.filter((s) => getSourceCategory(s.value) === "SEO");
@@ -466,7 +831,8 @@ export default function Dashboard() {
   const leads = conversionActions.filter(
     (a) => a.value in LEAD_ACTIONS && a.count > 0
   );
-  const leadsTotal = leads.reduce((sum, a) => sum + a.count, 0);
+  const formLeadsTotal = leads.reduce((sum, a) => sum + a.count, 0);
+  const leadsTotal = formLeadsTotal + organicLeads;
 
 
   const categoryCards: { title: string; total: number; sources: LeadSource[]; colour: string; bg: string; icon: string }[] = [
@@ -479,41 +845,84 @@ export default function Dashboard() {
   return (
     <div style={{ minHeight: "100vh", background: "#F1F5F9" }}>
       {/* Header */}
-      <header style={{ background: "#0F172A", padding: "0 24px" }}>
+      <header style={{ background: "#0F172A", padding: "0 16px" }}>
         <div
           style={{
-            maxWidth: "1280px",
+            maxWidth: "1600px",
             margin: "0 auto",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            height: "64px",
+            height: "48px",
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <img src="/acb-logo.png" alt="ACB" style={{ height: "36px", objectFit: "contain" }} />
+            <img src="/acb-logo.png" alt="ACB" style={{ height: "28px", objectFit: "contain" }} />
             <div>
-              <h1 style={{ fontSize: "15px", fontWeight: 700, margin: 0, color: "white", letterSpacing: "-0.3px" }}>
+              <h1 style={{ fontSize: "13px", fontWeight: 700, margin: 0, color: "white", letterSpacing: "-0.3px" }}>
                 ACB Stats
               </h1>
-              <p style={{ fontSize: "11px", margin: 0, color: "#64748B" }}>Marketing Funnel</p>
+              <p style={{ fontSize: "10px", margin: 0, color: "#64748B" }}>Marketing Funnel</p>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <a
-              href="/automations"
-              style={{
-                fontSize: "13px",
-                fontWeight: 600,
-                color: "#94A3B8",
-                textDecoration: "none",
-                padding: "8px 14px",
-                borderRadius: "10px",
-                background: "#1E293B",
-              }}
-            >
-              Automations
-            </a>
+            {/* Quick date range links */}
+            {(() => {
+              const today = new Date();
+              const pad = (n: number) => n.toString().padStart(2, "0");
+              const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+              const todayStr = fmt(today);
+
+              // Start of this week (Monday)
+              const weekStart = new Date(today);
+              weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+
+              // Start of this month
+              const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+
+              // Last month
+              const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+              const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+
+              // Last 3 months
+              const threeMonthsStart = new Date(today.getFullYear(), today.getMonth() - 3, 1);
+
+              const ranges = [
+                { label: "Today", from: todayStr, to: todayStr },
+                { label: "This Week", from: fmt(weekStart), to: fmt((() => { const sun = new Date(weekStart); sun.setDate(sun.getDate() + 6); return sun; })()) },
+                { label: "This Month", from: fmt(monthStart), to: fmt(new Date(today.getFullYear(), today.getMonth() + 1, 0)) },
+                { label: "Last Month", from: fmt(lastMonthStart), to: fmt(lastMonthEnd) },
+                { label: "Last 3 Months", from: fmt(threeMonthsStart), to: fmt(lastMonthEnd) },
+              ];
+
+              return (
+                <div style={{ display: "flex", gap: "2px", background: "#1E293B", borderRadius: "8px", padding: "3px" }}>
+                  {ranges.map((r) => {
+                    const active = from === r.from && to === r.to;
+                    return (
+                      <button
+                        key={r.label}
+                        onClick={() => applyQuickRange(r.from, r.to)}
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: active ? 700 : 500,
+                          color: active ? "white" : "#94A3B8",
+                          background: active ? "#3B82F6" : "transparent",
+                          border: "none",
+                          borderRadius: "6px",
+                          padding: "4px 10px",
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        {r.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
             {/* Date range inline in header */}
             <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#1E293B", borderRadius: "10px", padding: "6px 12px" }}>
               <input
@@ -597,7 +1006,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main style={{ maxWidth: "1280px", margin: "0 auto", padding: "24px" }}>
+      <main style={{ maxWidth: "1600px", margin: "0 auto", padding: "16px" }}>
         {/* Error */}
         {error && (
           <div
@@ -668,301 +1077,105 @@ export default function Dashboard() {
         })()}
 
         {dataReady && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
 
-            {/* === TOP ROW: Active Users → Contacts === */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr auto 1fr auto 1fr auto 1fr auto 1fr", alignItems: "stretch", gap: "0" }}>
-              <KpiCard label="Website Visitors" value={activeUsers} colour="#8B5CF6" subtitle="Google Analytics" />
-              <ConversionArrow
-                rate={activeUsers && sourcesTotal ? ((sourcesTotal / activeUsers) * 100).toFixed(2) : "0"}
-                label="Visitor → Contact"
-              />
-              <KpiCard label="Contacts" value={sourcesTotal} colour="#6366F1" subtitle="HubSpot CRM" />
-              <ConversionArrow
-                rate={sourcesTotal > 0 ? ((prospectsTotal / sourcesTotal) * 100).toFixed(1) : "0"}
-                label="Contact → Prospect"
-              />
-              <KpiCard label="Prospects" value={prospectsTotal} colour="#F59E0B" subtitle={sourcesTotal ? `${((prospectsTotal / sourcesTotal) * 100).toFixed(1)}% of contacts` : undefined} />
-              <ConversionArrow
-                rate={prospectsTotal > 0 ? ((leadsTotal / prospectsTotal) * 100).toFixed(1) : "0"}
-                label="Prospect → Lead"
-              />
-              <KpiCard label="Leads" value={leadsTotal} colour="#3B82F6" subtitle={prospectsTotal ? `${((leadsTotal / prospectsTotal) * 100).toFixed(1)}% of prospects` : undefined} />
-              <ConversionArrow
-                rate={leadsTotal > 0 ? (((homeVisits ?? 0) / leadsTotal) * 100).toFixed(1) : "0"}
-                label="Lead → Visit"
-              />
-              <KpiCard label="Home Visits" value={homeVisits} colour="#10B981" subtitle={leadsTotal ? `${((homeVisits ?? 0) / leadsTotal * 100).toFixed(1)}% of leads` : undefined} />
-              <ConversionArrow
-                rate={(homeVisits ?? 0) > 0 ? (((wonJobs ?? 0) / (homeVisits ?? 1)) * 100).toFixed(1) : "0"}
-                label="Visit → Won"
-              />
-              <KpiCard label="Won Jobs" value={wonJobs} colour="#059669" subtitle={wonValue ? `£${wonValue.toLocaleString()} value` : undefined} />
-            </div>
-
-            {/* === LIFECYCLE STAGES === */}
-            {lifecycleStages.length > 0 && (
-              <LifecyclePipeline stages={lifecycleStages} periodStages={lifecyclePeriod} />
-            )}
-
-            {/* === CONTACTS OVER TIME === */}
-            {timelineData.length > 0 && (
-              <div
-                style={{
-                  background: "white",
-                  borderRadius: "14px",
-                  border: "1px solid #E2E8F0",
-                  padding: "20px",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "16px" }}>
-                  <p style={{ fontSize: "13px", fontWeight: 600, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                    Contacts per {timelineGranularity}
-                  </p>
-                  <p style={{ fontSize: "12px", color: "#94A3B8", margin: 0 }}>
-                    {timelineData.reduce((s, d) => s + d.count, 0).toLocaleString()} total
-                  </p>
-                </div>
-                <div style={{ width: "100%", height: 220 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={timelineData} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
-                      <defs>
-                        <linearGradient id="contactGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#6366F1" stopOpacity={0.2} />
-                          <stop offset="95%" stopColor="#6366F1" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#F1F5F9" />
-                      <XAxis
-                        dataKey="label"
-                        tick={{ fontSize: 11, fill: "#94A3B8" }}
-                        axisLine={false}
-                        tickLine={false}
-                        tickFormatter={(d: string) => {
-                          if (timelineGranularity === "day") {
-                            const [, m, day] = d.split("-");
-                            return `${parseInt(day)}/${parseInt(m)}`;
-                          }
-                          return d;
-                        }}
-                        interval={timelineData.length > 20 ? Math.floor(timelineData.length / 10) : 0}
-                      />
-                      <YAxis
-                        tick={{ fontSize: 11, fill: "#94A3B8" }}
-                        axisLine={false}
-                        tickLine={false}
-                        allowDecimals={false}
-                      />
-                      <Tooltip
-                        labelFormatter={(d) => String(d)}
-                        formatter={(value) => [Number(value).toLocaleString(), "Contacts"]}
-                        contentStyle={{ borderRadius: "10px", border: "1px solid #E2E8F0", fontSize: "13px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="count"
-                        stroke="#6366F1"
-                        strokeWidth={2}
-                        fill="url(#contactGradient)"
-                        dot={timelineData.length <= 31 ? { r: 3, fill: "#6366F1", strokeWidth: 0 } : false}
-                        activeDot={{ r: 5, fill: "#6366F1", stroke: "white", strokeWidth: 2 }}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
-
-            {/* === GOAL BARS === */}
-            {(goals.leadGoalPerMonth || goals.prospectsGoalPerMonth || goals.visitsGoalPerMonth) && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
-                {goals.prospectsGoalPerMonth !== null && goals.prospectsGoalPerMonth > 0 && (
-                  <GoalBar
-                    current={prospectsTotal}
-                    monthlyGoal={goals.prospectsGoalPerMonth}
-                    label="Prospect Goal"
-                    colour="#F59E0B"
-                    from={from}
-                    to={to}
-                  />
-                )}
-                {goals.leadGoalPerMonth !== null && goals.leadGoalPerMonth > 0 && (
-                  <GoalBar
-                    current={leadsTotal}
-                    monthlyGoal={goals.leadGoalPerMonth}
-                    label="Lead Goal"
-                    colour="#3B82F6"
-                    from={from}
-                    to={to}
-                  />
-                )}
-                {goals.visitsGoalPerMonth !== null && goals.visitsGoalPerMonth > 0 && (
-                  <GoalBar
-                    current={homeVisits ?? 0}
-                    monthlyGoal={goals.visitsGoalPerMonth}
-                    label="Visit Goal"
-                    colour="#10B981"
-                    from={from}
-                    to={to}
-                  />
-                )}
-              </div>
-            )}
-
-            {/* === CHARTS + CONTACT SOURCES === */}
-            <div>
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "12px" }}>
-                <h2 style={{ fontSize: "16px", fontWeight: 700, color: "#0F172A", margin: 0 }}>
-                  Contact Sources
+            {/* === THE CUSTOMER FUNNEL === */}
+            {/* === GOALS SUMMARY === */}
+            <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px 20px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  Goals
                 </h2>
-                <span style={{ fontSize: "13px", color: "#94A3B8" }}>
-                  {sourcesTotal.toLocaleString()} total contacts
+                <span style={{ fontSize: "11px", color: "#94A3B8" }}>
+                  Targets adjust to your selected date range
                 </span>
               </div>
-
-              {/* Charts row */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "16px", marginBottom: "16px" }}>
-                {/* Donut chart */}
-                <div
-                  style={{
-                    background: "white",
-                    borderRadius: "14px",
-                    border: "1px solid #E2E8F0",
-                    padding: "20px",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                  }}
-                >
-                  <p style={{ fontSize: "13px", fontWeight: 600, color: "#64748B", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                    Source Split
-                  </p>
-                  <div style={{ width: "100%", height: 200, position: "relative" }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={[
-                            { name: "PPC", value: ppcTotal, fill: "#EF4444" },
-                            { name: "SEO", value: seoTotal, fill: "#10B981" },
-                            { name: "Content", value: contentTotal, fill: "#8B5CF6" },
-                            { name: "Other", value: otherTotal, fill: "#94A3B8" },
-                          ].filter((d) => d.value > 0)}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={55}
-                          outerRadius={85}
-                          paddingAngle={3}
-                          dataKey="value"
-                          strokeWidth={0}
-                        />
-                        <Tooltip
-                          formatter={(value, name) => [`${Number(value).toLocaleString()} (${sourcesTotal > 0 ? ((Number(value) / sourcesTotal) * 100).toFixed(1) : 0}%)`, String(name)]}
-                          contentStyle={{ borderRadius: "10px", border: "1px solid #E2E8F0", fontSize: "13px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    {/* Centre label */}
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: "50%",
-                        left: "50%",
-                        transform: "translate(-50%, -50%)",
-                        textAlign: "center",
-                        pointerEvents: "none",
-                      }}
-                    >
-                      <p style={{ fontSize: "22px", fontWeight: 800, color: "#0F172A", margin: 0, lineHeight: 1 }}>
-                        {sourcesTotal.toLocaleString()}
-                      </p>
-                      <p style={{ fontSize: "10px", color: "#94A3B8", margin: "2px 0 0", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                        total
-                      </p>
-                    </div>
-                  </div>
-                  {/* Legend */}
-                  <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", justifyContent: "center", marginTop: "8px" }}>
-                    {[
-                      { name: "PPC", colour: "#EF4444", value: ppcTotal },
-                      { name: "SEO", colour: "#10B981", value: seoTotal },
-                      { name: "Content", colour: "#8B5CF6", value: contentTotal },
-                      { name: "Other", colour: "#94A3B8", value: otherTotal },
-                    ].filter((d) => d.value > 0).map((d) => (
-                      <div key={d.name} style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                        <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: d.colour }} />
-                        <span style={{ fontSize: "12px", color: "#334155" }}>{d.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Funnel bar chart */}
-                <div
-                  style={{
-                    background: "white",
-                    borderRadius: "14px",
-                    border: "1px solid #E2E8F0",
-                    padding: "20px",
-                  }}
-                >
-                  <p style={{ fontSize: "13px", fontWeight: 600, color: "#64748B", margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                    Marketing Funnel
-                  </p>
-                  <div style={{ width: "100%", height: 230 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={[
-                          ...(activeUsers !== null ? [{ stage: "Visitors", value: activeUsers, fill: "#8B5CF6" }] : []),
-                          { stage: "Contacts", value: sourcesTotal, fill: "#6366F1" },
-                          { stage: "Prospects", value: prospectsTotal, fill: "#F59E0B" },
-                          { stage: "Leads", value: leadsTotal, fill: "#3B82F6" },
-                          { stage: "Home Visits", value: homeVisits ?? 0, fill: "#10B981" },
-                        ]}
-                        layout="vertical"
-                        margin={{ top: 0, right: 20, bottom: 0, left: 0 }}
-                        barSize={28}
-                      >
-                        <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#F1F5F9" />
-                        <XAxis type="number" tick={{ fontSize: 12, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
-                        <YAxis type="category" dataKey="stage" width={80} tick={{ fontSize: 13, fill: "#334155", fontWeight: 600 }} axisLine={false} tickLine={false} />
-                        <Tooltip
-                          formatter={(value) => [Number(value).toLocaleString(), ""]}
-                          contentStyle={{ borderRadius: "10px", border: "1px solid #E2E8F0", fontSize: "13px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
-                          cursor={{ fill: "#F8FAFC" }}
-                        />
-                        <Bar dataKey="value" radius={[0, 6, 6, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-
-              {/* Source category panels — 2x2 */}
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginTop: "8px" }}>
-                <h3 style={{ fontSize: "16px", fontWeight: 700, color: "#0F172A", margin: 0 }}>
-                  Contacts Per Team
-                </h3>
-                <span style={{ fontSize: "13px", color: "#94A3B8" }}>
-                  Prospects & leads by source channel
-                </span>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                {categoryCards.map((cat) => {
-                  const goalPct = cat.title === "PPC" ? goals.ppcPercentGoal
-                    : cat.title === "SEO" ? goals.seoPercentGoal
-                    : cat.title === "Content" ? goals.contentPercentGoal
-                    : cat.title === "Other" ? goals.otherPercentGoal
-                    : null;
+              <div style={{ display: "flex", justifyContent: "space-around", marginTop: "12px" }}>
+                {[
+                  { label: "Contacts", current: sourcesTotal, goal: proratedGoal(goals.contactsGoalPerMonth), colour: "#6366F1" },
+                  { label: "Prospects", current: prospectsTotal, goal: proratedGoal(goals.prospectsGoalPerMonth), colour: "#F59E0B" },
+                  { label: "Leads", current: leadsTotal, goal: proratedGoal(goals.leadGoalPerMonth), colour: "#3B82F6" },
+                  { label: "Home Visits", current: homeVisits ?? 0, goal: proratedGoal(goals.visitsGoalPerMonth), colour: "#10B981" },
+                ].map((g) => {
+                  if (!g.goal || g.goal <= 0) return null;
+                  const pct = Math.min((g.current / g.goal) * 100, 100);
+                  const met = g.current >= g.goal;
+                  const size = 110;
+                  const strokeWidth = 7;
+                  const radius = (size - strokeWidth) / 2;
+                  const circumference = 2 * Math.PI * radius;
+                  const offset = circumference - (pct / 100) * circumference;
                   return (
-                    <SourcePanel key={cat.title} {...cat} sourcesTotal={sourcesTotal} breakdown={sourceBreakdown[cat.title]} goalPercent={goalPct} />
+                    <div key={g.label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
+                      <div style={{ position: "relative", width: size, height: size }}>
+                        <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+                          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#F1F5F9" strokeWidth={strokeWidth} />
+                          <circle cx={size / 2} cy={size / 2} r={radius} fill="none"
+                            stroke={met ? "#10B981" : g.colour}
+                            strokeWidth={strokeWidth}
+                            strokeLinecap="round"
+                            strokeDasharray={circumference}
+                            strokeDashoffset={offset}
+                            style={{ transition: "stroke-dashoffset 0.6s ease" }}
+                          />
+                        </svg>
+                        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                          <span style={{ fontSize: "22px", fontWeight: 800, color: met ? "#059669" : "#0F172A", lineHeight: 1 }}>{g.current}</span>
+                          <span style={{ fontSize: "11px", color: "#94A3B8", fontWeight: 500 }}>/ {g.goal}</span>
+                        </div>
+                      </div>
+                      <span style={{ fontSize: "13px", fontWeight: 600, color: met ? "#059669" : "#334155" }}>{g.label}</span>
+                      <span style={{ fontSize: "12px", fontWeight: 700, color: met ? "#059669" : g.colour }}>{met ? "Goal met" : `${pct.toFixed(0)}%`}</span>
+                    </div>
                   );
                 })}
               </div>
             </div>
 
-            {/* === FUNNEL: Prospects → Leads → Visits → Won === */}
+            <div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+              <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                The Customer Funnel
+              </h2>
+              {unattributed.contactsWithoutSource > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: "8px", padding: "4px 12px" }}>
+                  <span style={{ fontSize: "11px", color: "#92400E", fontWeight: 600 }}>
+                    {unattributed.contactsWithoutSource} contact{unattributed.contactsWithoutSource !== 1 ? "s" : ""} without a source
+                    {unattributed.visitsWithoutSource > 0 && ` (${unattributed.visitsWithoutSource} with visits booked)`}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "10px" }}>
+              <KpiCard label="Website Visitors" value={activeUsers} colour="#8B5CF6" onClick={() => switchMetric("visitors")} selected={selectedMetric === "visitors"} liveNow={liveNow} />
+              <KpiCard label="Contacts" value={sourcesTotal} colour="#6366F1" comparison={previousPeriod ? { current: sourcesTotal, previous: previousPeriod.contacts } : undefined} onClick={() => switchMetric("contacts")} selected={selectedMetric === "contacts"} />
+              <KpiCard label="Prospects" value={prospectsTotal} colour="#F59E0B" comparison={previousPeriod ? { current: prospectsTotal, previous: previousPeriod.prospects } : undefined} goal={proratedGoal(goals.prospectsGoalPerMonth) ? { current: prospectsTotal, target: proratedGoal(goals.prospectsGoalPerMonth)! } : undefined} onClick={() => switchMetric("prospects")} selected={selectedMetric === "prospects"} />
+              <KpiCard label="Leads" value={leadsTotal} colour="#3B82F6" comparison={previousPeriod ? { current: leadsTotal, previous: previousPeriod.leads } : undefined} detail={organicLeads > 0 ? `${formLeadsTotal} Leads + ${organicLeads} Prospects Who Booked Visits` : undefined} goal={proratedGoal(goals.leadGoalPerMonth) ? { current: leadsTotal, target: proratedGoal(goals.leadGoalPerMonth)! } : undefined} onClick={() => switchMetric("leads")} selected={selectedMetric === "leads"} />
+              <KpiCard label="Home Visits" value={homeVisits} colour="#10B981" comparison={previousPeriod ? { current: homeVisits ?? 0, previous: previousPeriod.homeVisits } : undefined} goal={proratedGoal(goals.visitsGoalPerMonth) ? { current: homeVisits ?? 0, target: proratedGoal(goals.visitsGoalPerMonth)! } : undefined} onClick={() => switchMetric("visits")} selected={selectedMetric === "visits"} />
+              <KpiCard label="Won Jobs" value={wonJobs} colour="#059669" subtitle={wonValue ? `£${wonValue.toLocaleString()} value` : undefined} />
+            </div>
+            </div>
+
+
+            <div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+              <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                Funnel Breakdown
+              </h2>
+              <div style={{ display: "flex", gap: "16px" }}>
+                {[
+                  { label: "Contact → Prospect", rate: sourcesTotal > 0 ? ((prospectsTotal / sourcesTotal) * 100).toFixed(1) : "0" },
+                  { label: "Contact → Lead", rate: sourcesTotal > 0 ? ((leadsTotal / sourcesTotal) * 100).toFixed(1) : "0" },
+                  { label: "Lead → Visit", rate: leadsTotal > 0 ? (((homeVisits ?? 0) / leadsTotal) * 100).toFixed(1) : "0" },
+                  { label: "Visit → Won", rate: (homeVisits ?? 0) > 0 ? (((wonJobs ?? 0) / (homeVisits ?? 1)) * 100).toFixed(1) : "0" },
+                ].map((c) => (
+                  <span key={c.label} style={{ fontSize: "11px", color: "#64748B" }}>
+                    {c.label} <strong style={{ color: "#0F172A" }}>{c.rate}%</strong>
+                  </span>
+                ))}
+              </div>
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr auto 1fr auto 1fr", gap: "0", alignItems: "stretch" }}>
-              {/* Prospects */}
               <FunnelCard
                 title="Prospects"
                 subtitle="Browsing, not ready to talk"
@@ -974,20 +1187,10 @@ export default function Dashboard() {
                 {prospects
                   .sort((a, b) => b.count - a.count)
                   .map((action) => (
-                    <MiniRow
-                      key={action.value}
-                      label={PROSPECT_ACTIONS[action.value]}
-                      count={action.count}
-                    />
+                    <MiniRow key={action.value} label={PROSPECT_ACTIONS[action.value]} count={action.count} />
                   ))}
               </FunnelCard>
-
-              <ConversionArrow
-                rate={prospectsTotal > 0 ? ((leadsTotal / prospectsTotal) * 100).toFixed(1) : "0"}
-                label="Prospect → Lead"
-              />
-
-              {/* Leads */}
+              <ConversionArrow rate={prospectsTotal > 0 ? ((leadsTotal / prospectsTotal) * 100).toFixed(1) : "0"} label="Prospect → Lead" />
               <FunnelCard
                 title="Leads"
                 subtitle="Want to talk"
@@ -999,20 +1202,18 @@ export default function Dashboard() {
                 {leads
                   .sort((a, b) => b.count - a.count)
                   .map((action) => (
-                    <MiniRow
-                      key={action.value}
-                      label={LEAD_ACTIONS[action.value]}
-                      count={action.count}
-                    />
+                    <MiniRow key={action.value} label={LEAD_ACTIONS[action.value]} count={action.count} />
                   ))}
+                {organicLeads > 0 && (
+                  <>
+                    <div style={{ borderTop: "1px dashed #CBD5E1", margin: "6px 0", position: "relative" }}>
+                      <span style={{ position: "absolute", top: "-7px", left: "50%", transform: "translateX(-50%)", background: "#EFF6FF", padding: "0 6px", fontSize: "8px", fontWeight: 700, color: "#3B82F6", textTransform: "uppercase", letterSpacing: "0.5px", whiteSpace: "nowrap" }}>Organic</span>
+                    </div>
+                    <MiniRow label="Prospects who booked visits" count={organicLeads} highlight />
+                  </>
+                )}
               </FunnelCard>
-
-              <ConversionArrow
-                rate={leadsTotal > 0 ? (((homeVisits ?? 0) / leadsTotal) * 100).toFixed(1) : "0"}
-                label="Lead → Visit"
-              />
-
-              {/* Home Visits */}
+              <ConversionArrow rate={leadsTotal > 0 ? (((homeVisits ?? 0) / leadsTotal) * 100).toFixed(1) : "0"} label="Lead → Visit" />
               <FunnelCard
                 title="Home Visits"
                 subtitle="Visit booked"
@@ -1021,43 +1222,581 @@ export default function Dashboard() {
                 bg="#ECFDF5"
                 rate={leadsTotal > 0 ? `${(((homeVisits ?? 0) / leadsTotal) * 100).toFixed(1)}% of leads` : undefined}
               >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 0" }}>
-                  <span style={{ fontSize: "48px", fontWeight: 800, color: "#059669", lineHeight: 1 }}>
-                    {(homeVisits ?? 0).toLocaleString()}
-                  </span>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "10px 0" }}>
+                  <span style={{ fontSize: "32px", fontWeight: 800, color: "#059669", lineHeight: 1 }}>{(homeVisits ?? 0).toLocaleString()}</span>
                 </div>
               </FunnelCard>
-
-              <ConversionArrow
-                rate={(homeVisits ?? 0) > 0 ? (((wonJobs ?? 0) / (homeVisits ?? 1)) * 100).toFixed(1) : "0"}
-                label="Visit → Won"
-              />
-
-              {/* Won Jobs */}
+              <ConversionArrow rate={(homeVisits ?? 0) > 0 ? (((wonJobs ?? 0) / (homeVisits ?? 1)) * 100).toFixed(1) : "0"} label="Visit → Won" />
               <FunnelCard
                 title="Won Jobs"
-                subtitle="Deal won, waiting for install"
+                subtitle="Deal won"
                 total={wonJobs ?? 0}
                 colour="#059669"
                 bg="#ECFDF5"
                 rate={(homeVisits ?? 0) > 0 ? `${(((wonJobs ?? 0) / (homeVisits ?? 1)) * 100).toFixed(1)}% of visits` : undefined}
               >
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "16px 0", gap: "8px" }}>
-                  <span style={{ fontSize: "48px", fontWeight: 800, color: "#059669", lineHeight: 1 }}>
-                    {(wonJobs ?? 0).toLocaleString()}
-                  </span>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "8px 0", gap: "2px" }}>
+                  <span style={{ fontSize: "32px", fontWeight: 800, color: "#059669", lineHeight: 1 }}>{(wonJobs ?? 0).toLocaleString()}</span>
                   {wonValue !== null && wonValue > 0 && (
-                    <span style={{ fontSize: "18px", fontWeight: 700, color: "#047857" }}>
-                      £{wonValue.toLocaleString()}
-                    </span>
+                    <span style={{ fontSize: "13px", fontWeight: 700, color: "#047857" }}>£{wonValue.toLocaleString()}</span>
                   )}
                 </div>
               </FunnelCard>
             </div>
 
+            </div>
+
+            <div>
+            <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              Contacts Per Team
+            </h2>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px" }}>
+              {categoryCards.map((cat) => {
+                const goalPct = cat.title === "PPC" ? goals.ppcPercentGoal
+                  : cat.title === "SEO" ? goals.seoPercentGoal
+                  : cat.title === "Content" ? goals.contentPercentGoal
+                  : cat.title === "Other" ? goals.otherPercentGoal
+                  : null;
+                const teamPct = cat.title === "PPC" ? goals.ppcPercentGoal
+                  : cat.title === "SEO" ? goals.seoPercentGoal
+                  : cat.title === "Content" ? goals.contentPercentGoal
+                  : cat.title === "Other" ? goals.otherPercentGoal
+                  : null;
+                const teamGoalMonth = (goals.contactsGoalPerMonth && teamPct)
+                  ? Math.round((goals.contactsGoalPerMonth * teamPct) / 100)
+                  : (cat.title === "PPC" ? goals.ppcGoalPerMonth
+                    : cat.title === "SEO" ? goals.seoGoalPerMonth
+                    : cat.title === "Content" ? goals.contentGoalPerMonth
+                    : cat.title === "Other" ? goals.otherGoalPerMonth
+                    : null);
+                const teamGoal = proratedGoal(teamGoalMonth);
+                return (
+                  <SourcePanel key={cat.title} {...cat} sourcesTotal={sourcesTotal} breakdown={sourceBreakdown[cat.title]} goalPercent={goalPct} teamGoal={teamGoal} />
+                );
+              })}
+            </div>
+            </div>
+
+            {/* === AD SPEND === */}
+            {adSpend.length > 0 && adSpendTotal > 0 && (
+              <div>
+                <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  Ad Spend
+                </h2>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px" }}>
+                  {/* Total card */}
+                  <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px 16px", borderLeft: "3px solid #0F172A" }}>
+                    <p style={{ fontSize: "10px", fontWeight: 600, color: "#64748B", margin: "0 0 4px", textTransform: "uppercase" }}>Total Spend</p>
+                    <p style={{ fontSize: "24px", fontWeight: 800, color: "#0F172A", margin: 0, lineHeight: 1 }}>
+                      £{adSpendTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  {/* Per platform */}
+                  {adSpend.filter((p) => p.spend > 0).map((p) => (
+                    <div key={p.name} style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px 16px", borderLeft: `3px solid ${p.colour}` }}>
+                      <p style={{ fontSize: "10px", fontWeight: 600, color: "#64748B", margin: "0 0 4px", textTransform: "uppercase" }}>{p.name}</p>
+                      <p style={{ fontSize: "24px", fontWeight: 800, color: "#0F172A", margin: 0, lineHeight: 1 }}>
+                        £{p.spend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                      {p.clicks > 0 && (
+                        <p style={{ fontSize: "11px", color: "#94A3B8", margin: "4px 0 0" }}>
+                          {p.clicks.toLocaleString()} clicks · £{(p.spend / p.clicks).toFixed(2)} CPC
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* === CHART + LIFECYCLE STAGES side by side === */}
+            <div>
+            <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              Trends & Lifecycle
+            </h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {/* CHART with pill buttons — full width */}
+              {(() => {
+                const metrics = [
+                  { key: "contacts", label: "Contacts", colour: "#6366F1" },
+                  { key: "prospects", label: "Prospects", colour: "#F59E0B" },
+                  { key: "leads", label: "Leads", colour: "#3B82F6" },
+                  { key: "visits", label: "Home Visits", colour: "#10B981" },
+                  { key: "visitors", label: "Visitors", colour: "#8B5CF6" },
+                ];
+                const active = metrics.find((m) => m.key === selectedMetric) ?? metrics[0];
+
+                return (
+                  <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px", position: "relative" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                      <div style={{ display: "flex", gap: "2px", background: "#F1F5F9", borderRadius: "8px", padding: "3px" }}>
+                        {metrics.map((m) => (
+                          <button
+                            key={m.key}
+                            onClick={() => switchMetric(m.key)}
+                            style={{
+                              fontSize: "10px",
+                              fontWeight: selectedMetric === m.key ? 700 : 500,
+                              color: selectedMetric === m.key ? "white" : "#64748B",
+                              background: selectedMetric === m.key ? m.colour : "transparent",
+                              border: "none",
+                              borderRadius: "6px",
+                              padding: "4px 10px",
+                              cursor: "pointer",
+                              whiteSpace: "nowrap",
+                              transition: "all 0.15s",
+                            }}
+                          >
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p style={{ fontSize: "11px", color: "#94A3B8", margin: 0 }}>
+                        {timelineData.reduce((s, d) => s + d.count, 0).toLocaleString()} total
+                      </p>
+                    </div>
+                    {timelineLoading && (
+                      <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 2, background: "rgba(255,255,255,0.85)", borderRadius: "10px", padding: "12px 24px" }}>
+                        <p style={{ fontSize: "13px", color: "#64748B", margin: 0, fontWeight: 600 }}>Loading...</p>
+                      </div>
+                    )}
+                    <div style={{ width: "100%", height: 180, opacity: timelineLoading ? 0.3 : 1, transition: "opacity 0.2s" }}>
+                      {timelineData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={timelineData} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
+                            <defs>
+                              <linearGradient id="metricGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor={active.colour} stopOpacity={0.2} />
+                                <stop offset="95%" stopColor={active.colour} stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#F1F5F9" />
+                            <XAxis
+                              dataKey="label"
+                              tick={{ fontSize: 10, fill: "#94A3B8" }}
+                              axisLine={false}
+                              tickLine={false}
+                              tickFormatter={(d: string) => {
+                                if (timelineGranularity === "day") {
+                                  const [, m, day] = d.split("-");
+                                  return `${parseInt(day)}/${parseInt(m)}`;
+                                }
+                                return d;
+                              }}
+                              interval={timelineData.length > 20 ? Math.floor(timelineData.length / 10) : 0}
+                            />
+                            <YAxis tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                            <Tooltip
+                              labelFormatter={(d) => String(d)}
+                              formatter={(value) => [Number(value).toLocaleString(), active.label]}
+                              contentStyle={{ borderRadius: "10px", border: "1px solid #E2E8F0", fontSize: "12px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="count"
+                              stroke={active.colour}
+                              strokeWidth={2}
+                              fill="url(#metricGradient)"
+                              dot={timelineData.length <= 31 ? { r: 3, fill: active.colour, strokeWidth: 0 } : false}
+                              activeDot={{ r: 5, fill: active.colour, stroke: "white", strokeWidth: 2 }}
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#94A3B8", fontSize: "13px" }}>
+                          Select a metric to see the trend
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "10px" }}>
+              {/* LIFECYCLE STAGES */}
+              {lifecycleStages.length > 0 && (
+                <LifecyclePipeline stages={lifecycleStages} periodStages={lifecyclePeriod} />
+              )}
+
+              {/* DAY OF WEEK */}
+              {timelineGranularity === "day" && timelineData.length > 0 && (
+                <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px", display: "flex", flexDirection: "column" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                    <p style={{ fontSize: "11px", fontWeight: 600, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                      By Day of Week
+                    </p>
+                    {(() => {
+                      const best = timelineData.reduce((b, d) => d.count > b.count ? d : b, timelineData[0]);
+                      const [,m,d] = best.label.split("-");
+                      return (
+                        <span style={{ fontSize: "10px", color: "#059669", fontWeight: 700 }}>
+                          Best: {best.count} ({parseInt(d)}/{parseInt(m)})
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  <div style={{ display: "flex", gap: "6px", alignItems: "flex-end", flex: 1 }}>
+                    {(() => {
+                      const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+                      const dayCounts = [0, 0, 0, 0, 0, 0, 0];
+                      for (const d of timelineData) {
+                        const date = new Date(d.label + "T12:00:00");
+                        const dow = (date.getDay() + 6) % 7;
+                        dayCounts[dow] += d.count;
+                      }
+                      const maxDay = Math.max(...dayCounts, 1);
+                      const bestIdx = dayCounts.indexOf(Math.max(...dayCounts));
+                      return days.map((day, i) => (
+                        <div key={day} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+                          <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", flex: 1 }}>
+                            {dayCounts[i] > 0 && <span style={{ fontSize: "10px", fontWeight: 700, color: i === bestIdx ? "#059669" : "#0F172A", marginBottom: "2px" }}>{dayCounts[i]}</span>}
+                            <div style={{
+                              width: "100%",
+                              maxWidth: "48px",
+                              height: `${Math.max((dayCounts[i] / maxDay) * 100, dayCounts[i] > 0 ? 4 : 0)}%`,
+                              background: i === bestIdx ? "#10B981" : "#6366F1",
+                              borderRadius: "4px 4px 0 0",
+                              transition: "height 0.3s ease",
+                            }} />
+                          </div>
+                          <span style={{ fontSize: "10px", fontWeight: 600, color: i === bestIdx ? "#059669" : "#64748B" }}>{day}</span>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+              )}
+              </div>
+            </div>
+
+            </div>
+
+            {/* === REVIEWS + SOCIAL across the bottom === */}
+            <div>
+            <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              Reviews & Social
+            </h2>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+              {/* REVIEWS */}
+              {reviews.length > 0 && reviews.some((r) => r.total > 0) && (
+                <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "12px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "8px" }}>
+                    <p style={{ fontSize: "11px", fontWeight: 600, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>Reviews</p>
+                    <p style={{ fontSize: "12px", color: "#94A3B8", margin: 0 }}>
+                      <span style={{ fontWeight: 800, color: "#0F172A", fontSize: "15px" }}>{reviewsTotal.toLocaleString()}</span> total
+                    </p>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: `repeat(${reviews.filter((r) => r.total > 0).length}, 1fr)`, gap: "6px" }}>
+                    {reviews.filter((r) => r.total > 0).map((r) => (
+                      <a key={r.name} href={r.url || undefined} target="_blank" rel="noopener noreferrer"
+                        style={{ textDecoration: "none", background: `${r.colour}08`, borderRadius: "8px", border: `1px solid ${r.colour}25`, padding: "8px 10px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2px" }}>
+                          <span style={{ fontSize: "11px", fontWeight: 700, color: r.colour }}>{r.name}</span>
+                          {r.rating > 0 && <span style={{ fontSize: "10px", fontWeight: 700, color: "#0F172A" }}>★ {r.rating}</span>}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: "4px" }}>
+                          <span style={{ fontSize: "18px", fontWeight: 800, color: "#0F172A", lineHeight: 1 }}>{r.total.toLocaleString()}</span>
+                          <span style={{ fontSize: "9px", color: "#64748B" }}>reviews</span>
+                          {r.increase !== null && r.increase > 0 && (
+                            <span style={{ fontSize: "9px", fontWeight: 700, color: "#059669", background: "#ECFDF5", borderRadius: "4px", padding: "1px 5px" }}>+{r.increase}</span>
+                          )}
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* SOCIAL */}
+              {social.length > 0 && social.some((s) => s.total > 0) && (
+                <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "12px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "8px" }}>
+                    <p style={{ fontSize: "11px", fontWeight: 600, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>Social Followers</p>
+                    <p style={{ fontSize: "12px", color: "#94A3B8", margin: 0 }}>
+                      <span style={{ fontWeight: 800, color: "#0F172A", fontSize: "15px" }}>{socialTotal.toLocaleString()}</span> total
+                    </p>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: `repeat(${social.filter((s) => s.total > 0).length}, 1fr)`, gap: "6px" }}>
+                    {social.filter((s) => s.total > 0).map((s) => (
+                      <a key={s.name} href={s.url || undefined} target="_blank" rel="noopener noreferrer"
+                        style={{ textDecoration: "none", background: `${s.colour}08`, borderRadius: "8px", border: `1px solid ${s.colour}25`, padding: "8px 10px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2px" }}>
+                          <span style={{ fontSize: "11px", fontWeight: 700, color: s.colour }}>{s.name}</span>
+                          {!s.auto && <span style={{ fontSize: "8px", color: "#94A3B8", background: "#F1F5F9", borderRadius: "3px", padding: "1px 4px" }}>manual</span>}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: "4px" }}>
+                          <span style={{ fontSize: "18px", fontWeight: 800, color: "#0F172A", lineHeight: 1 }}>{s.total.toLocaleString()}</span>
+                          <span style={{ fontSize: "9px", color: "#64748B" }}>followers</span>
+                          {s.increase !== null && s.increase > 0 && (
+                            <span style={{ fontSize: "9px", fontWeight: 700, color: "#059669", background: "#ECFDF5", borderRadius: "4px", padding: "1px 5px" }}>+{s.increase.toLocaleString()}</span>
+                          )}
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            </div>
+
+
+
           </div>
         )}
       </main>
+
+      {/* AI Insights floating button */}
+      <button
+        onClick={() => { if (aiInsights.length === 0 && !aiLoading) fetchAiInsights(); else setAiOpen(true); }}
+        disabled={aiLoading}
+        style={{
+          position: "fixed",
+          bottom: "24px",
+          right: "24px",
+          zIndex: 900,
+          background: aiLoading ? "#A78BFA" : "#8B5CF6",
+          color: "white",
+          border: "none",
+          borderRadius: "14px",
+          padding: "12px 20px",
+          fontSize: "13px",
+          fontWeight: 700,
+          cursor: aiLoading ? "not-allowed" : "pointer",
+          boxShadow: "0 4px 20px rgba(139, 92, 246, 0.4)",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          transition: "all 0.2s",
+        }}
+      >
+        {aiLoading && <div style={{ width: "14px", height: "14px", border: "2px solid rgba(255,255,255,0.3)", borderTop: "2px solid white", borderRadius: "50%", animation: "spin 1s linear infinite" }} />}
+        {aiLoading ? "Analysing..." : "AI Insights"}
+      </button>
+
+      {/* AI Insights slide-out panel */}
+      {aiOpen && (
+        <>
+          <div onClick={() => setAiOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.3)", backdropFilter: "blur(2px)" }} />
+          <div style={{
+            position: "fixed",
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: "440px",
+            zIndex: 1001,
+            background: "#F8FAFC",
+            boxShadow: "-8px 0 30px rgba(0,0,0,0.12)",
+            display: "flex",
+            flexDirection: "column",
+            animation: "slideIn 0.25s ease",
+          }}>
+            {/* Header */}
+            <div style={{ padding: "20px 24px", borderBottom: "1px solid #E2E8F0", background: "white", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <h2 style={{ fontSize: "16px", fontWeight: 700, color: "#0F172A", margin: 0 }}>AI Marketing Insights</h2>
+                <p style={{ fontSize: "11px", color: "#94A3B8", margin: "2px 0 0" }}>Powered by Claude</p>
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  onClick={fetchAiInsights}
+                  disabled={aiLoading}
+                  style={{ fontSize: "11px", fontWeight: 600, color: "#8B5CF6", background: "#F5F3FF", border: "1px solid #DDD6FE", borderRadius: "8px", padding: "6px 12px", cursor: "pointer" }}
+                >
+                  {aiLoading ? "..." : "Refresh"}
+                </button>
+                <button
+                  onClick={() => setAiOpen(false)}
+                  style={{ background: "#F1F5F9", border: "none", borderRadius: "8px", width: "32px", height: "32px", cursor: "pointer", fontSize: "16px", color: "#64748B", display: "flex", alignItems: "center", justifyContent: "center" }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "16px 24px", display: "flex", flexDirection: "column", gap: "12px" }}>
+              {aiLoading && (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 0", gap: "12px" }}>
+                  <div style={{ width: "32px", height: "32px", border: "3px solid #E2E8F0", borderTop: "3px solid #8B5CF6", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                  <p style={{ fontSize: "13px", color: "#64748B", margin: 0 }}>Analysing your marketing data...</p>
+                </div>
+              )}
+              {!aiLoading && aiInsights.map((insight, i) => {
+                if (aiDismissed.has(i)) return null;
+                // Split on ** for bold parts
+                const parts = insight.split(/\*\*(.*?)\*\*/);
+                return (
+                  <div key={i} style={{
+                    background: "white",
+                    borderRadius: "12px",
+                    border: "1px solid #E2E8F0",
+                    padding: "16px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "12px",
+                  }}>
+                    <div style={{ fontSize: "13px", color: "#334155", lineHeight: 1.6 }}>
+                      <span style={{ fontSize: "11px", fontWeight: 700, color: "#8B5CF6", background: "#F5F3FF", borderRadius: "4px", padding: "2px 6px", marginRight: "8px" }}>
+                        {i + 1}
+                      </span>
+                      {parts.map((part, j) =>
+                        j % 2 === 1
+                          ? <strong key={j} style={{ color: "#0F172A" }}>{part}</strong>
+                          : <span key={j}>{part}</span>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <button
+                        onClick={() => {
+                          setAiDismissed((prev) => { const next = new Set(prev); next.add(i); return next; });
+                          const boldMatch = insight.match(/\*\*(.*?)\*\*/);
+                          const summary = boldMatch ? boldMatch[1] : insight.substring(0, 80);
+                          fetch("/api/ai-feedback", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ accepted: summary }),
+                          });
+                        }}
+                        style={{
+                          flex: 1,
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          color: "#059669",
+                          background: "#ECFDF5",
+                          border: "1px solid #A7F3D0",
+                          borderRadius: "8px",
+                          padding: "8px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Will do this
+                      </button>
+                      <button
+                        onClick={() => { setAiRejectingIdx(i); setAiRejectReason(""); }}
+                        style={{
+                          flex: 1,
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          color: "#64748B",
+                          background: "#F8FAFC",
+                          border: "1px solid #E2E8F0",
+                          borderRadius: "8px",
+                          padding: "8px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Not relevant
+                      </button>
+                    </div>
+                    {aiRejectingIdx === i && (
+                      <div style={{ display: "flex", gap: "6px", marginTop: "-4px" }}>
+                        <input
+                          autoFocus
+                          type="text"
+                          placeholder="Why? (optional)"
+                          value={aiRejectReason}
+                          onChange={(e) => setAiRejectReason(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              const boldMatch = insight.match(/\*\*(.*?)\*\*/);
+                              const summary = boldMatch ? boldMatch[1] : insight.substring(0, 80);
+                              const full = aiRejectReason ? `${summary} (reason: ${aiRejectReason})` : summary;
+                              setAiDismissed((prev) => { const next = new Set(prev); next.add(i); return next; });
+                              setAiRejected((prev) => [...prev, full]);
+                              fetch("/api/ai-feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rejected: full }) });
+                              setAiRejectingIdx(null);
+                            }
+                          }}
+                          style={{ flex: 1, fontSize: "12px", border: "1px solid #E2E8F0", borderRadius: "6px", padding: "6px 10px", background: "#F8FAFC" }}
+                        />
+                        <button
+                          onClick={() => {
+                            const boldMatch = insight.match(/\*\*(.*?)\*\*/);
+                            const summary = boldMatch ? boldMatch[1] : insight.substring(0, 80);
+                            const full = aiRejectReason ? `${summary} (reason: ${aiRejectReason})` : summary;
+                            setAiDismissed((prev) => { const next = new Set(prev); next.add(i); return next; });
+                            setAiRejected((prev) => [...prev, full]);
+                            fetch("/api/ai-feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rejected: full }) });
+                            setAiRejectingIdx(null);
+                          }}
+                          style={{ fontSize: "11px", fontWeight: 600, color: "white", background: "#64748B", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer" }}
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {!aiLoading && aiInsights.length > 0 && aiDismissed.size === aiInsights.length && (
+                <div style={{ textAlign: "center", padding: "40px 0" }}>
+                  <p style={{ fontSize: "14px", fontWeight: 600, color: "#059669", margin: "0 0 8px" }}>All insights reviewed!</p>
+                  <button
+                    onClick={fetchAiInsights}
+                    style={{ fontSize: "12px", fontWeight: 600, color: "#8B5CF6", background: "#F5F3FF", border: "1px solid #DDD6FE", borderRadius: "8px", padding: "8px 16px", cursor: "pointer" }}
+                  >
+                    Get fresh insights
+                  </button>
+                </div>
+              )}
+
+              {/* Chat messages */}
+              {aiChatMessages.length > 0 && (
+                <div style={{ borderTop: "1px solid #E2E8F0", paddingTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {aiChatMessages.map((msg, i) => (
+                    <div key={i} style={{
+                      background: msg.role === "user" ? "#EFF6FF" : "white",
+                      border: `1px solid ${msg.role === "user" ? "#BFDBFE" : "#E2E8F0"}`,
+                      borderRadius: "10px",
+                      padding: "10px 14px",
+                      alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
+                      maxWidth: "90%",
+                    }}>
+                      <p style={{ fontSize: "12px", color: "#334155", margin: 0, lineHeight: 1.5 }}>{msg.text}</p>
+                    </div>
+                  ))}
+                  {aiChatLoading && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px" }}>
+                      <div style={{ width: "12px", height: "12px", border: "2px solid #E2E8F0", borderTop: "2px solid #8B5CF6", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                      <span style={{ fontSize: "11px", color: "#94A3B8" }}>Thinking...</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Chat input */}
+            <div style={{ padding: "12px 24px 16px", borderTop: "1px solid #E2E8F0", background: "white" }}>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <input
+                  type="text"
+                  placeholder="Ask about your data..."
+                  value={aiChatInput}
+                  onChange={(e) => setAiChatInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !aiChatLoading) sendAiChat(); }}
+                  style={{ flex: 1, fontSize: "13px", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", background: "#F8FAFC" }}
+                />
+                <button
+                  onClick={sendAiChat}
+                  disabled={aiChatLoading || !aiChatInput.trim()}
+                  style={{
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    color: "white",
+                    background: aiChatLoading ? "#A78BFA" : "#8B5CF6",
+                    border: "none",
+                    borderRadius: "10px",
+                    padding: "10px 16px",
+                    cursor: aiChatLoading ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Ask
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {showSettings && <SettingsModal initialGoals={goals} onClose={() => setShowSettings(false)} />}
     </div>
@@ -1083,10 +1822,16 @@ const LIFECYCLE_COLOURS: Record<string, string> = {
 
 function LifecyclePipeline({ stages, periodStages }: { stages: { label: string; value: string; count: number }[]; periodStages: { label: string; value: string; count: number }[] }) {
   const total = stages.reduce((s, st) => s + st.count, 0);
-  const activeStages = stages.filter((s) => s.count > 0);
-  const maxCount = Math.max(...activeStages.map((s) => s.count));
   const periodMap = new Map(periodStages.map((s) => [s.value, s.count]));
   const hasPeriod = periodStages.length > 0;
+
+  const featuredOrder = ["Cold - Unsubscribed", "Cold - Subscribed", "Prospect", "Lead"];
+  const featuredStages = featuredOrder
+    .map((label) => stages.find((s) => s.label === label))
+    .filter((s): s is { label: string; value: string; count: number } => !!s);
+  const featuredLabels = new Set(featuredOrder);
+  const otherStages = stages.filter((s) => !featuredLabels.has(s.label) && s.count > 0);
+  const maxCount = Math.max(...featuredStages.map((s) => s.count), 1);
 
   return (
     <div
@@ -1094,80 +1839,138 @@ function LifecyclePipeline({ stages, periodStages }: { stages: { label: string; 
         background: "white",
         borderRadius: "14px",
         border: "1px solid #E2E8F0",
-        padding: "20px 24px",
+        padding: "16px 20px",
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "20px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "14px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <p style={{ fontSize: "13px", fontWeight: 600, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+          <p style={{ fontSize: "12px", fontWeight: 700, color: "#475569", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
             Lifecycle Stages
           </p>
-          <span style={{ fontSize: "11px", color: "#94A3B8", background: "#F1F5F9", borderRadius: "6px", padding: "2px 8px" }}>
+          <span style={{ fontSize: "10px", color: "#94A3B8", background: "#F1F5F9", borderRadius: "6px", padding: "2px 8px", fontWeight: 500 }}>
             Live totals
           </span>
         </div>
-        <p style={{ fontSize: "13px", color: "#94A3B8", margin: 0, fontVariantNumeric: "tabular-nums" }}>
-          <span style={{ fontWeight: 700, color: "#0F172A" }}>{total.toLocaleString()}</span> contacts
+        <p style={{ fontSize: "12px", color: "#94A3B8", margin: 0, fontVariantNumeric: "tabular-nums" }}>
+          <span style={{ fontWeight: 800, color: "#0F172A", fontSize: "15px" }}>{total.toLocaleString()}</span> contacts
         </p>
       </div>
 
-      {/* Pipeline circles */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "center", gap: "0", overflowX: "auto" }}>
-        {activeStages.map((stage, i) => {
-          const colour = LIFECYCLE_COLOURS[stage.label] ?? "#94A3B8";
-          const sizeScale = Math.max(0.55, Math.min(1, stage.count / maxCount));
-          const size = Math.round(48 + sizeScale * 36);
-          const periodCount = periodMap.get(stage.value) ?? 0;
+      <div style={{ display: "flex", gap: "20px", alignItems: "stretch" }}>
+        {/* Main pipeline */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1, padding: "8px 0" }}>
+          {featuredStages.map((stage, i) => {
+            const colour = LIFECYCLE_COLOURS[stage.label] ?? "#94A3B8";
+            const sizeScale = Math.max(0.5, stage.count / maxCount);
+            const size = Math.round(54 + sizeScale * 36);
+            const periodCount = periodMap.get(stage.value) ?? 0;
+            const isLead = stage.label === "Lead";
+            const pct = ((stage.count / total) * 100).toFixed(1);
 
-          return (
-            <div key={stage.value} style={{ display: "flex", alignItems: "center" }}>
-              {i > 0 && (
-                <div style={{ width: "20px", height: "2px", background: "#E2E8F0", flexShrink: 0, marginTop: `${size / 2}px`, alignSelf: "flex-start" }} />
-              )}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", flexShrink: 0 }}>
-                <div
-                  title={`${stage.label}: ${stage.count.toLocaleString()} (${((stage.count / total) * 100).toFixed(1)}%)`}
-                  style={{
-                    width: `${size}px`,
-                    height: `${size}px`,
-                    borderRadius: "50%",
-                    background: `${colour}18`,
-                    border: `2.5px solid ${colour}`,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    transition: "all 0.3s ease",
-                  }}
-                >
-                  <span style={{ fontSize: size > 60 ? "16px" : "13px", fontWeight: 800, color: colour, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
-                    {stage.count.toLocaleString()}
-                  </span>
-                </div>
-                <span style={{ fontSize: "10px", fontWeight: 600, color: "#64748B", textAlign: "center", maxWidth: "80px", lineHeight: 1.2 }}>
-                  {stage.label}
-                </span>
-                {hasPeriod && (
-                  <span style={{
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    color: periodCount > 0 ? "#059669" : "#CBD5E1",
-                    background: periodCount > 0 ? "#ECFDF5" : "#F8FAFC",
-                    borderRadius: "8px",
-                    padding: "2px 8px",
-                    fontVariantNumeric: "tabular-nums",
-                  }}>
-                    {periodCount > 0 ? `+${periodCount.toLocaleString()}` : "—"}
-                  </span>
+            return (
+              <div key={stage.value} style={{ display: "flex", alignItems: "center", flex: 1, justifyContent: "center" }}>
+                {i > 0 && (
+                  <svg width="40" height="20" viewBox="0 0 40 20" style={{ flexShrink: 0, opacity: 0.4 }}>
+                    <line x1="0" y1="10" x2="30" y2="10" stroke="#CBD5E1" strokeWidth="2" />
+                    <polygon points="30,5 40,10 30,15" fill="#CBD5E1" />
+                  </svg>
                 )}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+                  <div
+                    title={`${stage.label}: ${stage.count.toLocaleString()} (${pct}%)`}
+                    style={{
+                      width: `${size}px`,
+                      height: `${size}px`,
+                      borderRadius: "50%",
+                      background: isLead
+                        ? `radial-gradient(circle at 30% 30%, ${colour}30, ${colour}12)`
+                        : `radial-gradient(circle at 30% 30%, ${colour}20, ${colour}08)`,
+                      border: `${isLead ? "3.5px" : "2.5px"} solid ${colour}`,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "2px",
+                      transition: "all 0.3s ease",
+                      boxShadow: isLead ? `0 0 20px ${colour}35, 0 0 40px ${colour}15` : `0 2px 8px ${colour}15`,
+                    }}
+                  >
+                    <span style={{ fontSize: size > 72 ? "17px" : size > 60 ? "14px" : "12px", fontWeight: 800, color: colour, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
+                      {stage.count.toLocaleString()}
+                    </span>
+                    <span style={{ fontSize: "9px", fontWeight: 600, color: `${colour}99`, lineHeight: 1 }}>
+                      {pct}%
+                    </span>
+                  </div>
+                  <span style={{ fontSize: "11px", fontWeight: isLead ? 800 : 600, color: isLead ? colour : "#475569", textAlign: "center", lineHeight: 1.2 }}>
+                    {stage.label}
+                  </span>
+                  {hasPeriod && (
+                    <span style={{
+                      fontSize: "10px",
+                      fontWeight: 700,
+                      color: periodCount > 0 ? "#059669" : "#CBD5E1",
+                      background: periodCount > 0 ? "#ECFDF5" : "#F8FAFC",
+                      borderRadius: "10px",
+                      padding: "3px 12px",
+                      fontVariantNumeric: "tabular-nums",
+                    }}>
+                      {periodCount > 0 ? `+${periodCount.toLocaleString()}` : "—"}
+                    </span>
+                  )}
+                </div>
               </div>
+            );
+          })}
+        </div>
+
+        {/* Divider */}
+        {otherStages.length > 0 && (
+          <div style={{ width: "1px", background: "#E2E8F0", alignSelf: "stretch", margin: "8px 0" }} />
+        )}
+
+        {/* Other stages table */}
+        {otherStages.length > 0 && (
+          <div style={{ minWidth: "190px", flexShrink: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+            <p style={{ fontSize: "10px", fontWeight: 700, color: "#94A3B8", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.8px" }}>
+              Other Stages
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+              {otherStages.map((stage) => {
+                const colour = LIFECYCLE_COLOURS[stage.label] ?? "#94A3B8";
+                const periodCount = periodMap.get(stage.value) ?? 0;
+                return (
+                  <div
+                    key={stage.value}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      padding: "7px 10px",
+                      borderRadius: "8px",
+                      gap: "10px",
+                      background: "#FAFBFC",
+                    }}
+                  >
+                    <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: colour, flexShrink: 0 }} />
+                    <span style={{ color: "#475569", fontWeight: 500, fontSize: "11px", flex: 1 }}>{stage.label}</span>
+                    <span style={{ fontWeight: 700, color: "#0F172A", fontSize: "12px", fontVariantNumeric: "tabular-nums", minWidth: "36px", textAlign: "right" }}>
+                      {stage.count.toLocaleString()}
+                    </span>
+                    {hasPeriod && (
+                      <span style={{ fontWeight: 600, fontSize: "10px", color: periodCount > 0 ? "#059669" : "#CBD5E1", fontVariantNumeric: "tabular-nums", minWidth: "28px", textAlign: "right" }}>
+                        {periodCount > 0 ? `+${periodCount}` : "—"}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
+          </div>
+        )}
       </div>
 
       {hasPeriod && (
-        <p style={{ fontSize: "11px", color: "#94A3B8", margin: "14px 0 0", textAlign: "center" }}>
+        <p style={{ fontSize: "10px", color: "#94A3B8", margin: "10px 0 0", textAlign: "center" }}>
           Green badges show contacts created in the selected date range
         </p>
       )}
@@ -1175,25 +1978,62 @@ function LifecyclePipeline({ stages, periodStages }: { stages: { label: string; 
   );
 }
 
-function KpiCard({ label, value, colour, subtitle }: { label: string; value: number | null; colour: string; subtitle?: string }) {
+
+function KpiCard({ label, value, colour, subtitle, detail, goal, comparison, onClick, selected, liveNow }: { label: string; value: number | null; colour: string; subtitle?: string; detail?: string; goal?: { current: number; target: number }; comparison?: { current: number; previous: number }; onClick?: () => void; selected?: boolean; liveNow?: number | null }) {
+  const pct = goal ? Math.min((goal.current / goal.target) * 100, 100) : 0;
+  const met = goal ? goal.current >= goal.target : false;
+
   return (
     <div
+      onClick={onClick}
       style={{
-        background: "white",
-        borderRadius: "14px",
-        padding: "20px",
-        border: "1px solid #E2E8F0",
-        borderBottom: `3px solid ${colour}`,
+        background: selected ? `${colour}06` : "white",
+        borderRadius: "10px",
+        padding: "14px 16px",
+        borderTop: selected ? `2px solid ${colour}` : "1px solid #E8ECF0",
+        borderRight: selected ? `2px solid ${colour}` : "1px solid #E8ECF0",
+        borderBottom: selected ? `2px solid ${colour}` : "1px solid #E8ECF0",
+        borderLeft: `3px solid ${colour}`,
+        cursor: onClick ? "pointer" : "default",
+        transition: "all 0.15s ease",
       }}
     >
-      <p style={{ fontSize: "12px", fontWeight: 600, color: "#64748B", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+      <p style={{ fontSize: "10px", fontWeight: 600, color: "#64748B", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
         {label}
       </p>
-      <p style={{ fontSize: "32px", fontWeight: 800, color: "#0F172A", margin: 0, lineHeight: 1 }}>
+      <p style={{ fontSize: "24px", fontWeight: 800, color: "#0F172A", margin: 0, lineHeight: 1 }}>
         {value !== null ? value.toLocaleString() : "—"}
       </p>
       {subtitle && (
         <p style={{ fontSize: "12px", color: "#94A3B8", margin: "6px 0 0" }}>{subtitle}</p>
+      )}
+      {detail && (
+        <p style={{ fontSize: "11px", color: "#3B82F6", margin: "4px 0 0", fontWeight: 600 }}>{detail}</p>
+      )}
+      {goal && (
+        <div style={{ marginTop: "6px" }}>
+          <div style={{ background: "#F1F5F9", borderRadius: "3px", height: "3px", overflow: "hidden" }}>
+            <div style={{ width: `${pct}%`, height: "100%", borderRadius: "3px", background: met ? "#10B981" : colour, transition: "width 0.4s ease" }} />
+          </div>
+          <p style={{ fontSize: "10px", fontWeight: 600, color: met ? "#059669" : "#64748B", margin: "3px 0 0" }}>
+            {goal.current} / {goal.target} goal
+          </p>
+        </div>
+      )}
+      {comparison && (
+        <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "4px" }}>
+          <span style={{ fontSize: "11px", fontWeight: 700, color: comparison.current >= comparison.previous ? "#059669" : "#DC2626" }}>
+            {comparison.current >= comparison.previous ? "▲" : "▼"} {Math.abs(comparison.current - comparison.previous)}
+          </span>
+          <span style={{ fontSize: "10px", color: "#94A3B8" }}>vs prev period</span>
+        </div>
+      )}
+      {liveNow != null && (
+        <div style={{ marginTop: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+          <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#10B981", display: "inline-block", animation: "pulse 2s infinite" }} />
+          <span style={{ fontSize: "12px", fontWeight: 700, color: "#059669" }}>{liveNow}</span>
+          <span style={{ fontSize: "11px", color: "#64748B" }}>on site now</span>
+        </div>
       )}
     </div>
   );
@@ -1209,6 +2049,7 @@ function SourcePanel({
   sourcesTotal,
   breakdown,
   goalPercent,
+  teamGoal,
 }: {
   title: string;
   total: number;
@@ -1219,6 +2060,7 @@ function SourcePanel({
   sourcesTotal: number;
   breakdown?: { prospects: number; leads: number };
   goalPercent?: number | null;
+  teamGoal?: number | null;
 }) {
   const filtered = sources.filter((s) => s.count > 0).sort((a, b) => b.count - a.count);
   const pct = sourcesTotal > 0 ? ((total / sourcesTotal) * 100) : 0;
@@ -1228,22 +2070,22 @@ function SourcePanel({
     <div
       style={{
         background: "white",
-        borderRadius: "14px",
-        padding: "20px",
+        borderRadius: "12px",
+        padding: "14px",
         border: "1px solid #E2E8F0",
         display: "flex",
         flexDirection: "column",
-        gap: "14px",
+        gap: "10px",
       }}
     >
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <div
             style={{
-              width: "36px",
-              height: "36px",
-              borderRadius: "10px",
+              width: "30px",
+              height: "30px",
+              borderRadius: "8px",
               background: bg,
               display: "flex",
               alignItems: "center",
@@ -1253,14 +2095,21 @@ function SourcePanel({
             <div style={{ width: "12px", height: "12px", borderRadius: "50%", background: colour }} />
           </div>
           <div>
-            <p style={{ fontSize: "15px", fontWeight: 700, color: "#0F172A", margin: 0 }}>{title}</p>
-            <p style={{ fontSize: "11px", color: "#94A3B8", margin: "1px 0 0" }}>{icon}</p>
+            <p style={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", margin: 0 }}>{title}</p>
+            <p style={{ fontSize: "10px", color: "#94A3B8", margin: "1px 0 0" }}>{icon}</p>
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
-          <p style={{ fontSize: "24px", fontWeight: 800, color: colour, margin: 0, lineHeight: 1 }}>
-            {total.toLocaleString()}
-          </p>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "flex-end", gap: "6px" }}>
+            <p style={{ fontSize: "24px", fontWeight: 800, color: colour, margin: 0, lineHeight: 1 }}>
+              {total.toLocaleString()}
+            </p>
+            {teamGoal && teamGoal > 0 && (
+              <p style={{ fontSize: "14px", fontWeight: 600, color: total >= teamGoal ? "#059669" : "#94A3B8", margin: 0, lineHeight: 1 }}>
+                / {teamGoal.toLocaleString()}
+              </p>
+            )}
+          </div>
           <p style={{ fontSize: "11px", color: "#94A3B8", margin: "2px 0 0" }}>{pctStr}%</p>
         </div>
       </div>
@@ -1318,14 +2167,14 @@ function SourcePanel({
       <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
         {filtered.map((s) => (
           <div key={s.value} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: "13px", color: "#334155" }}>{s.label}</span>
-            <span style={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", fontVariantNumeric: "tabular-nums" }}>
+            <span style={{ fontSize: "11px", color: "#334155" }}>{s.label}</span>
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "#0F172A", fontVariantNumeric: "tabular-nums" }}>
               {s.count.toLocaleString()}
             </span>
           </div>
         ))}
         {filtered.length === 0 && (
-          <p style={{ fontSize: "12px", color: "#CBD5E1", margin: 0 }}>No data</p>
+          <p style={{ fontSize: "11px", color: "#CBD5E1", margin: 0 }}>No data</p>
         )}
       </div>
     </div>
@@ -1340,11 +2189,11 @@ function ConversionArrow({ rate, label }: { rate: string; label: string }) {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        padding: "0 6px",
-        minWidth: "60px",
+        padding: "0 4px",
+        minWidth: "44px",
       }}
     >
-      <span style={{ fontSize: "16px", fontWeight: 800, color: "#0F172A", lineHeight: 1 }}>
+      <span style={{ fontSize: "13px", fontWeight: 800, color: "#0F172A", lineHeight: 1 }}>
         {rate}%
       </span>
       <svg width="24" height="16" viewBox="0 0 24 16" style={{ margin: "4px 0" }}>
@@ -1386,7 +2235,7 @@ function FunnelCard({
       <div
         style={{
           background: bg,
-          padding: "16px 20px",
+          padding: "10px 14px",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
@@ -1394,30 +2243,30 @@ function FunnelCard({
         }}
       >
         <div>
-          <p style={{ fontSize: "14px", fontWeight: 700, color: "#0F172A", margin: 0 }}>{title}</p>
-          <p style={{ fontSize: "11px", color: "#64748B", margin: "2px 0 0" }}>{subtitle}</p>
+          <p style={{ fontSize: "12px", fontWeight: 700, color: "#0F172A", margin: 0 }}>{title}</p>
+          <p style={{ fontSize: "10px", color: "#64748B", margin: "1px 0 0" }}>{subtitle}</p>
         </div>
         <div style={{ textAlign: "right" }}>
-          <span style={{ fontSize: "24px", fontWeight: 800, color: colour, lineHeight: 1 }}>
+          <span style={{ fontSize: "20px", fontWeight: 800, color: colour, lineHeight: 1 }}>
             {total.toLocaleString()}
           </span>
           {rate && (
-            <p style={{ fontSize: "11px", fontWeight: 600, color: "#64748B", margin: "4px 0 0" }}>{rate}</p>
+            <p style={{ fontSize: "10px", fontWeight: 600, color: "#64748B", margin: "2px 0 0" }}>{rate}</p>
           )}
         </div>
       </div>
-      <div style={{ padding: "14px 20px", display: "flex", flexDirection: "column", gap: "6px" }}>
+      <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: "4px" }}>
         {children}
       </div>
     </div>
   );
 }
 
-function MiniRow({ label, count }: { label: string; count: number }) {
+function MiniRow({ label, count, highlight }: { label: string; count: number; highlight?: boolean }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-      <span style={{ fontSize: "13px", color: "#334155" }}>{label}</span>
-      <span style={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", fontVariantNumeric: "tabular-nums" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: highlight ? "#DBEAFE" : "transparent", borderRadius: highlight ? "6px" : 0, padding: highlight ? "4px 8px" : 0 }}>
+      <span style={{ fontSize: "12px", color: highlight ? "#1D4ED8" : "#334155", fontWeight: highlight ? 600 : 400 }}>{label}</span>
+      <span style={{ fontSize: "12px", fontWeight: 700, color: highlight ? "#1D4ED8" : "#0F172A", fontVariantNumeric: "tabular-nums" }}>
         {count.toLocaleString()}
       </span>
     </div>

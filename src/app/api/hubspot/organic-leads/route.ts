@@ -3,6 +3,13 @@ import { NextRequest } from "next/server";
 const HUBSPOT_API = "https://api.hubapi.com";
 const TZ = "Europe/London";
 
+// Prospect-level actions — contacts with these who also have a visit booked
+// are "organic leads" that bypassed the normal lead form
+const PROSPECT_ACTIONS = [
+  "Brochure Download Form", "Flipbook Form", "VAT Exempt Checker",
+  "Pricing Guide", "Physical Brochure Request", "Newsletter Sign Up",
+];
+
 function londonDateToUtcMs(dateStr: string, time: string): number {
   const formatter = new Intl.DateTimeFormat("en-GB", {
     timeZone: TZ,
@@ -43,24 +50,22 @@ export async function GET(request: NextRequest) {
   const fromMs = londonDateToUtcMs(from, "00:00:00");
   const toMs = londonDateToUtcMs(to, "23:59:59");
 
+  // Count contacts who:
+  // 1. Were created in the date range
+  // 2. Have a prospect-level conversion action (not a lead-level one)
+  // 3. Have a visit booked (date_that_initial_visit_booked_is_set_to_yes has a value)
   const body = {
     filterGroups: [
       {
         filters: [
-          {
-            propertyName: "date_that_initial_visit_booked_is_set_to_yes",
-            operator: "GTE",
-            value: fromMs.toString(),
-          },
-          {
-            propertyName: "date_that_initial_visit_booked_is_set_to_yes",
-            operator: "LTE",
-            value: toMs.toString(),
-          },
+          { propertyName: "createdate", operator: "GTE", value: fromMs.toString() },
+          { propertyName: "createdate", operator: "LTE", value: toMs.toString() },
+          { propertyName: "conversion_action", operator: "IN", values: PROSPECT_ACTIONS },
+          { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "HAS_PROPERTY" },
         ],
       },
     ],
-    properties: ["date_that_initial_visit_booked_is_set_to_yes"],
+    properties: ["conversion_action", "date_that_initial_visit_booked_is_set_to_yes"],
     limit: 1,
   };
 

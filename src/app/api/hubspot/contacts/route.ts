@@ -89,6 +89,7 @@ export async function GET(request: NextRequest) {
 
   const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts/search`, {
     method: "POST",
+    cache: "no-store",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",

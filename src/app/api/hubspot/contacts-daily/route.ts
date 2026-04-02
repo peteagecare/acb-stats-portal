@@ -102,6 +102,7 @@ async function hubspotFetch(path: string, token: string, options?: RequestInit) 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const res = await fetch(`${HUBSPOT_API}${path}`, {
       ...options,
+      cache: "no-store",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
@@ -119,28 +120,63 @@ async function hubspotFetch(path: string, token: string, options?: RequestInit) 
   }
 }
 
-async function countContactsForRange(
+const PROSPECT_ACTIONS = [
+  "Brochure Download Form", "Flipbook Form", "VAT Exempt Checker",
+  "Pricing Guide", "Physical Brochure Request", "Newsletter Sign Up",
+];
+
+const LEAD_ACTIONS = [
+  "Brochure - Call Me", "Request A Callback Form", "Contact Form",
+  "Free Home Design Form", "Phone Call", "Walk In Bath Form",
+  "Direct Email", "Brochure - Home Visit", "Pricing Guide Home Visit",
+];
+
+function buildFilters(metric: string, fromMs: number, toMs: number): { filterGroups: Record<string, unknown>[]; properties: string[]; dateProperty?: string } {
+  const dateRange = [
+    { propertyName: "createdate", operator: "GTE", value: fromMs.toString() },
+    { propertyName: "createdate", operator: "LTE", value: toMs.toString() },
+  ];
+
+  switch (metric) {
+    case "prospects":
+      return {
+        filterGroups: [{ filters: [...dateRange, { propertyName: "conversion_action", operator: "IN", values: PROSPECT_ACTIONS }] }],
+        properties: ["createdate"],
+      };
+    case "leads":
+      return {
+        filterGroups: [{ filters: [...dateRange, { propertyName: "conversion_action", operator: "IN", values: LEAD_ACTIONS }] }],
+        properties: ["createdate"],
+      };
+    case "visits":
+      return {
+        filterGroups: [{
+          filters: [
+            { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "GTE", value: fromMs.toString() },
+            { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "LTE", value: toMs.toString() },
+          ],
+        }],
+        properties: ["date_that_initial_visit_booked_is_set_to_yes"],
+      };
+    default: // contacts
+      return {
+        filterGroups: [{ filters: [...dateRange, { propertyName: "conversion_action", operator: "HAS_PROPERTY" }] }],
+        properties: ["createdate"],
+      };
+  }
+}
+
+async function countForRange(
   token: string,
+  metric: string,
   fromMs: number,
   toMs: number
 ): Promise<number> {
-  const body = {
-    filterGroups: [
-      {
-        filters: [
-          { propertyName: "createdate", operator: "GTE", value: fromMs.toString() },
-          { propertyName: "createdate", operator: "LTE", value: toMs.toString() },
-          { propertyName: "conversion_action", operator: "HAS_PROPERTY" },
-        ],
-      },
-    ],
-    properties: ["createdate"],
-    limit: 1,
-  };
+  const { filterGroups, properties } = buildFilters(metric, fromMs, toMs);
 
   const data = await hubspotFetch("/crm/v3/objects/contacts/search", token, {
     method: "POST",
-    body: JSON.stringify(body),
+    body: JSON.stringify({ filterGroups, properties, limit: 1 }),
   });
 
   return data.total ?? 0;
@@ -155,6 +191,7 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const from = searchParams.get("from");
   const to = searchParams.get("to");
+  const metric = searchParams.get("metric") ?? "contacts";
 
   if (!from || !to) {
     return Response.json({ error: "Missing required params: from, to" }, { status: 400 });
@@ -162,7 +199,6 @@ export async function GET(request: NextRequest) {
 
   const { buckets, granularity } = buildBuckets(from, to);
 
-  // Batch requests — 4 at a time to avoid HubSpot rate limits
   const BATCH_SIZE = 4;
   const results: { label: string; count: number }[] = [];
 
@@ -172,7 +208,7 @@ export async function GET(request: NextRequest) {
       batch.map((b) => {
         const bFrom = londonDateToUtcMs(b.from, "00:00:00");
         const bTo = londonDateToUtcMs(b.to, "23:59:59");
-        return countContactsForRange(token, bFrom, bTo);
+        return countForRange(token, metric, bFrom, bTo);
       })
     );
     for (let j = 0; j < batch.length; j++) {
@@ -183,5 +219,5 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return Response.json({ data: results, granularity });
+  return Response.json({ data: results, granularity, metric });
 }

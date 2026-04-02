@@ -31,6 +31,7 @@ async function hubspotFetch(path: string, token: string, options?: RequestInit) 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const res = await fetch(`${HUBSPOT_API}${path}`, {
       ...options,
+      cache: "no-store",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",

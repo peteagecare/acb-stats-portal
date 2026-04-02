@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
   // If an ID is provided, fetch a single workflow with full details
   if (id) {
     const res = await fetch(`${HUBSPOT_API}/automation/v4/flows/${id}`, {
+      cache: "no-store",
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -35,6 +36,7 @@ export async function GET(request: NextRequest) {
 
   for (const endpoint of endpoints) {
     const res = await fetch(endpoint.url, {
+      cache: "no-store",
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -59,7 +61,7 @@ export async function GET(request: NextRequest) {
   // Both failed — check what scopes the token has
   const scopeRes = await fetch(
     `${HUBSPOT_API}/oauth/v1/access-tokens/${token}`,
-    { headers: { Authorization: `Bearer ${token}` } }
+    { cache: "no-store", headers: { Authorization: `Bearer ${token}` } }
   );
 
   let scopeInfo = null;

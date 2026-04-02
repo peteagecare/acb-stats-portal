@@ -34,6 +34,7 @@ async function hubspotSearch(token: string, filters: Record<string, unknown>[]):
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts/search`, {
       method: "POST",
+      cache: "no-store",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ filterGroups: [{ filters }], properties: ["conversion_action"], limit: 1 }),
     });
@@ -72,6 +73,7 @@ export async function GET(request: NextRequest) {
 
   // Get source options
   const propRes = await fetch(`${HUBSPOT_API}/crm/v3/properties/contacts/original_lead_source`, {
+    cache: "no-store",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
   });
   const propData = await propRes.json();
