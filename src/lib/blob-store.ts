@@ -12,7 +12,7 @@
  * project-root JSON file so local development still works.
  */
 
-import { put, head } from "@vercel/blob";
+import { put, get } from "@vercel/blob";
 import fs from "fs";
 import path from "path";
 
@@ -25,13 +25,21 @@ function hasBlob(): boolean {
 export async function loadJson<T>(key: string, fallbackFile: string, defaults: T): Promise<T> {
   if (hasBlob()) {
     try {
-      const meta = await head(key).catch(() => null);
-      if (meta?.url) {
-        const res = await fetch(meta.url, { cache: "no-store" });
-        if (res.ok) return (await res.json()) as T;
+      const result = await get(key, { access: "private" }).catch(() => null);
+      if (result?.stream) {
+        const reader = result.stream.getReader();
+        const chunks: Uint8Array[] = [];
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) chunks.push(value);
+        }
+        const text = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf-8");
+        return JSON.parse(text) as T;
       }
     } catch (e) {
-      console.error(`[blob-store] head/fetch ${key} failed:`, e);
+      console.error(`[blob-store] get ${key} failed:`, e);
     }
     // First read (no blob exists yet) or fetch failure — fall back to bundled file
   }
@@ -49,7 +57,7 @@ export async function saveJson<T>(key: string, fallbackFile: string, data: T): P
   if (hasBlob()) {
     try {
       await put(key, JSON.stringify(data, null, 2), {
-        access: "public",
+        access: "private",
         contentType: "application/json",
         allowOverwrite: true,
         addRandomSuffix: false,
