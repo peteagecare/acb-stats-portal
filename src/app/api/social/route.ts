@@ -21,7 +21,16 @@ function loadFile(): SocialFile {
 }
 
 function saveFile(data: SocialFile) {
-  fs.writeFileSync(SOCIAL_PATH, JSON.stringify(data, null, 2));
+  try {
+    fs.writeFileSync(SOCIAL_PATH, JSON.stringify(data, null, 2));
+  } catch (e) {
+    // Vercel serverless has a read-only filesystem outside /tmp; persisting
+    // scraped updates is best-effort. The bundled JSON is still served.
+    const code = (e as NodeJS.ErrnoException)?.code;
+    if (code !== "EROFS" && code !== "EACCES") {
+      console.error("[social] saveFile failed:", e);
+    }
+  }
 }
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)";

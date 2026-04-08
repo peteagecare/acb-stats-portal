@@ -1431,7 +1431,13 @@ export default function Dashboard() {
               })()}
 
               {/* ROW 2: Lifecycle pipeline + Visit conversion (both metric-independent) */}
-              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "10px" }}>
+              {(() => {
+                const hasLifecycle = lifecycleStages.length > 0;
+                const hasDow = dowConversion && dowConversion.contacts.some((c) => c > 0);
+                if (!hasLifecycle && !hasDow) return null;
+                const cols = hasLifecycle && hasDow ? "2fr 1fr" : "1fr";
+                return (
+              <div style={{ display: "grid", gridTemplateColumns: cols, gap: "10px" }}>
               {/* LIFECYCLE STAGES */}
               {lifecycleStages.length > 0 && (
                 <LifecyclePipeline stages={lifecycleStages} periodStages={lifecyclePeriod} />
@@ -1513,16 +1519,24 @@ export default function Dashboard() {
                   );
                 })()}
               </div>
+                );
+              })()}
             </div>
 
             </div>
 
             {/* === REVIEWS + SOCIAL across the bottom === */}
+            {(() => {
+              const hasReviews = reviews.length > 0 && reviews.some((r) => r.total > 0);
+              const hasSocial = social.length > 0 && social.some((s) => s.total > 0);
+              if (!hasReviews && !hasSocial) return null;
+              const reviewsCols = hasReviews && hasSocial ? "1fr 1fr" : "1fr";
+              return (
             <div>
             <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
               Reviews & Social
             </h2>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: reviewsCols, gap: "10px" }}>
               {/* REVIEWS */}
               {reviews.length > 0 && reviews.some((r) => r.total > 0) && (
                 <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "12px" }}>
@@ -1584,6 +1598,8 @@ export default function Dashboard() {
               )}
             </div>
             </div>
+              );
+            })()}
 
 
 

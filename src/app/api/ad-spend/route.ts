@@ -20,7 +20,14 @@ function loadFile(): SpendFile {
 }
 
 function saveFile(data: SpendFile) {
-  fs.writeFileSync(SPEND_PATH, JSON.stringify(data, null, 2));
+  try {
+    fs.writeFileSync(SPEND_PATH, JSON.stringify(data, null, 2));
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException)?.code;
+    if (code !== "EROFS" && code !== "EACCES") {
+      console.error("[ad-spend] saveFile failed:", e);
+    }
+  }
 }
 
 export async function GET() {

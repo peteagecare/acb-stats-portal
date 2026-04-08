@@ -31,7 +31,16 @@ function loadFile(): ReviewsFile {
 }
 
 function saveFile(data: ReviewsFile) {
-  fs.writeFileSync(REVIEWS_PATH, JSON.stringify(data, null, 2));
+  try {
+    fs.writeFileSync(REVIEWS_PATH, JSON.stringify(data, null, 2));
+  } catch (e) {
+    // Vercel serverless has a read-only filesystem outside /tmp; persisting
+    // scraped updates is best-effort. The bundled JSON is still served.
+    const code = (e as NodeJS.ErrnoException)?.code;
+    if (code !== "EROFS" && code !== "EACCES") {
+      console.error("[reviews] saveFile failed:", e);
+    }
+  }
 }
 
 async function scrapeTrustpilot(): Promise<{ count: number; rating: number } | null> {

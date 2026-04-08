@@ -15,7 +15,14 @@ function loadFile(): FeedbackFile {
 }
 
 function saveFile(data: FeedbackFile) {
-  fs.writeFileSync(FEEDBACK_PATH, JSON.stringify(data, null, 2));
+  try {
+    fs.writeFileSync(FEEDBACK_PATH, JSON.stringify(data, null, 2));
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException)?.code;
+    if (code !== "EROFS" && code !== "EACCES") {
+      console.error("[ai-feedback] saveFile failed:", e);
+    }
+  }
 }
 
 export async function GET() {
