@@ -609,6 +609,11 @@ export default function Dashboard() {
     byAction: { value: string; label: string; count: number }[];
     bySource: { value: string; label: string; count: number }[];
   } | null>(null);
+  const [funnelTiming, setFunnelTiming] = useState<{
+    prospectToLead: { avgDays: number | null; sample: number };
+    leadToVisit: { avgDays: number | null; sample: number };
+    prospectToVisit: { avgDays: number | null; sample: number };
+  } | null>(null);
   const [outreachFeedback, setOutreachFeedback] = useState<{
     total: number;
     feedback: {
@@ -793,7 +798,7 @@ export default function Dashboard() {
 
       // Batch 5: Timeline + unattributed + day-of-week conversion
       setSelectedMetric("contacts");
-      const [timelineRes, unattribRes, dowRes, siteVisitsRes, installsRes, hvBreakdownRes, funnelSourceRes, outreachRes] = await Promise.all([
+      const [timelineRes, unattribRes, dowRes, siteVisitsRes, installsRes, hvBreakdownRes, funnelSourceRes, outreachRes, timingRes] = await Promise.all([
         fetch(`/api/hubspot/contacts-daily?from=${from}&to=${to}&metric=contacts`),
         fetch(`/api/hubspot/unattributed?from=${from}&to=${to}`),
         fetch(`/api/hubspot/dow-conversion?from=${from}&to=${to}`),
@@ -802,6 +807,7 @@ export default function Dashboard() {
         fetch(`/api/hubspot/home-visit-breakdown?from=${from}&to=${to}`),
         fetch(`/api/hubspot/funnel-by-source?from=${from}&to=${to}`),
         fetch(`/api/hubspot/outreach-feedback?from=${from}&to=${to}`),
+        fetch(`/api/hubspot/funnel-timing?from=${from}&to=${to}`),
       ]);
       if (unattribRes.ok) {
         setUnattributed(await unattribRes.json());
@@ -843,6 +849,12 @@ export default function Dashboard() {
       } else {
         console.error("[outreach-feedback] failed:", outreachRes.status, await outreachRes.text());
         setOutreachFeedback(null);
+      }
+      if (timingRes.ok) {
+        setFunnelTiming(await timingRes.json());
+      } else {
+        console.error("[funnel-timing] failed:", timingRes.status, await timingRes.text());
+        setFunnelTiming(null);
       }
       if (timelineRes.ok) {
         const timelineJson = await timelineRes.json();
@@ -1434,6 +1446,35 @@ export default function Dashboard() {
                 })}
               </div>
             </div>
+            {!isSourceFiltered && funnelTiming && (
+              (() => {
+                const fmt = (avg: number | null, sample: number) =>
+                  avg == null
+                    ? <span style={{ color: "#CBD5E1" }}>—</span>
+                    : <>
+                        <strong style={{ color: "#0F172A" }}>{avg.toFixed(1)} days</strong>
+                        <span style={{ color: "#94A3B8", marginLeft: "3px" }}>(n={sample})</span>
+                      </>;
+                return (
+                  <div style={{ background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "8px 14px", marginBottom: "10px", display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: "10px", fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                      Avg time in funnel
+                    </span>
+                    <span style={{ fontSize: "11px", color: "#64748B" }}>
+                      Prospect → Lead {fmt(funnelTiming.prospectToLead.avgDays, funnelTiming.prospectToLead.sample)}
+                    </span>
+                    <span style={{ color: "#CBD5E1", fontSize: "11px" }}>·</span>
+                    <span style={{ fontSize: "11px", color: "#64748B" }}>
+                      Lead → Visit {fmt(funnelTiming.leadToVisit.avgDays, funnelTiming.leadToVisit.sample)}
+                    </span>
+                    <span style={{ color: "#CBD5E1", fontSize: "11px" }}>·</span>
+                    <span style={{ fontSize: "11px", color: "#64748B" }}>
+                      Prospect → Visit {fmt(funnelTiming.prospectToVisit.avgDays, funnelTiming.prospectToVisit.sample)}
+                    </span>
+                  </div>
+                );
+              })()
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr auto 1fr auto 1fr", gap: "0", alignItems: "stretch" }}>
               <FunnelCard
                 title="Prospects"
