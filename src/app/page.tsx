@@ -1333,8 +1333,8 @@ export default function Dashboard() {
                 bg="#ECFDF5"
                 rate={(() => {
                   const parts: string[] = [];
-                  if (leadsTotal > 0) parts.push(`${(((homeVisits ?? 0) / leadsTotal) * 100).toFixed(1)}% of leads`);
-                  if (sourcesTotal > 0) parts.push(`${(((homeVisits ?? 0) / sourcesTotal) * 100).toFixed(1)}% of contacts`);
+                  if (leadsTotal > 0) parts.push(`Lead → Visit ${(((homeVisits ?? 0) / leadsTotal) * 100).toFixed(1)}%`);
+                  if (sourcesTotal > 0) parts.push(`Contact → Visit ${(((homeVisits ?? 0) / sourcesTotal) * 100).toFixed(1)}%`);
                   return parts.length > 0 ? parts.join(" · ") : undefined;
                 })()}
               >
