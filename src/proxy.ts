@@ -4,7 +4,8 @@ import { verifySessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
 
 const PUBLIC_PATHS = new Set<string>([
   "/login",
-  "/api/login",
+  "/api/login/request",
+  "/api/login/verify",
   "/api/logout",
   "/favicon.ico",
   "/acb-logo.png",

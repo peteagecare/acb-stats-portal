@@ -4,8 +4,11 @@ Internal marketing dashboard for **Age Care Bathrooms**. Pulls live data from
 HubSpot CRM, Google Analytics 4, Facebook, Google Places, and Anthropic for
 AI-generated insights. Built with Next.js 16 (App Router).
 
-> **Access**: password-protected. Single shared password set via env var.
-> Sessions are HMAC-signed httpOnly cookies, valid for 14 days.
+> **Access**: email magic-link auth. Staff enter their company email address
+> at `/login`; if it ends with `@agecare-bathrooms.co.uk` (configurable via
+> `ALLOWED_EMAIL_DOMAIN`) the system emails them a one-time sign-in link
+> valid for 15 minutes. Sessions are HMAC-signed httpOnly cookies, valid
+> for 14 days.
 
 ## Local development
 
@@ -15,7 +18,7 @@ npm run dev
 ```
 
 The app runs at http://localhost:3000. You'll be redirected to `/login` —
-sign in with the value of `DASHBOARD_PASSWORD`.
+click the button to email a sign-in link to `LOGIN_EMAIL_TO`.
 
 ## Required environment variables
 
@@ -24,7 +27,9 @@ Create `.env.local` (gitignored) with:
 ```bash
 # Auth — REQUIRED
 AUTH_SECRET=                   # 32+ char random string (e.g. `openssl rand -hex 32`)
-DASHBOARD_PASSWORD=            # the shared password staff use to sign in
+RESEND_API_KEY=                # https://resend.com — free tier is fine
+ALLOWED_EMAIL_DOMAIN=agecare-bathrooms.co.uk          # only emails on this domain can sign in
+LOGIN_EMAIL_FROM=ACB Stats <onboarding@resend.dev>    # or a verified sender on your own domain
 
 # HubSpot
 HUBSPOT_ACCESS_TOKEN=          # private app token
@@ -56,11 +61,16 @@ ANTHROPIC_API_KEY=
 
 ## Security
 
-- All routes (pages **and** API) sit behind `proxy.ts`. Unauthenticated
+- All routes (pages **and** API) sit behind `src/proxy.ts`. Unauthenticated
   requests to pages are redirected to `/login`; unauthenticated API requests
   return 401.
+- Login is by **email magic link**: staff enter their company email address;
+  if the domain matches `ALLOWED_EMAIL_DOMAIN` the server emails an HMAC-signed
+  one-time token (15 min TTL). Visiting the link validates the token
+  server-side and sets a session cookie.
 - Sessions are HMAC-SHA256 signed cookies — see [src/lib/auth.ts](src/lib/auth.ts).
 - Hard-to-guess `AUTH_SECRET` is required at startup.
+- Login requests are rate-limited to 5 per 10 min per IP to prevent email flood.
 - AI endpoints are rate-limited per IP via [src/lib/rate-limit.ts](src/lib/rate-limit.ts)
   to prevent runaway Anthropic spend.
 - Security headers (HSTS, X-Frame-Options DENY, X-Content-Type-Options,
