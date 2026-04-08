@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { LIFECYCLE_EXCLUSION_FILTER } from "@/lib/hubspot-exclusions";
 
 const HUBSPOT_API = "https://api.hubapi.com";
 const TZ = "Europe/London";
@@ -126,6 +127,7 @@ export async function GET(request: NextRequest) {
             operator: "LTE",
             value: prevToMs.toString(),
           },
+          LIFECYCLE_EXCLUSION_FILTER,
         ],
       },
     ]);
@@ -150,6 +152,7 @@ export async function GET(request: NextRequest) {
           operator: "LTE",
           value: prevToMs.toString(),
         },
+        LIFECYCLE_EXCLUSION_FILTER,
       ],
     }));
     const prospects = await searchContacts(token, prospectFilterGroups);
@@ -174,6 +177,7 @@ export async function GET(request: NextRequest) {
           operator: "LTE",
           value: prevToMs.toString(),
         },
+        LIFECYCLE_EXCLUSION_FILTER,
       ],
     }));
     const leads = await searchContacts(token, leadFilterGroups);
@@ -194,6 +198,7 @@ export async function GET(request: NextRequest) {
             operator: "LTE",
             value: prevToMs.toString(),
           },
+          LIFECYCLE_EXCLUSION_FILTER,
         ],
       },
     ]);

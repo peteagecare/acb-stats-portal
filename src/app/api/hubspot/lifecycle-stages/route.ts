@@ -1,3 +1,5 @@
+import { EXCLUDED_LIFECYCLE_STAGES } from "@/lib/hubspot-exclusions";
+
 const HUBSPOT_API = "https://api.hubapi.com";
 
 async function hubspotFetch(path: string, token: string, options?: RequestInit) {
@@ -59,7 +61,9 @@ export async function GET() {
     token
   );
 
-  const options: { value: string; label: string; displayOrder: number }[] = propData.options ?? [];
+  const allOptions: { value: string; label: string; displayOrder: number }[] = propData.options ?? [];
+  // Drop excluded stages (e.g. "Suppliers & Muppets") from the breakdown entirely
+  const options = allOptions.filter((o) => !EXCLUDED_LIFECYCLE_STAGES.includes(o.value));
 
   // Count contacts for each stage, batched 4 at a time
   const BATCH_SIZE = 4;

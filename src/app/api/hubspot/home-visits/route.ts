@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { LIFECYCLE_EXCLUSION_FILTER } from "@/lib/hubspot-exclusions";
 
 const HUBSPOT_API = "https://api.hubapi.com";
 const TZ = "Europe/London";
@@ -57,6 +58,7 @@ export async function GET(request: NextRequest) {
             operator: "LTE",
             value: toMs.toString(),
           },
+          LIFECYCLE_EXCLUSION_FILTER,
         ],
       },
     ],
@@ -64,22 +66,31 @@ export async function GET(request: NextRequest) {
     limit: 1,
   };
 
-  const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts/search`, {
-    method: "POST",
-    cache: "no-store",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts/search`, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
 
-  if (!res.ok) {
-    const err = await res.text();
-    return Response.json({ error: err }, { status: res.status });
+    if (res.status === 429 && attempt < MAX_RETRIES) {
+      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+      continue;
+    }
+
+    if (!res.ok) {
+      const err = await res.text();
+      return Response.json({ error: err }, { status: res.status });
+    }
+
+    const data = await res.json();
+    return Response.json({ total: data.total ?? 0 });
   }
 
-  const data = await res.json();
-
-  return Response.json({ total: data.total ?? 0 });
+  return Response.json({ error: "HubSpot rate-limited after retries" }, { status: 502 });
 }

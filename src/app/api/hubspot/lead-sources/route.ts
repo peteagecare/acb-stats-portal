@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { LIFECYCLE_EXCLUSION_FILTER } from "@/lib/hubspot-exclusions";
 
 const HUBSPOT_API = "https://api.hubapi.com";
 const TZ = "Europe/London";
@@ -76,6 +77,7 @@ async function countContacts(
       propertyName: "original_lead_source",
       ...sourceFilter,
     },
+    LIFECYCLE_EXCLUSION_FILTER,
   ];
 
   const data = await hubspotFetch(

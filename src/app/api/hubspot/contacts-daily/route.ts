@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { LIFECYCLE_EXCLUSION_FILTER } from "@/lib/hubspot-exclusions";
 
 const HUBSPOT_API = "https://api.hubapi.com";
 const TZ = "Europe/London";
@@ -140,12 +141,12 @@ function buildFilters(metric: string, fromMs: number, toMs: number): { filterGro
   switch (metric) {
     case "prospects":
       return {
-        filterGroups: [{ filters: [...dateRange, { propertyName: "conversion_action", operator: "IN", values: PROSPECT_ACTIONS }] }],
+        filterGroups: [{ filters: [...dateRange, { propertyName: "conversion_action", operator: "IN", values: PROSPECT_ACTIONS }, LIFECYCLE_EXCLUSION_FILTER] }],
         properties: ["createdate"],
       };
     case "leads":
       return {
-        filterGroups: [{ filters: [...dateRange, { propertyName: "conversion_action", operator: "IN", values: LEAD_ACTIONS }] }],
+        filterGroups: [{ filters: [...dateRange, { propertyName: "conversion_action", operator: "IN", values: LEAD_ACTIONS }, LIFECYCLE_EXCLUSION_FILTER] }],
         properties: ["createdate"],
       };
     case "visits":
@@ -154,13 +155,14 @@ function buildFilters(metric: string, fromMs: number, toMs: number): { filterGro
           filters: [
             { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "GTE", value: fromMs.toString() },
             { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "LTE", value: toMs.toString() },
+            LIFECYCLE_EXCLUSION_FILTER,
           ],
         }],
         properties: ["date_that_initial_visit_booked_is_set_to_yes"],
       };
     default: // contacts
       return {
-        filterGroups: [{ filters: [...dateRange, { propertyName: "conversion_action", operator: "HAS_PROPERTY" }] }],
+        filterGroups: [{ filters: [...dateRange, { propertyName: "conversion_action", operator: "HAS_PROPERTY" }, LIFECYCLE_EXCLUSION_FILTER] }],
         properties: ["createdate"],
       };
   }

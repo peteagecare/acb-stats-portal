@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { LIFECYCLE_EXCLUSION_FILTER } from "@/lib/hubspot-exclusions";
 
 const HUBSPOT_API = "https://api.hubapi.com";
 const TZ = "Europe/London";
@@ -61,6 +62,7 @@ export async function GET(request: NextRequest) {
             propertyName: "date_that_initial_visit_booked_is_set_to_yes",
             operator: "HAS_PROPERTY",
           },
+          LIFECYCLE_EXCLUSION_FILTER,
         ],
       },
     ],

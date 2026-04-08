@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { LIFECYCLE_EXCLUSION_FILTER } from "@/lib/hubspot-exclusions";
 
 const HUBSPOT_API = "https://api.hubapi.com";
 const TZ = "Europe/London";
@@ -95,6 +96,7 @@ export async function GET(request: NextRequest) {
   const dateFilters = [
     { propertyName: "createdate", operator: "GTE", value: fromMs.toString() },
     { propertyName: "createdate", operator: "LTE", value: toMs.toString() },
+    LIFECYCLE_EXCLUSION_FILTER,
   ];
 
   // 8 queries total: 4 categories x 2 types (prospect/lead)

@@ -1,13 +1,17 @@
 import { NextRequest } from "next/server";
+import { LIFECYCLE_EXCLUSION_FILTER } from "@/lib/hubspot-exclusions";
 
 const HUBSPOT_API = "https://api.hubapi.com";
 const TZ = "Europe/London";
 
-// Prospect-level actions — contacts with these who also have a visit booked
-// are "organic leads" that bypassed the normal lead form
-const PROSPECT_ACTIONS = [
-  "Brochure Download Form", "Flipbook Form", "VAT Exempt Checker",
-  "Pricing Guide", "Physical Brochure Request", "Newsletter Sign Up",
+// Lead-level conversion actions — contacts with these are already counted in
+// the "Form Leads" total, so we exclude them here to avoid double-counting.
+// Anyone else who has a booked visit (prospects, no conversion action, etc.)
+// is counted as an "organic lead".
+const LEAD_ACTIONS = [
+  "Brochure - Call Me", "Request A Callback Form", "Contact Form",
+  "Free Home Design Form", "Phone Call", "Walk In Bath Form",
+  "Direct Email", "Brochure - Home Visit", "Pricing Guide Home Visit",
 ];
 
 function londonDateToUtcMs(dateStr: string, time: string): number {
@@ -51,17 +55,32 @@ export async function GET(request: NextRequest) {
   const toMs = londonDateToUtcMs(to, "23:59:59");
 
   // Count contacts who:
-  // 1. Were created in the date range
-  // 2. Have a prospect-level conversion action (not a lead-level one)
-  // 3. Have a visit booked (date_that_initial_visit_booked_is_set_to_yes has a value)
+  // 1. Had their visit booked in the date range (matches the Home Visits KPI's
+  //    date semantics — booking date, NOT contact createdate)
+  // 2. Are NOT already counted as a form lead (conversion_action not in LEAD_ACTIONS)
+  //
+  // Two filterGroups are used so we capture both:
+  //   a) contacts with a non-lead conversion action
+  //   b) contacts with no conversion action at all
+  // (HubSpot's NOT_IN does not match contacts where the property is unset.)
+  const baseFilters = [
+    { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "GTE", value: fromMs.toString() },
+    { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "LTE", value: toMs.toString() },
+    LIFECYCLE_EXCLUSION_FILTER,
+  ];
+
   const body = {
     filterGroups: [
       {
         filters: [
-          { propertyName: "createdate", operator: "GTE", value: fromMs.toString() },
-          { propertyName: "createdate", operator: "LTE", value: toMs.toString() },
-          { propertyName: "conversion_action", operator: "IN", values: PROSPECT_ACTIONS },
-          { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "HAS_PROPERTY" },
+          ...baseFilters,
+          { propertyName: "conversion_action", operator: "NOT_IN", values: LEAD_ACTIONS },
+        ],
+      },
+      {
+        filters: [
+          ...baseFilters,
+          { propertyName: "conversion_action", operator: "NOT_HAS_PROPERTY" },
         ],
       },
     ],
@@ -69,22 +88,31 @@ export async function GET(request: NextRequest) {
     limit: 1,
   };
 
-  const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts/search`, {
-    method: "POST",
-    cache: "no-store",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts/search`, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
 
-  if (!res.ok) {
-    const err = await res.text();
-    return Response.json({ error: err }, { status: res.status });
+    if (res.status === 429 && attempt < MAX_RETRIES) {
+      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+      continue;
+    }
+
+    if (!res.ok) {
+      const err = await res.text();
+      return Response.json({ error: err }, { status: res.status });
+    }
+
+    const data = await res.json();
+    return Response.json({ total: data.total ?? 0 });
   }
 
-  const data = await res.json();
-
-  return Response.json({ total: data.total ?? 0 });
+  return Response.json({ error: "HubSpot rate-limited after retries" }, { status: 502 });
 }

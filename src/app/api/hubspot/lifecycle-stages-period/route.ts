@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { EXCLUDED_LIFECYCLE_STAGES } from "@/lib/hubspot-exclusions";
 
 const HUBSPOT_API = "https://api.hubapi.com";
 const TZ = "Europe/London";
@@ -64,7 +65,8 @@ export async function GET(request: NextRequest) {
   const toMs = londonDateToUtcMs(to, "23:59:59");
 
   const propData = await hubspotFetch("/crm/v3/properties/contacts/lifecyclestage", token);
-  const options: { value: string; label: string; displayOrder: number }[] = propData.options ?? [];
+  const allOptions: { value: string; label: string; displayOrder: number }[] = propData.options ?? [];
+  const options = allOptions.filter((o) => !EXCLUDED_LIFECYCLE_STAGES.includes(o.value));
 
   const BATCH_SIZE = 4;
   const counts: number[] = [];
