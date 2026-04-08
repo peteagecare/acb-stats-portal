@@ -14,6 +14,7 @@ interface Goals {
   prospectsGoalPerMonth: number | null;
   visitsGoalPerMonth: number | null;
   contactsGoalPerMonth: number | null;
+  siteVisitsGoalPerWeek: number | null;
   ppcGoalPerMonth: number | null;
   seoGoalPerMonth: number | null;
   contentGoalPerMonth: number | null;
@@ -29,6 +30,7 @@ const DEFAULT_GOALS: Goals = {
   prospectsGoalPerMonth: null,
   visitsGoalPerMonth: null,
   contactsGoalPerMonth: null,
+  siteVisitsGoalPerWeek: null,
   ppcGoalPerMonth: null,
   seoGoalPerMonth: null,
   contentGoalPerMonth: null,
@@ -132,6 +134,7 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
     }).catch(() => {});
   }, []);
   const [draftContacts, setDraftContacts] = useState(initialGoals.contactsGoalPerMonth !== null ? String(initialGoals.contactsGoalPerMonth) : "");
+  const [draftSiteVisitsWeek, setDraftSiteVisitsWeek] = useState(initialGoals.siteVisitsGoalPerWeek !== null ? String(initialGoals.siteVisitsGoalPerWeek) : "");
   const [draftPpcNum, setDraftPpcNum] = useState(initialGoals.ppcGoalPerMonth !== null ? String(initialGoals.ppcGoalPerMonth) : "");
   const [draftSeoNum, setDraftSeoNum] = useState(initialGoals.seoGoalPerMonth !== null ? String(initialGoals.seoGoalPerMonth) : "");
   const [draftContentNum, setDraftContentNum] = useState(initialGoals.contentGoalPerMonth !== null ? String(initialGoals.contentGoalPerMonth) : "");
@@ -149,6 +152,7 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
       prospectsGoalPerMonth: parseGoalDraft(draftProspects),
       visitsGoalPerMonth: parseGoalDraft(draftVisitsMonth),
       contactsGoalPerMonth: parseGoalDraft(draftContacts),
+      siteVisitsGoalPerWeek: parseGoalDraft(draftSiteVisitsWeek),
       ppcGoalPerMonth: parseGoalDraft(draftPpcNum),
       seoGoalPerMonth: parseGoalDraft(draftSeoNum),
       contentGoalPerMonth: parseGoalDraft(draftContentNum),
@@ -339,6 +343,25 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
             </label>
             <input id="contactsGoal" type="number" min="1" placeholder="e.g. 800" value={draftContacts} onChange={(e) => setDraftContacts(e.target.value)}
               style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
+          </div>
+
+          {/* Site visits per week goal */}
+          <div>
+            <label htmlFor="siteVisitsWeekGoal" style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#3B82F6", marginBottom: "4px" }}>
+              Site Visits / Week
+            </label>
+            <p style={{ fontSize: "11px", color: "#94A3B8", margin: "0 0 8px" }}>
+              Shown as a goal circle on each upcoming-week card
+            </p>
+            <input
+              id="siteVisitsWeekGoal"
+              type="number"
+              min="1"
+              placeholder="e.g. 60"
+              value={draftSiteVisitsWeek}
+              onChange={(e) => setDraftSiteVisitsWeek(e.target.value)}
+              style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }}
+            />
           </div>
 
           <div style={{ borderTop: "1px solid #F1F5F9" }} />
@@ -1702,6 +1725,31 @@ export default function Dashboard() {
                               textAlign: "center",
                             }}
                           >
+                            {goals.siteVisitsGoalPerWeek != null && goals.siteVisitsGoalPerWeek > 0 && (() => {
+                              const goal = goals.siteVisitsGoalPerWeek!;
+                              const hit = wk.count >= goal;
+                              const ringColour = hit ? "#10B981" : colour;
+                              return (
+                                <div
+                                  style={{
+                                    width: "44px",
+                                    height: "44px",
+                                    borderRadius: "50%",
+                                    border: `2px solid ${ringColour}`,
+                                    background: hit ? `${ringColour}15` : "white",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    marginBottom: "8px",
+                                  }}
+                                  title={`Goal: ${goal} visits`}
+                                >
+                                  <span style={{ fontSize: "16px", fontWeight: 800, color: ringColour, lineHeight: 1 }}>
+                                    {goal}
+                                  </span>
+                                </div>
+                              );
+                            })()}
                             <p style={{ fontSize: "10px", fontWeight: 700, color: colour, margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
                               {wk.label}
                             </p>
@@ -1726,14 +1774,22 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Salesman workload — 6 rows × 4 weeks, goal 10 visits/week */}
+                {/* Salesman workload — 6 rows × 4 weeks, goal varies per rep */}
                 {(() => {
                   const SALESMEN = ["Andy", "Barry", "Brian", "Dean", "Kevin", "Tony"];
-                  const GOAL = 10;
-                  const cellColour = (n: number) => {
-                    if (n >= GOAL) return { bg: "#ECFDF5", border: "#A7F3D0", text: "#059669" };
-                    if (n >= 7) return { bg: "#FFFBEB", border: "#FDE68A", text: "#B45309" };
-                    if (n >= 4) return { bg: "#FFF7ED", border: "#FED7AA", text: "#C2410C" };
+                  const SALESMAN_GOALS: Record<string, number> = {
+                    Andy: 10,
+                    Barry: 10,
+                    Brian: 6,
+                    Dean: 10,
+                    Kevin: 10,
+                    Tony: 10,
+                  };
+                  const cellColour = (n: number, goal: number) => {
+                    if (n >= goal) return { bg: "#ECFDF5", border: "#A7F3D0", text: "#059669" };
+                    const ratio = n / goal;
+                    if (ratio >= 0.7) return { bg: "#FFFBEB", border: "#FDE68A", text: "#B45309" };
+                    if (ratio >= 0.4) return { bg: "#FFF7ED", border: "#FED7AA", text: "#C2410C" };
                     return { bg: "#FEF2F2", border: "#FECACA", text: "#DC2626" };
                   };
                   return (
@@ -1743,7 +1799,7 @@ export default function Dashboard() {
                           Salesman Workload
                         </p>
                         <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>
-                          Goal: {GOAL} visits per salesman per week
+                          Goal: 10 / week (Brian: 6)
                         </span>
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "minmax(70px, auto) repeat(4, 1fr)", gap: "6px", alignItems: "stretch" }}>
@@ -1762,8 +1818,9 @@ export default function Dashboard() {
                             </div>
                             {siteVisits.upcoming.map((wk) => {
                               const n = wk.bySalesman?.[name] ?? 0;
-                              const c = cellColour(n);
-                              const pct = Math.min(100, (n / GOAL) * 100);
+                              const goal = SALESMAN_GOALS[name] ?? 10;
+                              const c = cellColour(n, goal);
+                              const pct = Math.min(100, (n / goal) * 100);
                               return (
                                 <div
                                   key={`${name}-${wk.label}`}
@@ -1784,7 +1841,7 @@ export default function Dashboard() {
                                       {n}
                                     </span>
                                     <span style={{ fontSize: "11px", color: "#94A3B8", fontWeight: 600 }}>
-                                      / {GOAL}
+                                      / {goal}
                                     </span>
                                   </div>
                                   <div style={{ width: "100%", height: "3px", background: "#F1F5F9", borderRadius: "2px", marginTop: "6px", overflow: "hidden" }}>
