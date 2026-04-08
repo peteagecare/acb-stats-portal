@@ -545,6 +545,7 @@ export default function Dashboard() {
   const [siteVisits, setSiteVisits] = useState<{
     inPeriod: number;
     inPeriodCancelled: number;
+    cancelledDuringPeriod: number;
     upcoming: { label: string; weekStart: string; weekEnd: string; count: number; cancelled: number }[];
   } | null>(null);
   const [aiInsights, setAiInsights] = useState<string[]>([]);
@@ -1636,10 +1637,29 @@ export default function Dashboard() {
                     <p style={{ fontSize: "44px", fontWeight: 800, color: "#0F172A", margin: 0, lineHeight: 1 }}>
                       {siteVisits.inPeriod.toLocaleString()}
                     </p>
-                    {siteVisits.inPeriodCancelled > 0 && (
-                      <p style={{ fontSize: "11px", color: "#DC2626", margin: "8px 0 0", fontWeight: 600 }}>
-                        {siteVisits.inPeriodCancelled.toLocaleString()} cancelled
-                      </p>
+                    {(siteVisits.cancelledDuringPeriod > 0 || siteVisits.inPeriodCancelled > 0) && (
+                      <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #F1F5F9", display: "flex", flexDirection: "column", gap: "8px" }}>
+                        {siteVisits.cancelledDuringPeriod > 0 && (
+                          <div>
+                            <p style={{ fontSize: "20px", fontWeight: 800, color: "#DC2626", margin: 0, lineHeight: 1 }}>
+                              {siteVisits.cancelledDuringPeriod.toLocaleString()}
+                            </p>
+                            <p style={{ fontSize: "11px", color: "#64748B", margin: "2px 0 0", lineHeight: 1.3 }}>
+                              visits cancelled within this period
+                            </p>
+                          </div>
+                        )}
+                        {siteVisits.inPeriodCancelled > 0 && (
+                          <div>
+                            <p style={{ fontSize: "20px", fontWeight: 800, color: "#DC2626", margin: 0, lineHeight: 1 }}>
+                              {siteVisits.inPeriodCancelled.toLocaleString()}
+                            </p>
+                            <p style={{ fontSize: "11px", color: "#64748B", margin: "2px 0 0", lineHeight: 1.3 }}>
+                              visits scheduled in this period that were set to cancelled
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
 

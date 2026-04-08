@@ -109,15 +109,20 @@ export async function GET(request: NextRequest) {
 
   try {
     // ──────────────────────────────────────────────────────────────────
-    // 1. Visits whose initial_home_visit_date falls in the dashboard period
-    //    Two parallel searches: non-cancelled count + cancelled count.
+    // 1. Three parallel counts for the in-period card:
+    //    a) Non-cancelled visits whose initial_home_visit_date is in the period
+    //    b) Cancelled visits whose initial_home_visit_date is in the period
+    //       (visit was scheduled FOR this period but got cancelled)
+    //    c) Visits whose date_that_initial_visit_is_cancelled is in the period
+    //       (cancellation event happened DURING this period, regardless of
+    //        when the visit itself was scheduled)
     // ──────────────────────────────────────────────────────────────────
     const inPeriodBaseFilters = [
       { propertyName: "initial_home_visit_date", operator: "GTE", value: dayStartUtcMs(from).toString() },
       { propertyName: "initial_home_visit_date", operator: "LTE", value: dayEndUtcMs(to).toString() },
       LIFECYCLE_EXCLUSION_FILTER,
     ];
-    const [inPeriodRes, inPeriodCancelledRes] = await Promise.all([
+    const [inPeriodRes, inPeriodCancelledRes, cancelledDuringPeriodRes] = await Promise.all([
       hubspotSearch(token, {
         filterGroups: [
           {
@@ -142,9 +147,23 @@ export async function GET(request: NextRequest) {
         properties: ["initial_home_visit_date"],
         limit: 1,
       }),
+      hubspotSearch(token, {
+        filterGroups: [
+          {
+            filters: [
+              { propertyName: "date_that_initial_visit_is_cancelled", operator: "GTE", value: dayStartUtcMs(from).toString() },
+              { propertyName: "date_that_initial_visit_is_cancelled", operator: "LTE", value: dayEndUtcMs(to).toString() },
+              LIFECYCLE_EXCLUSION_FILTER,
+            ],
+          },
+        ],
+        properties: ["date_that_initial_visit_is_cancelled"],
+        limit: 1,
+      }),
     ]);
     const inPeriod = inPeriodRes.total ?? 0;
     const inPeriodCancelled = inPeriodCancelledRes.total ?? 0;
+    const cancelledDuringPeriod = cancelledDuringPeriodRes.total ?? 0;
 
     // ──────────────────────────────────────────────────────────────────
     // 2. Forward calendar — visits scheduled this week / next 3 weeks
@@ -225,6 +244,7 @@ export async function GET(request: NextRequest) {
     return Response.json({
       inPeriod,
       inPeriodCancelled,
+      cancelledDuringPeriod,
       upcoming: buckets.map((b, i) => ({
         label: b.label,
         weekStart: londonDateString(b.start),
