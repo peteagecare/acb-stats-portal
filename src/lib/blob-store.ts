@@ -16,10 +16,14 @@ import { put, head } from "@vercel/blob";
 import fs from "fs";
 import path from "path";
 
-const HAS_BLOB = !!process.env.BLOB_READ_WRITE_TOKEN;
+// Read at call time, not module load time — Turbopack/Next can hoist
+// top-level constants and we need this to reflect the live runtime env.
+function hasBlob(): boolean {
+  return !!process.env.BLOB_READ_WRITE_TOKEN;
+}
 
 export async function loadJson<T>(key: string, fallbackFile: string, defaults: T): Promise<T> {
-  if (HAS_BLOB) {
+  if (hasBlob()) {
     try {
       const meta = await head(key).catch(() => null);
       if (meta?.url) {
@@ -29,7 +33,7 @@ export async function loadJson<T>(key: string, fallbackFile: string, defaults: T
     } catch (e) {
       console.error(`[blob-store] head/fetch ${key} failed:`, e);
     }
-    // First write or fetch failure — fall back to bundled defaults file
+    // First read (no blob exists yet) or fetch failure — fall back to bundled file
   }
 
   try {
@@ -42,7 +46,7 @@ export async function loadJson<T>(key: string, fallbackFile: string, defaults: T
 }
 
 export async function saveJson<T>(key: string, fallbackFile: string, data: T): Promise<void> {
-  if (HAS_BLOB) {
+  if (hasBlob()) {
     try {
       await put(key, JSON.stringify(data, null, 2), {
         access: "public",
@@ -51,6 +55,7 @@ export async function saveJson<T>(key: string, fallbackFile: string, data: T): P
         addRandomSuffix: false,
         cacheControlMaxAge: 0,
       });
+      console.log(`[blob-store] saved ${key} to Vercel Blob`);
       return;
     } catch (e) {
       console.error(`[blob-store] put ${key} failed:`, e);
@@ -63,10 +68,13 @@ export async function saveJson<T>(key: string, fallbackFile: string, data: T): P
   try {
     const filePath = path.resolve(fallbackFile);
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+    console.log(`[blob-store] saved ${key} to local fs`);
   } catch (e) {
     const code = (e as NodeJS.ErrnoException)?.code;
     if (code !== "EROFS" && code !== "EACCES") {
       console.error(`[blob-store] fs write ${fallbackFile} failed:`, e);
+    } else {
+      console.error(`[blob-store] WARNING: ${key} could not be persisted (${code}) — Blob token missing?`);
     }
   }
 }
