@@ -1331,7 +1331,12 @@ export default function Dashboard() {
                 total={homeVisits ?? 0}
                 colour="#10B981"
                 bg="#ECFDF5"
-                rate={leadsTotal > 0 ? `${(((homeVisits ?? 0) / leadsTotal) * 100).toFixed(1)}% of leads` : undefined}
+                rate={(() => {
+                  const parts: string[] = [];
+                  if (leadsTotal > 0) parts.push(`${(((homeVisits ?? 0) / leadsTotal) * 100).toFixed(1)}% of leads`);
+                  if (sourcesTotal > 0) parts.push(`${(((homeVisits ?? 0) / sourcesTotal) * 100).toFixed(1)}% of contacts`);
+                  return parts.length > 0 ? parts.join(" · ") : undefined;
+                })()}
               >
                 {homeVisitBreakdown && homeVisitBreakdown.total > 0 ? (
                   <>
