@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { PieChart, Pie, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area } from "recharts";
+import { PieChart, Pie, ResponsiveContainer, Tooltip, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, AreaChart, Area } from "recharts";
 
 interface LeadSource {
   label: string;
@@ -209,14 +209,16 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
         style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}
       />
       <div
+        className="dashboard-modal-card"
         style={{
           position: "relative",
           background: "#fff",
           borderRadius: "16px",
           width: "100%",
           maxWidth: "440px",
+          maxHeight: "90vh",
+          overflowY: "auto",
           boxShadow: "0 24px 48px -12px rgba(0,0,0,0.25)",
-          overflow: "hidden",
         }}
       >
         <div
@@ -533,6 +535,7 @@ export default function Dashboard() {
   const [adSpend, setAdSpend] = useState<{ name: string; colour: string; spend: number; clicks: number }[]>([]);
   const [adSpendTotal, setAdSpendTotal] = useState(0);
   const [unattributed, setUnattributed] = useState<{ contactsWithoutSource: number; visitsWithoutSource: number }>({ contactsWithoutSource: 0, visitsWithoutSource: 0 });
+  const [dowConversion, setDowConversion] = useState<{ contacts: number[]; withVisit: number[] } | null>(null);
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const [aiDismissed, setAiDismissed] = useState<Set<number>>(new Set());
   const [aiRejectingIdx, setAiRejectingIdx] = useState<number | null>(null);
@@ -681,13 +684,24 @@ export default function Dashboard() {
       if (lcPeriodRes.ok) setLifecyclePeriod((await lcPeriodRes.json()).stages);
       setLoadProgress(85);
 
-      // Batch 5: Timeline + unattributed
+      // Batch 5: Timeline + unattributed + day-of-week conversion
       setSelectedMetric("contacts");
-      const [timelineRes, unattribRes] = await Promise.all([
+      const [timelineRes, unattribRes, dowRes] = await Promise.all([
         fetch(`/api/hubspot/contacts-daily?from=${from}&to=${to}&metric=contacts`),
         fetch(`/api/hubspot/unattributed?from=${from}&to=${to}`),
+        fetch(`/api/hubspot/dow-conversion?from=${from}&to=${to}`),
       ]);
-      if (unattribRes.ok) setUnattributed(await unattribRes.json());
+      if (unattribRes.ok) {
+        setUnattributed(await unattribRes.json());
+      } else {
+        console.error("[unattributed] failed:", unattribRes.status, await unattribRes.text());
+      }
+      if (dowRes.ok) {
+        setDowConversion(await dowRes.json());
+      } else {
+        console.error("[dow-conversion] failed:", dowRes.status, await dowRes.text());
+        setDowConversion(null);
+      }
       if (timelineRes.ok) {
         const timelineJson = await timelineRes.json();
         setTimelineData(timelineJson.data);
@@ -843,10 +857,11 @@ export default function Dashboard() {
   ];
 
   return (
-    <div style={{ minHeight: "100vh", background: "#F1F5F9" }}>
+    <div className="dashboard-root" style={{ minHeight: "100vh", background: "#F1F5F9" }}>
       {/* Header */}
       <header style={{ background: "#0F172A", padding: "0 16px" }}>
         <div
+          className="dashboard-header-bar"
           style={{
             maxWidth: "1600px",
             margin: "0 auto",
@@ -854,6 +869,8 @@ export default function Dashboard() {
             justifyContent: "space-between",
             alignItems: "center",
             height: "48px",
+            flexWrap: "wrap",
+            gap: "8px",
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -896,7 +913,7 @@ export default function Dashboard() {
               ];
 
               return (
-                <div style={{ display: "flex", gap: "2px", background: "#1E293B", borderRadius: "8px", padding: "3px" }}>
+                <div className="dashboard-quick-ranges" style={{ display: "flex", gap: "2px", background: "#1E293B", borderRadius: "8px", padding: "3px" }}>
                   {ranges.map((r) => {
                     const active = from === r.from && to === r.to;
                     return (
@@ -1006,7 +1023,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main style={{ maxWidth: "1600px", margin: "0 auto", padding: "16px" }}>
+      <main className="dashboard-main" style={{ maxWidth: "1600px", margin: "0 auto", padding: "16px" }}>
         {/* Error */}
         {error && (
           <div
@@ -1147,11 +1164,11 @@ export default function Dashboard() {
               )}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "10px" }}>
-              <KpiCard label="Website Visitors" value={activeUsers} colour="#8B5CF6" onClick={() => switchMetric("visitors")} selected={selectedMetric === "visitors"} liveNow={liveNow} />
-              <KpiCard label="Contacts" value={sourcesTotal} colour="#6366F1" comparison={previousPeriod ? { current: sourcesTotal, previous: previousPeriod.contacts } : undefined} onClick={() => switchMetric("contacts")} selected={selectedMetric === "contacts"} />
-              <KpiCard label="Prospects" value={prospectsTotal} colour="#F59E0B" comparison={previousPeriod ? { current: prospectsTotal, previous: previousPeriod.prospects } : undefined} goal={proratedGoal(goals.prospectsGoalPerMonth) ? { current: prospectsTotal, target: proratedGoal(goals.prospectsGoalPerMonth)! } : undefined} onClick={() => switchMetric("prospects")} selected={selectedMetric === "prospects"} />
-              <KpiCard label="Leads" value={leadsTotal} colour="#3B82F6" comparison={previousPeriod ? { current: leadsTotal, previous: previousPeriod.leads } : undefined} detail={organicLeads > 0 ? `${formLeadsTotal} Leads + ${organicLeads} Prospects Who Booked Visits` : undefined} goal={proratedGoal(goals.leadGoalPerMonth) ? { current: leadsTotal, target: proratedGoal(goals.leadGoalPerMonth)! } : undefined} onClick={() => switchMetric("leads")} selected={selectedMetric === "leads"} />
-              <KpiCard label="Home Visits" value={homeVisits} colour="#10B981" comparison={previousPeriod ? { current: homeVisits ?? 0, previous: previousPeriod.homeVisits } : undefined} goal={proratedGoal(goals.visitsGoalPerMonth) ? { current: homeVisits ?? 0, target: proratedGoal(goals.visitsGoalPerMonth)! } : undefined} onClick={() => switchMetric("visits")} selected={selectedMetric === "visits"} />
+              <KpiCard label="Website Visitors" value={activeUsers} colour="#8B5CF6" liveNow={liveNow} />
+              <KpiCard label="Contacts" value={sourcesTotal} colour="#6366F1" comparison={previousPeriod ? { current: sourcesTotal, previous: previousPeriod.contacts } : undefined} />
+              <KpiCard label="Prospects" value={prospectsTotal} colour="#F59E0B" comparison={previousPeriod ? { current: prospectsTotal, previous: previousPeriod.prospects } : undefined} goal={proratedGoal(goals.prospectsGoalPerMonth) ? { current: prospectsTotal, target: proratedGoal(goals.prospectsGoalPerMonth)! } : undefined} />
+              <KpiCard label="Leads" value={leadsTotal} colour="#3B82F6" comparison={previousPeriod ? { current: leadsTotal, previous: previousPeriod.leads } : undefined} detail={organicLeads > 0 ? `${formLeadsTotal} Form Leads + ${organicLeads} Direct Bookings` : undefined} goal={proratedGoal(goals.leadGoalPerMonth) ? { current: leadsTotal, target: proratedGoal(goals.leadGoalPerMonth)! } : undefined} />
+              <KpiCard label="Home Visits" value={homeVisits} colour="#10B981" comparison={previousPeriod ? { current: homeVisits ?? 0, previous: previousPeriod.homeVisits } : undefined} goal={proratedGoal(goals.visitsGoalPerMonth) ? { current: homeVisits ?? 0, target: proratedGoal(goals.visitsGoalPerMonth)! } : undefined} />
               <KpiCard label="Won Jobs" value={wonJobs} colour="#059669" subtitle={wonValue ? `£${wonValue.toLocaleString()} value` : undefined} />
             </div>
             </div>
@@ -1209,7 +1226,7 @@ export default function Dashboard() {
                     <div style={{ borderTop: "1px dashed #CBD5E1", margin: "6px 0", position: "relative" }}>
                       <span style={{ position: "absolute", top: "-7px", left: "50%", transform: "translateX(-50%)", background: "#EFF6FF", padding: "0 6px", fontSize: "8px", fontWeight: 700, color: "#3B82F6", textTransform: "uppercase", letterSpacing: "0.5px", whiteSpace: "nowrap" }}>Organic</span>
                     </div>
-                    <MiniRow label="Prospects who booked visits" count={organicLeads} highlight />
+                    <MiniRow label="Direct bookings (no lead form)" count={organicLeads} highlight />
                   </>
                 )}
               </FunnelCard>
@@ -1315,7 +1332,7 @@ export default function Dashboard() {
               Trends & Lifecycle
             </h2>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {/* CHART with pill buttons — full width */}
+              {/* CHART with pill buttons — full width bar chart */}
               {(() => {
                 const metrics = [
                   { key: "contacts", label: "Contacts", colour: "#6366F1" },
@@ -1360,16 +1377,10 @@ export default function Dashboard() {
                         <p style={{ fontSize: "13px", color: "#64748B", margin: 0, fontWeight: 600 }}>Loading...</p>
                       </div>
                     )}
-                    <div style={{ width: "100%", height: 180, opacity: timelineLoading ? 0.3 : 1, transition: "opacity 0.2s" }}>
+                    <div style={{ width: "100%", height: 320, opacity: timelineLoading ? 0.3 : 1, transition: "opacity 0.2s" }}>
                       {timelineData.length > 0 ? (
                         <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={timelineData} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
-                            <defs>
-                              <linearGradient id="metricGradient" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor={active.colour} stopOpacity={0.2} />
-                                <stop offset="95%" stopColor={active.colour} stopOpacity={0} />
-                              </linearGradient>
-                            </defs>
+                          <BarChart data={timelineData} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
                             <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#F1F5F9" />
                             <XAxis
                               dataKey="label"
@@ -1389,18 +1400,25 @@ export default function Dashboard() {
                             <Tooltip
                               labelFormatter={(d) => String(d)}
                               formatter={(value) => [Number(value).toLocaleString(), active.label]}
+                              cursor={{ fill: "#F1F5F9" }}
                               contentStyle={{ borderRadius: "10px", border: "1px solid #E2E8F0", fontSize: "12px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
                             />
-                            <Area
-                              type="monotone"
+                            <Bar
                               dataKey="count"
-                              stroke={active.colour}
-                              strokeWidth={2}
-                              fill="url(#metricGradient)"
-                              dot={timelineData.length <= 31 ? { r: 3, fill: active.colour, strokeWidth: 0 } : false}
-                              activeDot={{ r: 5, fill: active.colour, stroke: "white", strokeWidth: 2 }}
-                            />
-                          </AreaChart>
+                              radius={[4, 4, 0, 0]}
+                              maxBarSize={48}
+                            >
+                              {timelineData.map((d, i) => {
+                                // Only daily granularity has a meaningful weekend concept
+                                let isWeekend = false;
+                                if (timelineGranularity === "day") {
+                                  const dow = new Date(d.label + "T12:00:00").getDay();
+                                  isWeekend = dow === 0 || dow === 6;
+                                }
+                                return <Cell key={i} fill={isWeekend ? "#F59E0B" : active.colour} />;
+                              })}
+                            </Bar>
+                          </BarChart>
                         </ResponsiveContainer>
                       ) : (
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#94A3B8", fontSize: "13px" }}>
@@ -1412,60 +1430,88 @@ export default function Dashboard() {
                 );
               })()}
 
+              {/* ROW 2: Lifecycle pipeline + Visit conversion (both metric-independent) */}
               <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "10px" }}>
               {/* LIFECYCLE STAGES */}
               {lifecycleStages.length > 0 && (
                 <LifecyclePipeline stages={lifecycleStages} periodStages={lifecyclePeriod} />
               )}
 
-              {/* DAY OF WEEK */}
-              {timelineGranularity === "day" && timelineData.length > 0 && (
-                <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px", display: "flex", flexDirection: "column" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                    <p style={{ fontSize: "11px", fontWeight: 600, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                      By Day of Week
-                    </p>
-                    {(() => {
-                      const best = timelineData.reduce((b, d) => d.count > b.count ? d : b, timelineData[0]);
-                      const [,m,d] = best.label.split("-");
-                      return (
-                        <span style={{ fontSize: "10px", color: "#059669", fontWeight: 700 }}>
-                          Best: {best.count} ({parseInt(d)}/{parseInt(m)})
-                        </span>
-                      );
-                    })()}
-                  </div>
-                  <div style={{ display: "flex", gap: "6px", alignItems: "flex-end", flex: 1 }}>
-                    {(() => {
-                      const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-                      const dayCounts = [0, 0, 0, 0, 0, 0, 0];
-                      for (const d of timelineData) {
-                        const date = new Date(d.label + "T12:00:00");
-                        const dow = (date.getDay() + 6) % 7;
-                        dayCounts[dow] += d.count;
-                      }
-                      const maxDay = Math.max(...dayCounts, 1);
-                      const bestIdx = dayCounts.indexOf(Math.max(...dayCounts));
-                      return days.map((day, i) => (
-                        <div key={day} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
-                          <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", flex: 1 }}>
-                            {dayCounts[i] > 0 && <span style={{ fontSize: "10px", fontWeight: 700, color: i === bestIdx ? "#059669" : "#0F172A", marginBottom: "2px" }}>{dayCounts[i]}</span>}
-                            <div style={{
-                              width: "100%",
-                              maxWidth: "48px",
-                              height: `${Math.max((dayCounts[i] / maxDay) * 100, dayCounts[i] > 0 ? 4 : 0)}%`,
-                              background: i === bestIdx ? "#10B981" : "#6366F1",
-                              borderRadius: "4px 4px 0 0",
-                              transition: "height 0.3s ease",
-                            }} />
-                          </div>
-                          <span style={{ fontSize: "10px", fontWeight: 600, color: i === bestIdx ? "#059669" : "#64748B" }}>{day}</span>
+              {/* VISIT CONVERSION BY DAY OF WEEK — answers "are weekend leads worth it?" */}
+              {dowConversion && dowConversion.contacts.some((c) => c > 0) && (() => {
+                  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+                  const rates = dowConversion.contacts.map((c, i) =>
+                    c > 0 ? (dowConversion.withVisit[i] / c) * 100 : 0
+                  );
+                  const maxRate = Math.max(...rates, 1);
+                  const bestIdx = rates.indexOf(Math.max(...rates));
+
+                  // Weekday vs weekend aggregate
+                  const wdContacts = dowConversion.contacts.slice(0, 5).reduce((a, b) => a + b, 0);
+                  const wdVisits = dowConversion.withVisit.slice(0, 5).reduce((a, b) => a + b, 0);
+                  const weContacts = dowConversion.contacts.slice(5).reduce((a, b) => a + b, 0);
+                  const weVisits = dowConversion.withVisit.slice(5).reduce((a, b) => a + b, 0);
+                  const wdRate = wdContacts > 0 ? (wdVisits / wdContacts) * 100 : 0;
+                  const weRate = weContacts > 0 ? (weVisits / weContacts) * 100 : 0;
+
+                  return (
+                    <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px", display: "flex", flexDirection: "column", flex: 1, minHeight: "240px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                        <p style={{ fontSize: "11px", fontWeight: 600, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                          Visit Conversion by Day
+                        </p>
+                        <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>% that book a visit</span>
+                      </div>
+                      <p style={{ fontSize: "11px", color: "#64748B", margin: "0 0 10px", lineHeight: 1.4 }}>
+                        When a contact enters our system on this day, this is the percentage that go on to book a home visit at some point.
+                      </p>
+                      {/* Weekday vs weekend headline */}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "12px" }}>
+                        <div style={{ background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: "8px", padding: "8px 10px" }}>
+                          <p style={{ fontSize: "10px", color: "#047857", margin: 0, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>Weekday</p>
+                          <p style={{ fontSize: "20px", fontWeight: 800, color: "#059669", margin: "2px 0 0", lineHeight: 1.1 }}>{wdRate.toFixed(1)}%</p>
+                          <p style={{ fontSize: "10px", color: "#64748B", margin: "2px 0 0" }}>{wdVisits} of {wdContacts}</p>
                         </div>
-                      ));
-                    })()}
-                  </div>
-                </div>
-              )}
+                        <div style={{ background: weRate < wdRate ? "#FEF2F2" : "#ECFDF5", border: `1px solid ${weRate < wdRate ? "#FECACA" : "#A7F3D0"}`, borderRadius: "8px", padding: "8px 10px" }}>
+                          <p style={{ fontSize: "10px", color: weRate < wdRate ? "#B91C1C" : "#047857", margin: 0, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>Weekend</p>
+                          <p style={{ fontSize: "20px", fontWeight: 800, color: weRate < wdRate ? "#DC2626" : "#059669", margin: "2px 0 0", lineHeight: 1.1 }}>{weRate.toFixed(1)}%</p>
+                          <p style={{ fontSize: "10px", color: "#64748B", margin: "2px 0 0" }}>{weVisits} of {weContacts}</p>
+                        </div>
+                      </div>
+                      {/* Per-day conversion bars */}
+                      <div style={{ display: "flex", gap: "6px", alignItems: "flex-end", flex: 1, minHeight: 0 }}>
+                        {days.map((day, i) => {
+                          const isWeekend = i >= 5;
+                          const isBest = i === bestIdx;
+                          const colour = isBest ? "#10B981" : isWeekend ? "#F59E0B" : "#6366F1";
+                          return (
+                            <div key={day} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", height: "100%" }}>
+                              <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", flex: 1, minHeight: 0 }}>
+                                {dowConversion.contacts[i] > 0 && (
+                                  <span style={{ fontSize: "10px", fontWeight: 700, color: isBest ? "#059669" : "#0F172A", marginBottom: "2px" }}>
+                                    {rates[i].toFixed(0)}%
+                                  </span>
+                                )}
+                                <div
+                                  title={`${dowConversion.withVisit[i]} of ${dowConversion.contacts[i]} contacts booked a visit`}
+                                  style={{
+                                    width: "100%",
+                                    maxWidth: "48px",
+                                    height: `${Math.max((rates[i] / maxRate) * 100, rates[i] > 0 ? 4 : 0)}%`,
+                                    background: colour,
+                                    borderRadius: "4px 4px 0 0",
+                                    transition: "height 0.3s ease",
+                                  }}
+                                />
+                              </div>
+                              <span style={{ fontSize: "10px", fontWeight: 600, color: isBest ? "#059669" : isWeekend ? "#B45309" : "#64748B" }}>{day}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
@@ -1979,22 +2025,20 @@ function LifecyclePipeline({ stages, periodStages }: { stages: { label: string; 
 }
 
 
-function KpiCard({ label, value, colour, subtitle, detail, goal, comparison, onClick, selected, liveNow }: { label: string; value: number | null; colour: string; subtitle?: string; detail?: string; goal?: { current: number; target: number }; comparison?: { current: number; previous: number }; onClick?: () => void; selected?: boolean; liveNow?: number | null }) {
+function KpiCard({ label, value, colour, subtitle, detail, goal, comparison, liveNow }: { label: string; value: number | null; colour: string; subtitle?: string; detail?: string; goal?: { current: number; target: number }; comparison?: { current: number; previous: number }; liveNow?: number | null }) {
   const pct = goal ? Math.min((goal.current / goal.target) * 100, 100) : 0;
   const met = goal ? goal.current >= goal.target : false;
 
   return (
     <div
-      onClick={onClick}
       style={{
-        background: selected ? `${colour}06` : "white",
+        background: "white",
         borderRadius: "10px",
         padding: "14px 16px",
-        borderTop: selected ? `2px solid ${colour}` : "1px solid #E8ECF0",
-        borderRight: selected ? `2px solid ${colour}` : "1px solid #E8ECF0",
-        borderBottom: selected ? `2px solid ${colour}` : "1px solid #E8ECF0",
+        borderTop: "1px solid #E8ECF0",
+        borderRight: "1px solid #E8ECF0",
+        borderBottom: "1px solid #E8ECF0",
         borderLeft: `3px solid ${colour}`,
-        cursor: onClick ? "pointer" : "default",
         transition: "all 0.15s ease",
       }}
     >

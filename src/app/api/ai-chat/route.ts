@@ -1,6 +1,15 @@
 import { NextRequest } from "next/server";
+import { rateLimit, clientKey } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
+  const limit = rateLimit(`ai-chat:${clientKey(request)}`, 20, 60_000);
+  if (!limit.ok) {
+    return Response.json(
+      { error: "Too many requests. Try again shortly." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.resetAt - Date.now()) / 1000)) } },
+    );
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return Response.json({ error: "Missing ANTHROPIC_API_KEY" }, { status: 500 });
 
@@ -16,7 +25,7 @@ CURRENT DASHBOARD DATA:
 - Home Visits: ${dashboardData.homeVisits}
 - Won Jobs: ${dashboardData.wonJobs} (value: £${dashboardData.wonValue ?? 0})
 - Unattributed contacts: ${dashboardData.unattributedContacts}
-- Prospects who booked visits directly: ${dashboardData.organicLeads}
+- Direct bookings (booked a visit without filling out a lead form): ${dashboardData.organicLeads}
 - Previous period contacts: ${dashboardData.prevContacts ?? "N/A"}
 - Previous period leads: ${dashboardData.prevLeads ?? "N/A"}
 - Sources: ${dashboardData.sources?.map((s: { label: string; count: number }) => `${s.label}: ${s.count}`).join(", ") ?? "N/A"}`;

@@ -1,36 +1,89 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ACB Stats Portal
 
-## Getting Started
+Internal marketing dashboard for **Age Care Bathrooms**. Pulls live data from
+HubSpot CRM, Google Analytics 4, Facebook, Google Places, and Anthropic for
+AI-generated insights. Built with Next.js 16 (App Router).
 
-First, run the development server:
+> **Access**: password-protected. Single shared password set via env var.
+> Sessions are HMAC-signed httpOnly cookies, valid for 14 days.
+
+## Local development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The app runs at http://localhost:3000. You'll be redirected to `/login` —
+sign in with the value of `DASHBOARD_PASSWORD`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Required environment variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Create `.env.local` (gitignored) with:
 
-## Learn More
+```bash
+# Auth — REQUIRED
+AUTH_SECRET=                   # 32+ char random string (e.g. `openssl rand -hex 32`)
+DASHBOARD_PASSWORD=            # the shared password staff use to sign in
 
-To learn more about Next.js, take a look at the following resources:
+# HubSpot
+HUBSPOT_ACCESS_TOKEN=          # private app token
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Google Analytics 4
+GA4_PROPERTY_ID=
+GOOGLE_SERVICE_ACCOUNT_KEY_PATH=./ga-service-account.json   # local only
+# On Vercel use this instead (paste the JSON file contents):
+# GOOGLE_SERVICE_ACCOUNT_KEY=
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Google Places
+GOOGLE_PLACES_API_KEY=
+GOOGLE_PLACE_ID=
 
-## Deploy on Vercel
+# Facebook
+FACEBOOK_PAGE_TOKEN=
+FACEBOOK_PAGE_ID=
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+# Google Ads
+GOOGLE_ADS_DEVELOPER_TOKEN=
+GOOGLE_ADS_CUSTOMER_ID=
+GOOGLE_ADS_LOGIN_CUSTOMER_ID=
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# Anthropic (used by /api/ai-chat and /api/ai-insights)
+ANTHROPIC_API_KEY=
+```
+
+`ga-service-account.json` is also gitignored — never commit it.
+
+## Security
+
+- All routes (pages **and** API) sit behind `proxy.ts`. Unauthenticated
+  requests to pages are redirected to `/login`; unauthenticated API requests
+  return 401.
+- Sessions are HMAC-SHA256 signed cookies — see [src/lib/auth.ts](src/lib/auth.ts).
+- Hard-to-guess `AUTH_SECRET` is required at startup.
+- AI endpoints are rate-limited per IP via [src/lib/rate-limit.ts](src/lib/rate-limit.ts)
+  to prevent runaway Anthropic spend.
+- Security headers (HSTS, X-Frame-Options DENY, X-Content-Type-Options,
+  Referrer-Policy, Permissions-Policy) are set in [next.config.ts](next.config.ts).
+- `noindex, nofollow` is set in the layout metadata so the dashboard never
+  appears in search results.
+
+## Deployment (Vercel)
+
+1. Push to `main` — Vercel auto-deploys.
+2. Add **all** the env vars above in Vercel → Settings → Environment Variables
+   for the `Production` and `Preview` environments.
+3. For `GOOGLE_SERVICE_ACCOUNT_KEY`, paste the **entire JSON contents** of
+   `ga-service-account.json` (not the file path).
+4. Configure custom domain `stats.agecare.co.uk` in Vercel → Settings → Domains
+   and add the CNAME record Vercel gives you in your DNS provider.
+
+## Notable conventions
+
+- This is **Next.js 16**. The `middleware` file convention has been renamed to
+  `proxy` — see [proxy.ts](proxy.ts). Always read
+  `node_modules/next/dist/docs/` before assuming an API exists.
+- The dashboard uses inline `style={}` rather than Tailwind classes.
+  Mobile responsiveness is layered on top via `@media` rules in
+  [src/app/globals.css](src/app/globals.css) that target the
+  `.dashboard-root` class.

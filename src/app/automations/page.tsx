@@ -104,9 +104,9 @@ export default function AutomationsPage() {
         </div>
       </header>
 
-      <div style={{ display: "flex" }}>
+      <div className="dashboard-root automations-layout" style={{ display: "flex" }}>
         {/* Flow */}
-        <div style={{ flex: 1, padding: "40px 32px", display: "flex", flexDirection: "column", alignItems: "center", gap: "0" }}>
+        <div className="dashboard-main" style={{ flex: 1, padding: "40px 32px", display: "flex", flexDirection: "column", alignItems: "center", gap: "0" }}>
           {FLOW.map((row, rowIdx) => (
             <div key={rowIdx} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
               {/* Down arrow + label between rows */}
@@ -162,6 +162,7 @@ export default function AutomationsPage() {
         {/* Detail panel */}
         {selectedNode && (
           <div
+            className="automations-detail"
             style={{
               width: "300px",
               flexShrink: 0,

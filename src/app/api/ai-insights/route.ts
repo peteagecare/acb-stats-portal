@@ -1,6 +1,15 @@
 import { NextRequest } from "next/server";
+import { rateLimit, clientKey } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
+  const limit = rateLimit(`ai-insights:${clientKey(request)}`, 10, 60_000);
+  if (!limit.ok) {
+    return Response.json(
+      { error: "Too many requests. Try again shortly." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((limit.resetAt - Date.now()) / 1000)) } },
+    );
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return Response.json({ error: "Missing ANTHROPIC_API_KEY" }, { status: 500 });
@@ -20,7 +29,7 @@ FUNNEL METRICS:
 - Home Visits booked: ${data.homeVisits}
 - Won Jobs: ${data.wonJobs} (value: £${data.wonValue ?? 0})
 - Contacts without a source attributed: ${data.unattributedContacts}
-- Prospects who skipped lead stage and booked visits directly: ${data.organicLeads}
+- Direct bookings (booked a visit without filling out a lead form): ${data.organicLeads}
 
 CONVERSION RATES:
 - Visitor → Contact: ${data.visitors && data.contacts ? ((data.contacts / data.visitors) * 100).toFixed(1) : "N/A"}%
