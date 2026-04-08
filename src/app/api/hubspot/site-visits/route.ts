@@ -179,10 +179,13 @@ export async function GET(request: NextRequest) {
     const calendarFrom = buckets[0].start;
     const calendarTo = buckets[buckets.length - 1].end;
 
-    // Single paginated search across the 4-week window. Fetches the booked
-    // status too so we can bucket booked vs cancelled in one pass.
+    // Two paginated searches across the 4-week window:
+    //   - by initial_home_visit_date  → counts (booked) + cancelled
+    //   - by date_that_initial_visit_is_cancelled → cancelledDuringWeek
+    // Each one bucketed into the four week ranges client-side.
     const counts = [0, 0, 0, 0];
     const cancelled = [0, 0, 0, 0];
+    const cancelledDuringWeek = [0, 0, 0, 0];
     let after: string | undefined;
     let pages = 0;
     const MAX_PAGES = 20;
@@ -241,6 +244,57 @@ export async function GET(request: NextRequest) {
       if (pages >= MAX_PAGES) break;
     } while (after);
 
+    // Second paginated search: cancellation events whose
+    // date_that_initial_visit_is_cancelled falls in the 4-week window.
+    let cancelAfter: string | undefined;
+    let cancelPages = 0;
+    do {
+      const body: Record<string, unknown> = {
+        filterGroups: [
+          {
+            filters: [
+              {
+                propertyName: "date_that_initial_visit_is_cancelled",
+                operator: "GTE",
+                value: calendarFrom.getTime().toString(),
+              },
+              {
+                propertyName: "date_that_initial_visit_is_cancelled",
+                operator: "LTE",
+                value: (calendarTo.getTime() + 86_399_999).toString(),
+              },
+              LIFECYCLE_EXCLUSION_FILTER,
+            ],
+          },
+        ],
+        properties: ["date_that_initial_visit_is_cancelled"],
+        limit: 100,
+        sorts: [{ propertyName: "date_that_initial_visit_is_cancelled", direction: "ASCENDING" }],
+      };
+      if (cancelAfter) body.after = cancelAfter;
+
+      const data = await hubspotSearch(token, body);
+      for (const c of data.results ?? []) {
+        const raw = c.properties?.date_that_initial_visit_is_cancelled;
+        if (!raw) continue;
+        const [y, mo, d] = raw.split("-").map(Number);
+        if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) continue;
+        const ms = Date.UTC(y, mo - 1, d);
+        for (let i = 0; i < buckets.length; i++) {
+          const bStart = buckets[i].start.getTime();
+          const bEnd = buckets[i].end.getTime() + 86_399_999;
+          if (ms >= bStart && ms <= bEnd) {
+            cancelledDuringWeek[i] += 1;
+            break;
+          }
+        }
+      }
+
+      cancelAfter = data.paging?.next?.after;
+      cancelPages++;
+      if (cancelPages >= MAX_PAGES) break;
+    } while (cancelAfter);
+
     return Response.json({
       inPeriod,
       inPeriodCancelled,
@@ -251,6 +305,7 @@ export async function GET(request: NextRequest) {
         weekEnd: londonDateString(b.end),
         count: counts[i],
         cancelled: cancelled[i],
+        cancelledDuringWeek: cancelledDuringWeek[i],
       })),
     });
   } catch (e) {

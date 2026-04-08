@@ -546,7 +546,7 @@ export default function Dashboard() {
     inPeriod: number;
     inPeriodCancelled: number;
     cancelledDuringPeriod: number;
-    upcoming: { label: string; weekStart: string; weekEnd: string; count: number; cancelled: number }[];
+    upcoming: { label: string; weekStart: string; weekEnd: string; count: number; cancelled: number; cancelledDuringWeek: number }[];
   } | null>(null);
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const [aiDismissed, setAiDismissed] = useState<Set<number>>(new Set());
@@ -1707,10 +1707,29 @@ export default function Dashboard() {
                             <p style={{ fontSize: "10px", color: "#64748B", margin: "4px 0 0" }}>
                               {wk.count === 1 ? "visit" : "visits"}
                             </p>
-                            {wk.cancelled > 0 && (
-                              <p style={{ fontSize: "10px", color: "#DC2626", margin: "4px 0 0", fontWeight: 600 }}>
-                                {wk.cancelled} cancelled
-                              </p>
+                            {(wk.cancelledDuringWeek > 0 || wk.cancelled > 0) && (
+                              <div style={{ marginTop: "8px", paddingTop: "8px", borderTop: "1px solid #F1F5F9", width: "100%", display: "flex", flexDirection: "column", gap: "6px" }}>
+                                {wk.cancelledDuringWeek > 0 && (
+                                  <div>
+                                    <p style={{ fontSize: "16px", fontWeight: 800, color: "#DC2626", margin: 0, lineHeight: 1 }}>
+                                      {wk.cancelledDuringWeek}
+                                    </p>
+                                    <p style={{ fontSize: "9px", color: "#64748B", margin: "2px 0 0", lineHeight: 1.3 }}>
+                                      cancelled within week
+                                    </p>
+                                  </div>
+                                )}
+                                {wk.cancelled > 0 && (
+                                  <div>
+                                    <p style={{ fontSize: "16px", fontWeight: 800, color: "#DC2626", margin: 0, lineHeight: 1 }}>
+                                      {wk.cancelled}
+                                    </p>
+                                    <p style={{ fontSize: "9px", color: "#64748B", margin: "2px 0 0", lineHeight: 1.3 }}>
+                                      scheduled, cancelled
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </div>
                         );
