@@ -544,7 +544,8 @@ export default function Dashboard() {
   const [dowSegment, setDowSegment] = useState<string>("__all__");
   const [siteVisits, setSiteVisits] = useState<{
     inPeriod: number;
-    upcoming: { label: string; weekStart: string; weekEnd: string; count: number }[];
+    inPeriodCancelled: number;
+    upcoming: { label: string; weekStart: string; weekEnd: string; count: number; cancelled: number }[];
   } | null>(null);
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const [aiDismissed, setAiDismissed] = useState<Set<number>>(new Set());
@@ -1630,11 +1631,16 @@ export default function Dashboard() {
                       In Selected Period
                     </p>
                     <p style={{ fontSize: "11px", color: "#94A3B8", margin: "2px 0 8px" }}>
-                      Visits with Initial Home Visit Date in range
+                      Visits with Initial Home Visit Date in range, excluding cancelled
                     </p>
                     <p style={{ fontSize: "44px", fontWeight: 800, color: "#0F172A", margin: 0, lineHeight: 1 }}>
                       {siteVisits.inPeriod.toLocaleString()}
                     </p>
+                    {siteVisits.inPeriodCancelled > 0 && (
+                      <p style={{ fontSize: "11px", color: "#DC2626", margin: "8px 0 0", fontWeight: 600 }}>
+                        {siteVisits.inPeriodCancelled.toLocaleString()} cancelled
+                      </p>
+                    )}
                   </div>
 
                   {/* 4-week forward calendar — independent of selected date range */}
@@ -1681,6 +1687,11 @@ export default function Dashboard() {
                             <p style={{ fontSize: "10px", color: "#64748B", margin: "4px 0 0" }}>
                               {wk.count === 1 ? "visit" : "visits"}
                             </p>
+                            {wk.cancelled > 0 && (
+                              <p style={{ fontSize: "10px", color: "#DC2626", margin: "4px 0 0", fontWeight: 600 }}>
+                                {wk.cancelled} cancelled
+                              </p>
+                            )}
                           </div>
                         );
                       })}

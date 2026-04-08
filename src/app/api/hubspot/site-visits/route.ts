@@ -110,21 +110,41 @@ export async function GET(request: NextRequest) {
   try {
     // ──────────────────────────────────────────────────────────────────
     // 1. Visits whose initial_home_visit_date falls in the dashboard period
+    //    Two parallel searches: non-cancelled count + cancelled count.
     // ──────────────────────────────────────────────────────────────────
-    const inPeriodRes = await hubspotSearch(token, {
-      filterGroups: [
-        {
-          filters: [
-            { propertyName: "initial_home_visit_date", operator: "GTE", value: dayStartUtcMs(from).toString() },
-            { propertyName: "initial_home_visit_date", operator: "LTE", value: dayEndUtcMs(to).toString() },
-            LIFECYCLE_EXCLUSION_FILTER,
-          ],
-        },
-      ],
-      properties: ["initial_home_visit_date"],
-      limit: 1,
-    });
+    const inPeriodBaseFilters = [
+      { propertyName: "initial_home_visit_date", operator: "GTE", value: dayStartUtcMs(from).toString() },
+      { propertyName: "initial_home_visit_date", operator: "LTE", value: dayEndUtcMs(to).toString() },
+      LIFECYCLE_EXCLUSION_FILTER,
+    ];
+    const [inPeriodRes, inPeriodCancelledRes] = await Promise.all([
+      hubspotSearch(token, {
+        filterGroups: [
+          {
+            filters: [
+              ...inPeriodBaseFilters,
+              { propertyName: "initial_visit_booked_", operator: "NEQ", value: "Cancelled" },
+            ],
+          },
+        ],
+        properties: ["initial_home_visit_date"],
+        limit: 1,
+      }),
+      hubspotSearch(token, {
+        filterGroups: [
+          {
+            filters: [
+              ...inPeriodBaseFilters,
+              { propertyName: "initial_visit_booked_", operator: "EQ", value: "Cancelled" },
+            ],
+          },
+        ],
+        properties: ["initial_home_visit_date"],
+        limit: 1,
+      }),
+    ]);
     const inPeriod = inPeriodRes.total ?? 0;
+    const inPeriodCancelled = inPeriodCancelledRes.total ?? 0;
 
     // ──────────────────────────────────────────────────────────────────
     // 2. Forward calendar — visits scheduled this week / next 3 weeks
@@ -140,8 +160,10 @@ export async function GET(request: NextRequest) {
     const calendarFrom = buckets[0].start;
     const calendarTo = buckets[buckets.length - 1].end;
 
-    // Single paginated search across the 4-week window, then bucket client-side.
+    // Single paginated search across the 4-week window. Fetches the booked
+    // status too so we can bucket booked vs cancelled in one pass.
     const counts = [0, 0, 0, 0];
+    const cancelled = [0, 0, 0, 0];
     let after: string | undefined;
     let pages = 0;
     const MAX_PAGES = 20;
@@ -166,7 +188,7 @@ export async function GET(request: NextRequest) {
             ],
           },
         ],
-        properties: ["initial_home_visit_date"],
+        properties: ["initial_home_visit_date", "initial_visit_booked_"],
         limit: 100,
         sorts: [{ propertyName: "initial_home_visit_date", direction: "ASCENDING" }],
       };
@@ -180,11 +202,16 @@ export async function GET(request: NextRequest) {
         const [y, mo, d] = raw.split("-").map(Number);
         if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) continue;
         const ms = Date.UTC(y, mo - 1, d);
+        const isCancelled = c.properties?.initial_visit_booked_ === "Cancelled";
         for (let i = 0; i < buckets.length; i++) {
           const bStart = buckets[i].start.getTime();
           const bEnd = buckets[i].end.getTime() + 86_399_999;
           if (ms >= bStart && ms <= bEnd) {
-            counts[i] += 1;
+            if (isCancelled) {
+              cancelled[i] += 1;
+            } else {
+              counts[i] += 1;
+            }
             break;
           }
         }
@@ -197,11 +224,13 @@ export async function GET(request: NextRequest) {
 
     return Response.json({
       inPeriod,
+      inPeriodCancelled,
       upcoming: buckets.map((b, i) => ({
         label: b.label,
         weekStart: londonDateString(b.start),
         weekEnd: londonDateString(b.end),
         count: counts[i],
+        cancelled: cancelled[i],
       })),
     });
   } catch (e) {
