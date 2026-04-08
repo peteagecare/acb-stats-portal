@@ -17,7 +17,20 @@ const TZ = "Europe/London";
  * any value — we don't care WHEN the visit was booked, only that it
  * eventually happened. That matters because weekend contacts often only
  * get picked up and booked in on Monday/Tuesday.
+ *
+ * Returns the same totals broken down by `original_lead_source` and
+ * `conversion_action` so the dashboard can answer follow-up questions
+ * like "which source actually converts on a weekend".
  */
+
+interface DowSegment {
+  contacts: number[];
+  withVisit: number[];
+}
+
+function emptySegment(): DowSegment {
+  return { contacts: [0, 0, 0, 0, 0, 0, 0], withVisit: [0, 0, 0, 0, 0, 0, 0] };
+}
 
 function londonDateToUtcMs(dateStr: string, time: string): number {
   const formatter = new Intl.DateTimeFormat("en-GB", {
@@ -68,6 +81,30 @@ async function hubspotSearch(token: string, body: object): Promise<{
   throw new Error("HubSpot search failed after retries");
 }
 
+async function fetchPropertyLabels(
+  token: string,
+  propertyName: string,
+): Promise<Record<string, string>> {
+  try {
+    const res = await fetch(
+      `${HUBSPOT_API}/crm/v3/properties/contacts/${propertyName}`,
+      {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+    if (!res.ok) return {};
+    const data = await res.json();
+    const map: Record<string, string> = {};
+    for (const opt of data.options ?? []) {
+      if (opt?.value) map[opt.value] = opt.label ?? opt.value;
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Convert a UTC ISO timestamp string into a London-zone day-of-week index
  * (0 = Monday … 6 = Sunday). Important: a contact created at 11pm GMT on
@@ -100,14 +137,31 @@ export async function GET(request: NextRequest) {
   const fromMs = londonDateToUtcMs(from, "00:00:00");
   const toMs = londonDateToUtcMs(to, "23:59:59");
 
-  const contacts = [0, 0, 0, 0, 0, 0, 0];
-  const withVisit = [0, 0, 0, 0, 0, 0, 0];
+  const overall = emptySegment();
+  const bySource = new Map<string, DowSegment>();
+  const byAction = new Map<string, DowSegment>();
+
+  function bump(map: Map<string, DowSegment>, key: string, dow: number, hadVisit: boolean) {
+    let seg = map.get(key);
+    if (!seg) {
+      seg = emptySegment();
+      map.set(key, seg);
+    }
+    seg.contacts[dow] += 1;
+    if (hadVisit) seg.withVisit[dow] += 1;
+  }
 
   let after: string | undefined;
   let pages = 0;
   const MAX_PAGES = 50; // 50 * 100 = 5000 contacts ceiling — more than enough
 
   try {
+    // Fetch property labels in parallel with the first contacts page
+    const labelsPromise = Promise.all([
+      fetchPropertyLabels(token, "original_lead_source"),
+      fetchPropertyLabels(token, "conversion_action"),
+    ]);
+
     do {
       const body: Record<string, unknown> = {
         filterGroups: [
@@ -120,7 +174,12 @@ export async function GET(request: NextRequest) {
             ],
           },
         ],
-        properties: ["createdate", "date_that_initial_visit_booked_is_set_to_yes"],
+        properties: [
+          "createdate",
+          "date_that_initial_visit_booked_is_set_to_yes",
+          "original_lead_source",
+          "conversion_action",
+        ],
         limit: 100,
         sorts: [{ propertyName: "createdate", direction: "ASCENDING" }],
       };
@@ -132,10 +191,16 @@ export async function GET(request: NextRequest) {
         const createdate = contact.properties?.createdate;
         if (!createdate) continue;
         const dow = londonDayOfWeek(createdate);
-        contacts[dow] += 1;
-        if (contact.properties?.date_that_initial_visit_booked_is_set_to_yes) {
-          withVisit[dow] += 1;
-        }
+        const hadVisit = !!contact.properties?.date_that_initial_visit_booked_is_set_to_yes;
+
+        overall.contacts[dow] += 1;
+        if (hadVisit) overall.withVisit[dow] += 1;
+
+        const source = contact.properties?.original_lead_source ?? "(No source)";
+        bump(bySource, source, dow, hadVisit);
+
+        const action = contact.properties?.conversion_action ?? "(No action)";
+        bump(byAction, action, dow, hadVisit);
       }
 
       after = data.paging?.next?.after;
@@ -143,7 +208,27 @@ export async function GET(request: NextRequest) {
       if (pages >= MAX_PAGES) break;
     } while (after);
 
-    return Response.json({ contacts, withVisit, truncated: pages >= MAX_PAGES });
+    const [sourceLabels, actionLabels] = await labelsPromise;
+
+    function serialise(map: Map<string, DowSegment>, labels: Record<string, string>) {
+      return Array.from(map.entries())
+        .map(([value, seg]) => ({
+          value,
+          label: labels[value] ?? value,
+          contacts: seg.contacts,
+          withVisit: seg.withVisit,
+          totalContacts: seg.contacts.reduce((a, b) => a + b, 0),
+        }))
+        .sort((a, b) => b.totalContacts - a.totalContacts);
+    }
+
+    return Response.json({
+      contacts: overall.contacts,
+      withVisit: overall.withVisit,
+      bySource: serialise(bySource, sourceLabels),
+      byAction: serialise(byAction, actionLabels),
+      truncated: pages >= MAX_PAGES,
+    });
   } catch (e) {
     return Response.json(
       { error: e instanceof Error ? e.message : "HubSpot request failed" },

@@ -535,7 +535,13 @@ export default function Dashboard() {
   const [adSpend, setAdSpend] = useState<{ name: string; colour: string; spend: number; clicks: number }[]>([]);
   const [adSpendTotal, setAdSpendTotal] = useState(0);
   const [unattributed, setUnattributed] = useState<{ contactsWithoutSource: number; visitsWithoutSource: number }>({ contactsWithoutSource: 0, visitsWithoutSource: 0 });
-  const [dowConversion, setDowConversion] = useState<{ contacts: number[]; withVisit: number[] } | null>(null);
+  const [dowConversion, setDowConversion] = useState<{
+    contacts: number[];
+    withVisit: number[];
+    bySource?: { value: string; label: string; contacts: number[]; withVisit: number[]; totalContacts: number }[];
+    byAction?: { value: string; label: string; contacts: number[]; withVisit: number[]; totalContacts: number }[];
+  } | null>(null);
+  const [dowSegment, setDowSegment] = useState<string>("__all__");
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const [aiDismissed, setAiDismissed] = useState<Set<number>>(new Set());
   const [aiRejectingIdx, setAiRejectingIdx] = useState<number | null>(null);
@@ -1446,17 +1452,51 @@ export default function Dashboard() {
               {/* VISIT CONVERSION BY DAY OF WEEK — answers "are weekend leads worth it?" */}
               {dowConversion && dowConversion.contacts.some((c) => c > 0) && (() => {
                   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-                  const rates = dowConversion.contacts.map((c, i) =>
-                    c > 0 ? (dowConversion.withVisit[i] / c) * 100 : 0
+
+                  // Resolve which segment to display based on the dropdown
+                  const sourceList = dowConversion.bySource ?? [];
+                  const actionList = dowConversion.byAction ?? [];
+                  let segContacts: number[];
+                  let segVisits: number[];
+                  let segLabel = "All contacts";
+                  if (dowSegment.startsWith("source:")) {
+                    const value = dowSegment.slice("source:".length);
+                    const seg = sourceList.find((s) => s.value === value);
+                    if (seg) {
+                      segContacts = seg.contacts;
+                      segVisits = seg.withVisit;
+                      segLabel = seg.label;
+                    } else {
+                      segContacts = dowConversion.contacts;
+                      segVisits = dowConversion.withVisit;
+                    }
+                  } else if (dowSegment.startsWith("action:")) {
+                    const value = dowSegment.slice("action:".length);
+                    const seg = actionList.find((a) => a.value === value);
+                    if (seg) {
+                      segContacts = seg.contacts;
+                      segVisits = seg.withVisit;
+                      segLabel = seg.label;
+                    } else {
+                      segContacts = dowConversion.contacts;
+                      segVisits = dowConversion.withVisit;
+                    }
+                  } else {
+                    segContacts = dowConversion.contacts;
+                    segVisits = dowConversion.withVisit;
+                  }
+
+                  const rates = segContacts.map((c, i) =>
+                    c > 0 ? (segVisits[i] / c) * 100 : 0
                   );
                   const maxRate = Math.max(...rates, 1);
                   const bestIdx = rates.indexOf(Math.max(...rates));
 
-                  // Weekday vs weekend aggregate
-                  const wdContacts = dowConversion.contacts.slice(0, 5).reduce((a, b) => a + b, 0);
-                  const wdVisits = dowConversion.withVisit.slice(0, 5).reduce((a, b) => a + b, 0);
-                  const weContacts = dowConversion.contacts.slice(5).reduce((a, b) => a + b, 0);
-                  const weVisits = dowConversion.withVisit.slice(5).reduce((a, b) => a + b, 0);
+                  // Weekday vs weekend aggregate (filtered to current segment)
+                  const wdContacts = segContacts.slice(0, 5).reduce((a, b) => a + b, 0);
+                  const wdVisits = segVisits.slice(0, 5).reduce((a, b) => a + b, 0);
+                  const weContacts = segContacts.slice(5).reduce((a, b) => a + b, 0);
+                  const weVisits = segVisits.slice(5).reduce((a, b) => a + b, 0);
                   const wdRate = wdContacts > 0 ? (wdVisits / wdContacts) * 100 : 0;
                   const weRate = weContacts > 0 ? (weVisits / weContacts) * 100 : 0;
 
@@ -1469,8 +1509,49 @@ export default function Dashboard() {
                         <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>% that book a visit</span>
                       </div>
                       <p style={{ fontSize: "11px", color: "#64748B", margin: "0 0 10px", lineHeight: 1.4 }}>
-                        When a contact enters our system on this day, this is the percentage that go on to book a home visit at some point.
+                        Showing <strong style={{ color: "#0F172A" }}>{segLabel}</strong>. The percentage of contacts entering on each day who go on to book a home visit.
                       </p>
+
+                      {/* Segment selector */}
+                      {(sourceList.length > 0 || actionList.length > 0) && (
+                        <select
+                          value={dowSegment}
+                          onChange={(e) => setDowSegment(e.target.value)}
+                          style={{
+                            width: "100%",
+                            padding: "8px 10px",
+                            fontSize: "12px",
+                            color: "#0F172A",
+                            background: "#F8FAFC",
+                            border: "1px solid #E2E8F0",
+                            borderRadius: "8px",
+                            marginBottom: "10px",
+                            cursor: "pointer",
+                            outline: "none",
+                          }}
+                        >
+                          <option value="__all__">All contacts ({dowConversion.contacts.reduce((a, b) => a + b, 0)})</option>
+                          {sourceList.length > 0 && (
+                            <optgroup label="By original lead source">
+                              {sourceList.filter((s) => s.totalContacts > 0).map((s) => (
+                                <option key={`source:${s.value}`} value={`source:${s.value}`}>
+                                  {s.label} ({s.totalContacts})
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {actionList.length > 0 && (
+                            <optgroup label="By conversion action">
+                              {actionList.filter((a) => a.totalContacts > 0).map((a) => (
+                                <option key={`action:${a.value}`} value={`action:${a.value}`}>
+                                  {a.label} ({a.totalContacts})
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </select>
+                      )}
+
                       {/* Weekday vs weekend headline */}
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "12px" }}>
                         <div style={{ background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: "8px", padding: "8px 10px" }}>
@@ -1493,13 +1574,13 @@ export default function Dashboard() {
                           return (
                             <div key={day} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", height: "100%" }}>
                               <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", flex: 1, minHeight: 0 }}>
-                                {dowConversion.contacts[i] > 0 && (
+                                {segContacts[i] > 0 && (
                                   <span style={{ fontSize: "10px", fontWeight: 700, color: isBest ? "#059669" : "#0F172A", marginBottom: "2px" }}>
                                     {rates[i].toFixed(0)}%
                                   </span>
                                 )}
                                 <div
-                                  title={`${dowConversion.withVisit[i]} of ${dowConversion.contacts[i]} contacts booked a visit`}
+                                  title={`${segVisits[i]} of ${segContacts[i]} contacts booked a visit`}
                                   style={{
                                     width: "100%",
                                     maxWidth: "48px",
