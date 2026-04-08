@@ -2560,16 +2560,24 @@ function KpiCard({ label, value, colour, subtitle, detail, goal, comparison, liv
       {detail && (
         <p style={{ fontSize: "11px", color: "#3B82F6", margin: "4px 0 0", fontWeight: 600 }}>{detail}</p>
       )}
-      {goal && (
-        <div style={{ marginTop: "6px" }}>
-          <div style={{ background: "#F1F5F9", borderRadius: "3px", height: "3px", overflow: "hidden" }}>
-            <div style={{ width: `${pct}%`, height: "100%", borderRadius: "3px", background: met ? "#10B981" : colour, transition: "width 0.4s ease" }} />
+      {goal && (() => {
+        const pctOfPace = goal.target > 0 ? (goal.current / goal.target) * 100 : 0;
+        const delta = goal.current - goal.target;
+        const ahead = delta >= 0;
+        return (
+          <div style={{ marginTop: "6px" }}>
+            <div style={{ background: "#F1F5F9", borderRadius: "3px", height: "3px", overflow: "hidden" }}>
+              <div style={{ width: `${pct}%`, height: "100%", borderRadius: "3px", background: met ? "#10B981" : colour, transition: "width 0.4s ease" }} />
+            </div>
+            <p style={{ fontSize: "10px", fontWeight: 600, color: met ? "#059669" : "#64748B", margin: "3px 0 0" }}>
+              {goal.current} / {goal.target} goal · {pctOfPace.toFixed(0)}%
+            </p>
+            <p style={{ fontSize: "10px", fontWeight: 700, color: ahead ? "#059669" : "#DC2626", margin: "2px 0 0" }}>
+              {ahead ? "▲" : "▼"} {Math.abs(delta)} {ahead ? "ahead of pace" : "behind pace"}
+            </p>
           </div>
-          <p style={{ fontSize: "10px", fontWeight: 600, color: met ? "#059669" : "#64748B", margin: "3px 0 0" }}>
-            {goal.current} / {goal.target} goal
-          </p>
-        </div>
-      )}
+        );
+      })()}
       {comparison && (
         <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "4px" }}>
           <span style={{ fontSize: "11px", fontWeight: 700, color: comparison.current >= comparison.previous ? "#059669" : "#DC2626" }}>
