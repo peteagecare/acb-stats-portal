@@ -653,7 +653,16 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [goals, setGoals] = useState<Goals>(DEFAULT_GOALS);
-  const [previousPeriod, setPreviousPeriod] = useState<{ contacts: number; prospects: number; leads: number; homeVisits: number } | null>(null);
+  const [previousPeriod, setPreviousPeriod] = useState<{
+    contacts: number;
+    prospects: number;
+    leads: number;
+    homeVisits: number;
+    wonJobs: number;
+    wonValue: number;
+    from: string;
+    to: string;
+  } | null>(null);
   const [recentContacts, setRecentContacts] = useState<{ name: string; email: string; date: string; action: string; source: string; stage: string }[]>([]);
   const [pipelineCount, setPipelineCount] = useState<number>(0);
   const [timeToVisit, setTimeToVisit] = useState<{ averageDays: number; count: number } | null>(null);
@@ -1354,27 +1363,58 @@ export default function Dashboard() {
               <KpiCard label="Prospects" value={dispProspects} colour="#F59E0B" comparison={!isSourceFiltered && previousPeriod ? { current: prospectsTotal, previous: previousPeriod.prospects } : undefined} goal={!isSourceFiltered && proratedGoal(goals.prospectsGoalPerMonth) ? { current: prospectsTotal, target: proratedGoal(goals.prospectsGoalPerMonth)! } : undefined} />
               <KpiCard label="Leads" value={dispLeads} colour="#3B82F6" comparison={!isSourceFiltered && previousPeriod ? { current: leadsTotal, previous: previousPeriod.leads } : undefined} detail={dispDirectBookings > 0 ? `${dispFormLeads} Form Leads + ${dispDirectBookings} Direct Bookings` : undefined} goal={!isSourceFiltered && proratedGoal(goals.leadGoalPerMonth) ? { current: leadsTotal, target: proratedGoal(goals.leadGoalPerMonth)! } : undefined} />
               <KpiCard label="Home Visits" value={dispHomeVisits} colour="#10B981" comparison={!isSourceFiltered && previousPeriod ? { current: homeVisits ?? 0, previous: previousPeriod.homeVisits } : undefined} goal={!isSourceFiltered && proratedGoal(goals.visitsGoalPerMonth) ? { current: homeVisits ?? 0, target: proratedGoal(goals.visitsGoalPerMonth)! } : undefined} />
-              <KpiCard label="Won Jobs" value={dispWonJobs} colour="#059669" subtitle={!isSourceFiltered && wonValue ? `£${wonValue.toLocaleString()} value` : undefined} />
+              <KpiCard label="Won Jobs" value={dispWonJobs} colour="#059669" subtitle={!isSourceFiltered && wonValue ? `£${wonValue.toLocaleString()} value` : undefined} comparison={!isSourceFiltered && previousPeriod ? { current: wonJobs ?? 0, previous: previousPeriod.wonJobs } : undefined} />
             </div>
             </div>
 
 
             <div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
-              <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                Funnel Breakdown
-              </h2>
-              <div style={{ display: "flex", gap: "16px" }}>
-                {[
-                  { label: "Contact → Prospect", rate: dispContacts > 0 ? ((dispProspects / dispContacts) * 100).toFixed(1) : "0" },
-                  { label: "Contact → Lead", rate: dispContacts > 0 ? ((dispLeads / dispContacts) * 100).toFixed(1) : "0" },
-                  { label: "Lead → Visit", rate: dispLeads > 0 ? ((dispHomeVisits / dispLeads) * 100).toFixed(1) : "0" },
-                  { label: "Visit → Won", rate: dispHomeVisits > 0 ? ((dispWonJobs / dispHomeVisits) * 100).toFixed(1) : "0" },
-                ].map((c) => (
-                  <span key={c.label} style={{ fontSize: "11px", color: "#64748B" }}>
-                    {c.label} <strong style={{ color: "#0F172A" }}>{c.rate}%</strong>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px", flexWrap: "wrap", gap: "8px" }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
+                <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  Funnel Breakdown
+                </h2>
+                {!isSourceFiltered && previousPeriod && (
+                  <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>
+                    vs {(() => {
+                      const fmt = (s: string) => {
+                        const [, m, d] = s.split("-");
+                        return `${parseInt(d, 10)}/${parseInt(m, 10)}`;
+                      };
+                      return `${fmt(previousPeriod.from)}–${fmt(previousPeriod.to)}`;
+                    })()}
                   </span>
-                ))}
+                )}
+              </div>
+              <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+                {(() => {
+                  // Compute prev rates only when not source-filtered (cohort math doesn't compare cleanly)
+                  const showPrev = !isSourceFiltered && previousPeriod;
+                  const pp = previousPeriod;
+                  const prevContactRate = showPrev && pp && pp.contacts > 0 ? (pp.prospects / pp.contacts) * 100 : null;
+                  const prevLeadRate = showPrev && pp && pp.contacts > 0 ? (pp.leads / pp.contacts) * 100 : null;
+                  const prevVisitRate = showPrev && pp && pp.leads > 0 ? (pp.homeVisits / pp.leads) * 100 : null;
+                  const prevWonRate = showPrev && pp && pp.homeVisits > 0 ? (pp.wonJobs / pp.homeVisits) * 100 : null;
+                  return [
+                    { label: "Contact → Prospect", rate: dispContacts > 0 ? ((dispProspects / dispContacts) * 100) : 0, prev: prevContactRate },
+                    { label: "Contact → Lead", rate: dispContacts > 0 ? ((dispLeads / dispContacts) * 100) : 0, prev: prevLeadRate },
+                    { label: "Lead → Visit", rate: dispLeads > 0 ? ((dispHomeVisits / dispLeads) * 100) : 0, prev: prevVisitRate },
+                    { label: "Visit → Won", rate: dispHomeVisits > 0 ? ((dispWonJobs / dispHomeVisits) * 100) : 0, prev: prevWonRate },
+                  ];
+                })().map((c) => {
+                  const delta = c.prev != null ? c.rate - c.prev : null;
+                  const better = delta != null && delta >= 0;
+                  return (
+                    <span key={c.label} style={{ fontSize: "11px", color: "#64748B", display: "inline-flex", alignItems: "baseline", gap: "5px" }}>
+                      {c.label} <strong style={{ color: "#0F172A" }}>{c.rate.toFixed(1)}%</strong>
+                      {delta != null && (
+                        <span style={{ fontSize: "10px", fontWeight: 700, color: better ? "#059669" : "#DC2626" }}>
+                          {better ? "▲" : "▼"} {Math.abs(delta).toFixed(1)}pp
+                        </span>
+                      )}
+                    </span>
+                  );
+                })}
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr auto 1fr auto 1fr", gap: "0", alignItems: "stretch" }}>
@@ -1385,6 +1425,7 @@ export default function Dashboard() {
                 colour="#F59E0B"
                 bg="#FFFBEB"
                 rate={dispContacts > 0 ? `${((dispProspects / dispContacts) * 100).toFixed(1)}% of contacts` : undefined}
+                comparison={!isSourceFiltered && previousPeriod ? { current: prospectsTotal, previous: previousPeriod.prospects } : undefined}
               >
                 {(sourceSlice
                   ? sourceSlice.prospectActions.map((a) => ({ value: a.value, count: a.count }))
@@ -1401,6 +1442,7 @@ export default function Dashboard() {
                 colour="#3B82F6"
                 bg="#EFF6FF"
                 rate={dispContacts > 0 ? `${((dispLeads / dispContacts) * 100).toFixed(1)}% of contacts` : undefined}
+                comparison={!isSourceFiltered && previousPeriod ? { current: leadsTotal, previous: previousPeriod.leads } : undefined}
               >
                 {(sourceSlice
                   ? sourceSlice.leadActions.map((a) => ({ value: a.value, count: a.count }))
@@ -1430,6 +1472,7 @@ export default function Dashboard() {
                 colour="#10B981"
                 bg="#ECFDF5"
                 rate={dispLeads > 0 ? `Lead → Visit ${((dispHomeVisits / dispLeads) * 100).toFixed(1)}%` : undefined}
+                comparison={!isSourceFiltered && previousPeriod ? { current: homeVisits ?? 0, previous: previousPeriod.homeVisits } : undefined}
               >
                 {homeVisitBreakdown && homeVisitBreakdown.total > 0 ? (
                   <>
@@ -1468,6 +1511,7 @@ export default function Dashboard() {
                 colour="#059669"
                 bg="#ECFDF5"
                 rate={dispHomeVisits > 0 ? `${((dispWonJobs / dispHomeVisits) * 100).toFixed(1)}% of visits` : undefined}
+                comparison={!isSourceFiltered && previousPeriod ? { current: wonJobs ?? 0, previous: previousPeriod.wonJobs } : undefined}
               >
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "8px 0", gap: "2px" }}>
                   <span style={{ fontSize: "32px", fontWeight: 800, color: "#059669", lineHeight: 1 }}>{dispWonJobs.toLocaleString()}</span>
@@ -2884,6 +2928,7 @@ function FunnelCard({
   colour,
   bg,
   rate,
+  comparison,
   children,
 }: {
   title: string;
@@ -2892,6 +2937,7 @@ function FunnelCard({
   colour: string;
   bg: string;
   rate?: string;
+  comparison?: { current: number; previous: number };
   children: React.ReactNode;
 }) {
   return (
@@ -2921,6 +2967,16 @@ function FunnelCard({
           <span style={{ fontSize: "20px", fontWeight: 800, color: colour, lineHeight: 1 }}>
             {total.toLocaleString()}
           </span>
+          {comparison && (() => {
+            const delta = comparison.current - comparison.previous;
+            const better = delta >= 0;
+            return (
+              <p style={{ fontSize: "10px", fontWeight: 700, color: better ? "#059669" : "#DC2626", margin: "2px 0 0" }}>
+                {better ? "▲" : "▼"} {Math.abs(delta).toLocaleString()}{" "}
+                <span style={{ color: "#94A3B8", fontWeight: 500 }}>vs prev</span>
+              </p>
+            );
+          })()}
           {rate && (
             <p style={{ fontSize: "10px", fontWeight: 600, color: "#64748B", margin: "2px 0 0" }}>{rate}</p>
           )}

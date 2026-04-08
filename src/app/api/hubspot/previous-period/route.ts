@@ -203,7 +203,56 @@ export async function GET(request: NextRequest) {
       },
     ]);
 
-    return Response.json({ contacts, prospects, leads, homeVisits });
+    await delay(500);
+
+    // 5. Won jobs (count + value) — same logic as /api/hubspot/won-deals:
+    //    contacts in Won-Waiting or Completed lifecycle stages whose
+    //    first_deal_created_date falls in the previous period.
+    const WON_WAITING_STAGE = "151694551";
+    const COMPLETED_STAGE = "151694559";
+    let wonJobs = 0;
+    let wonValue = 0;
+    for (const stage of [WON_WAITING_STAGE, COMPLETED_STAGE]) {
+      const wonRes = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts/search`, {
+        method: "POST",
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filterGroups: [
+            {
+              filters: [
+                { propertyName: "lifecyclestage", operator: "EQ", value: stage },
+                { propertyName: "first_deal_created_date", operator: "GTE", value: prevFromMs.toString() },
+                { propertyName: "first_deal_created_date", operator: "LTE", value: prevToMs.toString() },
+              ],
+            },
+          ],
+          properties: ["recent_deal_amount"],
+          limit: 100,
+        }),
+      });
+      if (wonRes.ok) {
+        const data = await wonRes.json();
+        wonJobs += data.total ?? 0;
+        for (const c of data.results ?? []) {
+          const amt = parseFloat(c.properties?.recent_deal_amount ?? "0");
+          if (!isNaN(amt)) wonValue += amt;
+        }
+      }
+      await delay(500);
+    }
+
+    return Response.json({
+      contacts,
+      prospects,
+      leads,
+      homeVisits,
+      wonJobs,
+      wonValue: Math.round(wonValue),
+      // Echo back the calculated previous period for the UI label
+      from: prevFrom,
+      to: prevTo,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return Response.json({ error: message }, { status: 500 });
