@@ -134,53 +134,33 @@ export async function GET(request: NextRequest) {
 
     await delay(500);
 
-    // 2. Prospects count
-    const prospectFilterGroups = PROSPECT_ACTIONS.map((action) => ({
-      filters: [
-        {
-          propertyName: "conversion_action",
-          operator: "EQ",
-          value: action,
-        },
-        {
-          propertyName: "createdate",
-          operator: "GTE",
-          value: prevFromMs.toString(),
-        },
-        {
-          propertyName: "createdate",
-          operator: "LTE",
-          value: prevToMs.toString(),
-        },
-        LIFECYCLE_EXCLUSION_FILTER,
-      ],
-    }));
-    const prospects = await searchContacts(token, prospectFilterGroups);
+    // 2. Prospects count — single filterGroup with IN operator. The previous
+    //    one-filterGroup-per-action approach exceeded HubSpot's max of 5
+    //    filterGroups once LIFECYCLE_EXCLUSION_FILTER was added.
+    const prospects = await searchContacts(token, [
+      {
+        filters: [
+          { propertyName: "conversion_action", operator: "IN", values: PROSPECT_ACTIONS },
+          { propertyName: "createdate", operator: "GTE", value: prevFromMs.toString() },
+          { propertyName: "createdate", operator: "LTE", value: prevToMs.toString() },
+          LIFECYCLE_EXCLUSION_FILTER,
+        ],
+      },
+    ]);
 
     await delay(500);
 
-    // 3. Leads count
-    const leadFilterGroups = LEAD_ACTIONS.map((action) => ({
-      filters: [
-        {
-          propertyName: "conversion_action",
-          operator: "EQ",
-          value: action,
-        },
-        {
-          propertyName: "createdate",
-          operator: "GTE",
-          value: prevFromMs.toString(),
-        },
-        {
-          propertyName: "createdate",
-          operator: "LTE",
-          value: prevToMs.toString(),
-        },
-        LIFECYCLE_EXCLUSION_FILTER,
-      ],
-    }));
-    const leads = await searchContacts(token, leadFilterGroups);
+    // 3. Leads count — same IN-operator pattern
+    const leads = await searchContacts(token, [
+      {
+        filters: [
+          { propertyName: "conversion_action", operator: "IN", values: LEAD_ACTIONS },
+          { propertyName: "createdate", operator: "GTE", value: prevFromMs.toString() },
+          { propertyName: "createdate", operator: "LTE", value: prevToMs.toString() },
+          LIFECYCLE_EXCLUSION_FILTER,
+        ],
+      },
+    ]);
 
     await delay(500);
 
