@@ -1417,19 +1417,19 @@ export default function Dashboard() {
                   </>
                 )}
               </FunnelCard>
-              <ConversionArrow rate={dispLeads > 0 ? ((dispHomeVisits / dispLeads) * 100).toFixed(1) : "0"} label="Lead → Visit" />
+              <ConversionArrow
+                rate={dispLeads > 0 ? ((dispHomeVisits / dispLeads) * 100).toFixed(1) : "0"}
+                label="Lead → Visit"
+                secondaryRate={dispContacts > 0 ? ((dispHomeVisits / dispContacts) * 100).toFixed(1) : "0"}
+                secondaryLabel="Contact → Visit"
+              />
               <FunnelCard
                 title="Home Visits"
                 subtitle="Visit booked"
                 total={dispHomeVisits}
                 colour="#10B981"
                 bg="#ECFDF5"
-                rate={(() => {
-                  const parts: string[] = [];
-                  if (dispLeads > 0) parts.push(`Lead → Visit ${((dispHomeVisits / dispLeads) * 100).toFixed(1)}%`);
-                  if (dispContacts > 0) parts.push(`Contact → Visit ${((dispHomeVisits / dispContacts) * 100).toFixed(1)}%`);
-                  return parts.length > 0 ? parts.join(" · ") : undefined;
-                })()}
+                rate={dispLeads > 0 ? `Lead → Visit ${((dispHomeVisits / dispLeads) * 100).toFixed(1)}%` : undefined}
               >
                 {homeVisitBreakdown && homeVisitBreakdown.total > 0 ? (
                   <>
@@ -2832,7 +2832,17 @@ function SourcePanel({
   );
 }
 
-function ConversionArrow({ rate, label }: { rate: string; label: string }) {
+function ConversionArrow({
+  rate,
+  label,
+  secondaryRate,
+  secondaryLabel,
+}: {
+  rate: string;
+  label: string;
+  secondaryRate?: string;
+  secondaryLabel?: string;
+}) {
   return (
     <div
       style={{
@@ -2853,6 +2863,16 @@ function ConversionArrow({ rate, label }: { rate: string; label: string }) {
       <span style={{ fontSize: "9px", color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.3px", textAlign: "center", lineHeight: 1.2 }}>
         {label}
       </span>
+      {secondaryRate !== undefined && secondaryLabel && (
+        <div style={{ marginTop: "10px", paddingTop: "8px", borderTop: "1px solid #E2E8F0", display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
+          <span style={{ fontSize: "12px", fontWeight: 800, color: "#0F172A", lineHeight: 1 }}>
+            {secondaryRate}%
+          </span>
+          <span style={{ fontSize: "9px", color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.3px", textAlign: "center", lineHeight: 1.2 }}>
+            {secondaryLabel}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
