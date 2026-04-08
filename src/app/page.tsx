@@ -542,6 +542,10 @@ export default function Dashboard() {
     byAction?: { value: string; label: string; contacts: number[]; withVisit: number[]; totalContacts: number }[];
   } | null>(null);
   const [dowSegment, setDowSegment] = useState<string>("__all__");
+  const [siteVisits, setSiteVisits] = useState<{
+    inPeriod: number;
+    upcoming: { label: string; weekStart: string; weekEnd: string; count: number }[];
+  } | null>(null);
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const [aiDismissed, setAiDismissed] = useState<Set<number>>(new Set());
   const [aiRejectingIdx, setAiRejectingIdx] = useState<number | null>(null);
@@ -692,10 +696,11 @@ export default function Dashboard() {
 
       // Batch 5: Timeline + unattributed + day-of-week conversion
       setSelectedMetric("contacts");
-      const [timelineRes, unattribRes, dowRes] = await Promise.all([
+      const [timelineRes, unattribRes, dowRes, siteVisitsRes] = await Promise.all([
         fetch(`/api/hubspot/contacts-daily?from=${from}&to=${to}&metric=contacts`),
         fetch(`/api/hubspot/unattributed?from=${from}&to=${to}`),
         fetch(`/api/hubspot/dow-conversion?from=${from}&to=${to}`),
+        fetch(`/api/hubspot/site-visits?from=${from}&to=${to}`),
       ]);
       if (unattribRes.ok) {
         setUnattributed(await unattribRes.json());
@@ -707,6 +712,12 @@ export default function Dashboard() {
       } else {
         console.error("[dow-conversion] failed:", dowRes.status, await dowRes.text());
         setDowConversion(null);
+      }
+      if (siteVisitsRes.ok) {
+        setSiteVisits(await siteVisitsRes.json());
+      } else {
+        console.error("[site-visits] failed:", siteVisitsRes.status, await siteVisitsRes.text());
+        setSiteVisits(null);
       }
       if (timelineRes.ok) {
         const timelineJson = await timelineRes.json();
@@ -1605,6 +1616,79 @@ export default function Dashboard() {
             </div>
 
             </div>
+
+            {/* === SITE VISITS — in-period count + 4-week forward calendar === */}
+            {siteVisits && (
+              <div>
+                <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  Site Visits
+                </h2>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 3fr", gap: "10px" }}>
+                  {/* In-period count */}
+                  <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "16px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                    <p style={{ fontSize: "11px", fontWeight: 600, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                      In Selected Period
+                    </p>
+                    <p style={{ fontSize: "11px", color: "#94A3B8", margin: "2px 0 8px" }}>
+                      Visits with Initial Home Visit Date in range
+                    </p>
+                    <p style={{ fontSize: "44px", fontWeight: 800, color: "#0F172A", margin: 0, lineHeight: 1 }}>
+                      {siteVisits.inPeriod.toLocaleString()}
+                    </p>
+                  </div>
+
+                  {/* 4-week forward calendar — independent of selected date range */}
+                  <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "16px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "12px" }}>
+                      <p style={{ fontSize: "11px", fontWeight: 600, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        Upcoming Calendar
+                      </p>
+                      <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>
+                        Independent of date range
+                      </span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px" }}>
+                      {siteVisits.upcoming.map((wk, i) => {
+                        const colours = ["#3B82F6", "#6366F1", "#8B5CF6", "#A855F7"];
+                        const colour = colours[i] ?? "#3B82F6";
+                        const fmtDay = (s: string) => {
+                          const [, m, d] = s.split("-");
+                          return `${parseInt(d, 10)}/${parseInt(m, 10)}`;
+                        };
+                        return (
+                          <div
+                            key={wk.label}
+                            style={{
+                              background: `${colour}08`,
+                              border: `1px solid ${colour}30`,
+                              borderRadius: "10px",
+                              padding: "12px 10px",
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "center",
+                              textAlign: "center",
+                            }}
+                          >
+                            <p style={{ fontSize: "10px", fontWeight: 700, color: colour, margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                              {wk.label}
+                            </p>
+                            <p style={{ fontSize: "10px", color: "#94A3B8", margin: "2px 0 6px" }}>
+                              {fmtDay(wk.weekStart)} – {fmtDay(wk.weekEnd)}
+                            </p>
+                            <p style={{ fontSize: "32px", fontWeight: 800, color: "#0F172A", margin: 0, lineHeight: 1 }}>
+                              {wk.count.toLocaleString()}
+                            </p>
+                            <p style={{ fontSize: "10px", color: "#64748B", margin: "4px 0 0" }}>
+                              {wk.count === 1 ? "visit" : "visits"}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* === REVIEWS + SOCIAL across the bottom === */}
             {(() => {
