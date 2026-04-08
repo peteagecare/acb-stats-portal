@@ -176,8 +176,10 @@ export async function GET(request: NextRequest) {
       for (const c of data.results ?? []) {
         const raw = c.properties?.initial_home_visit_date;
         if (!raw) continue;
-        const ms = parseInt(raw, 10);
-        if (!Number.isFinite(ms)) continue;
+        // HubSpot returns date-type properties as YYYY-MM-DD strings, not ms
+        const [y, mo, d] = raw.split("-").map(Number);
+        if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) continue;
+        const ms = Date.UTC(y, mo - 1, d);
         for (let i = 0; i < buckets.length; i++) {
           const bStart = buckets[i].start.getTime();
           const bEnd = buckets[i].end.getTime() + 86_399_999;
