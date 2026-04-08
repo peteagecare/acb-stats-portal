@@ -609,6 +609,16 @@ export default function Dashboard() {
     byAction: { value: string; label: string; count: number }[];
     bySource: { value: string; label: string; count: number }[];
   } | null>(null);
+  const [outreachFeedback, setOutreachFeedback] = useState<{
+    total: number;
+    feedback: {
+      value: string;
+      label: string;
+      count: number;
+      bySource: { value: string; label: string; count: number }[];
+      byAction: { value: string; label: string; count: number }[];
+    }[];
+  } | null>(null);
   const [funnelBySource, setFunnelBySource] = useState<{
     sources: {
       value: string;
@@ -783,7 +793,7 @@ export default function Dashboard() {
 
       // Batch 5: Timeline + unattributed + day-of-week conversion
       setSelectedMetric("contacts");
-      const [timelineRes, unattribRes, dowRes, siteVisitsRes, installsRes, hvBreakdownRes, funnelSourceRes] = await Promise.all([
+      const [timelineRes, unattribRes, dowRes, siteVisitsRes, installsRes, hvBreakdownRes, funnelSourceRes, outreachRes] = await Promise.all([
         fetch(`/api/hubspot/contacts-daily?from=${from}&to=${to}&metric=contacts`),
         fetch(`/api/hubspot/unattributed?from=${from}&to=${to}`),
         fetch(`/api/hubspot/dow-conversion?from=${from}&to=${to}`),
@@ -791,6 +801,7 @@ export default function Dashboard() {
         fetch(`/api/hubspot/installs`),
         fetch(`/api/hubspot/home-visit-breakdown?from=${from}&to=${to}`),
         fetch(`/api/hubspot/funnel-by-source?from=${from}&to=${to}`),
+        fetch(`/api/hubspot/outreach-feedback?from=${from}&to=${to}`),
       ]);
       if (unattribRes.ok) {
         setUnattributed(await unattribRes.json());
@@ -826,6 +837,12 @@ export default function Dashboard() {
       } else {
         console.error("[funnel-by-source] failed:", funnelSourceRes.status, await funnelSourceRes.text());
         setFunnelBySource(null);
+      }
+      if (outreachRes.ok) {
+        setOutreachFeedback(await outreachRes.json());
+      } else {
+        console.error("[outreach-feedback] failed:", outreachRes.status, await outreachRes.text());
+        setOutreachFeedback(null);
       }
       if (timelineRes.ok) {
         const timelineJson = await timelineRes.json();
@@ -2148,6 +2165,89 @@ export default function Dashboard() {
                       );
                     })}
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* === INITIAL OUTREACH FEEDBACK — split by source + by action === */}
+            {outreachFeedback && outreachFeedback.feedback.length > 0 && (
+              <div>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "10px" }}>
+                  <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Initial Outreach Feedback
+                  </h2>
+                  <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>
+                    {outreachFeedback.total} call{outreachFeedback.total !== 1 ? "s" : ""} with feedback in this period
+                  </span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  {(["bySource", "byAction"] as const).map((dim) => {
+                    const titles = {
+                      bySource: "By Original Lead Source",
+                      byAction: "By Conversion Action",
+                    };
+                    // Pick a colour band based on the feedback label so the bad
+                    // ones (Time Wasters / Not Answering / Wrong Contact / etc.)
+                    // jump out visually.
+                    const feedbackColour = (label: string): { bar: string; text: string } => {
+                      const l = label.toLowerCase();
+                      if (l.includes("home visit booked")) return { bar: "#10B981", text: "#059669" };
+                      if (l.includes("grant")) return { bar: "#10B981", text: "#059669" };
+                      if (l.includes("discussing with family")) return { bar: "#3B82F6", text: "#2563EB" };
+                      if (l.includes("timing") || l.includes("not yet ready")) return { bar: "#3B82F6", text: "#2563EB" };
+                      if (l.includes("brochure only")) return { bar: "#F59E0B", text: "#B45309" };
+                      if (l.includes("too expensive")) return { bar: "#F59E0B", text: "#B45309" };
+                      if (l.includes("competitor")) return { bar: "#F59E0B", text: "#B45309" };
+                      if (l.includes("part fitting") || l.includes("supply only") || l.includes("flooring")) return { bar: "#94A3B8", text: "#64748B" };
+                      // The painful ones
+                      if (l.includes("not answering")) return { bar: "#DC2626", text: "#B91C1C" };
+                      if (l.includes("wrong contact")) return { bar: "#DC2626", text: "#B91C1C" };
+                      if (l.includes("time wasters")) return { bar: "#DC2626", text: "#B91C1C" };
+                      if (l.includes("doesn't know") || l.includes("didn't know")) return { bar: "#DC2626", text: "#B91C1C" };
+                      return { bar: "#94A3B8", text: "#64748B" };
+                    };
+                    const maxCount = Math.max(...outreachFeedback.feedback.map((f) => f.count), 1);
+                    return (
+                      <div key={dim} style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px" }}>
+                        <p style={{ fontSize: "11px", fontWeight: 700, color: "#64748B", margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                          {titles[dim]}
+                        </p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                          {outreachFeedback.feedback.map((f) => {
+                            const c = feedbackColour(f.label);
+                            const pct = (f.count / maxCount) * 100;
+                            const top3 = f[dim].slice(0, 3);
+                            return (
+                              <div key={f.value}>
+                                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "3px" }}>
+                                  <span style={{ fontSize: "12px", fontWeight: 700, color: c.text }}>
+                                    {f.label}
+                                  </span>
+                                  <span style={{ fontSize: "13px", fontWeight: 800, color: "#0F172A", fontVariantNumeric: "tabular-nums" }}>
+                                    {f.count}
+                                  </span>
+                                </div>
+                                <div style={{ background: "#F1F5F9", borderRadius: "3px", height: "4px", overflow: "hidden" }}>
+                                  <div style={{ width: `${pct}%`, height: "100%", background: c.bar, borderRadius: "3px", transition: "width 0.3s ease" }} />
+                                </div>
+                                {top3.length > 0 && (
+                                  <p style={{ fontSize: "10px", color: "#64748B", margin: "4px 0 0", lineHeight: 1.3 }}>
+                                    {top3.map((s, i) => (
+                                      <span key={s.value}>
+                                        {i > 0 && <span style={{ color: "#CBD5E1" }}> · </span>}
+                                        <span>{s.label}</span>{" "}
+                                        <strong style={{ color: "#334155" }}>{s.count}</strong>
+                                      </span>
+                                    ))}
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
