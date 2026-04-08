@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
-import fs from "fs";
-import path from "path";
+import { loadJson, saveJson } from "@/lib/blob-store";
 
-const SPEND_PATH = path.resolve("./ad-spend.json");
+const KEY = "ad-spend.json";
+const FALLBACK = "./ad-spend.json";
 
 interface Platform {
   name: string;
@@ -14,24 +14,18 @@ interface Platform {
 
 interface SpendFile { platforms: Platform[] }
 
-function loadFile(): SpendFile {
-  try { return JSON.parse(fs.readFileSync(SPEND_PATH, "utf-8")); }
-  catch { return { platforms: [] }; }
+const DEFAULT: SpendFile = { platforms: [] };
+
+async function loadFile(): Promise<SpendFile> {
+  return loadJson<SpendFile>(KEY, FALLBACK, DEFAULT);
 }
 
-function saveFile(data: SpendFile) {
-  try {
-    fs.writeFileSync(SPEND_PATH, JSON.stringify(data, null, 2));
-  } catch (e) {
-    const code = (e as NodeJS.ErrnoException)?.code;
-    if (code !== "EROFS" && code !== "EACCES") {
-      console.error("[ad-spend] saveFile failed:", e);
-    }
-  }
+async function saveFile(data: SpendFile): Promise<void> {
+  await saveJson(KEY, FALLBACK, data);
 }
 
 export async function GET() {
-  const data = loadFile();
+  const data = await loadFile();
 
   const totalSpend = data.platforms.reduce((s, p) => s + p.spend, 0);
   const totalClicks = data.platforms.reduce((s, p) => s + p.clicks, 0);
@@ -45,14 +39,14 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const data = loadFile();
+  const data = await loadFile();
 
   if (body.name) {
     const platform = data.platforms.find((p) => p.name === body.name);
     if (platform) {
       if (body.spend != null) platform.spend = body.spend;
       if (body.clicks != null) platform.clicks = body.clicks;
-      saveFile(data);
+      await saveFile(data);
       return Response.json({ ok: true });
     }
   }

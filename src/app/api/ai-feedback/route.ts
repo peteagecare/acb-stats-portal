@@ -1,45 +1,39 @@
 import { NextRequest } from "next/server";
-import fs from "fs";
-import path from "path";
+import { loadJson, saveJson } from "@/lib/blob-store";
 
-const FEEDBACK_PATH = path.resolve("./ai-feedback.json");
+const KEY = "ai-feedback.json";
+const FALLBACK = "./ai-feedback.json";
 
 interface FeedbackFile {
   rejected: string[];
   accepted: string[];
 }
 
-function loadFile(): FeedbackFile {
-  try { return JSON.parse(fs.readFileSync(FEEDBACK_PATH, "utf-8")); }
-  catch { return { rejected: [], accepted: [] }; }
+const DEFAULT: FeedbackFile = { rejected: [], accepted: [] };
+
+async function loadFile(): Promise<FeedbackFile> {
+  return loadJson<FeedbackFile>(KEY, FALLBACK, DEFAULT);
 }
 
-function saveFile(data: FeedbackFile) {
-  try {
-    fs.writeFileSync(FEEDBACK_PATH, JSON.stringify(data, null, 2));
-  } catch (e) {
-    const code = (e as NodeJS.ErrnoException)?.code;
-    if (code !== "EROFS" && code !== "EACCES") {
-      console.error("[ai-feedback] saveFile failed:", e);
-    }
-  }
+async function saveFile(data: FeedbackFile): Promise<void> {
+  await saveJson(KEY, FALLBACK, data);
 }
 
 export async function GET() {
-  return Response.json(loadFile());
+  return Response.json(await loadFile());
 }
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const data = loadFile();
+  const data = await loadFile();
 
   if (body.rejected) {
     data.rejected.push(body.rejected);
-    saveFile(data);
+    await saveFile(data);
   }
   if (body.accepted) {
     data.accepted.push(body.accepted);
-    saveFile(data);
+    await saveFile(data);
   }
 
   return Response.json({ ok: true });

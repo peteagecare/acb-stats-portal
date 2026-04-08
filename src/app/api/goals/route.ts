@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
-import { readFile, writeFile } from "fs/promises";
-import path from "path";
+import { loadJson, saveJson } from "@/lib/blob-store";
 
-const GOALS_PATH = path.join(process.cwd(), "goals.json");
+const KEY = "goals.json";
+const FALLBACK = "./goals.json";
 
 const DEFAULT_GOALS = {
   leadGoalPerMonth: null as number | null,
@@ -14,29 +14,17 @@ const DEFAULT_GOALS = {
   otherPercentGoal: null as number | null,
 };
 
-async function loadGoals() {
-  try {
-    const data = await readFile(GOALS_PATH, "utf8");
-    return { ...DEFAULT_GOALS, ...JSON.parse(data) };
-  } catch {
-    return DEFAULT_GOALS;
-  }
-}
+type Goals = typeof DEFAULT_GOALS;
 
 export async function GET() {
-  return Response.json(await loadGoals());
+  const stored = await loadJson<Partial<Goals>>(KEY, FALLBACK, DEFAULT_GOALS);
+  return Response.json({ ...DEFAULT_GOALS, ...stored });
 }
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const current = await loadGoals();
-  const updated = { ...current, ...body };
-
-  try {
-    await writeFile(GOALS_PATH, JSON.stringify(updated, null, 2) + "\n");
-  } catch {
-    // On Vercel the filesystem is read-only — goals are set by committing goals.json
-  }
-
+  const current = await loadJson<Partial<Goals>>(KEY, FALLBACK, DEFAULT_GOALS);
+  const updated = { ...DEFAULT_GOALS, ...current, ...body };
+  await saveJson(KEY, FALLBACK, updated);
   return Response.json(updated);
 }

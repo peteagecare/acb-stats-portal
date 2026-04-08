@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
-import fs from "fs";
-import path from "path";
+import { loadJson, saveJson } from "@/lib/blob-store";
 
-const SOCIAL_PATH = path.resolve("./social.json");
+const KEY = "social.json";
+const FALLBACK = "./social.json";
 
 interface Snapshot { date: string; count: number }
 interface Platform {
@@ -15,22 +15,12 @@ interface Platform {
 }
 interface SocialFile { platforms: Platform[] }
 
-function loadFile(): SocialFile {
-  try { return JSON.parse(fs.readFileSync(SOCIAL_PATH, "utf-8")); }
-  catch { return { platforms: [] }; }
+async function loadFile(): Promise<SocialFile> {
+  return loadJson<SocialFile>(KEY, FALLBACK, { platforms: [] });
 }
 
-function saveFile(data: SocialFile) {
-  try {
-    fs.writeFileSync(SOCIAL_PATH, JSON.stringify(data, null, 2));
-  } catch (e) {
-    // Vercel serverless has a read-only filesystem outside /tmp; persisting
-    // scraped updates is best-effort. The bundled JSON is still served.
-    const code = (e as NodeJS.ErrnoException)?.code;
-    if (code !== "EROFS" && code !== "EACCES") {
-      console.error("[social] saveFile failed:", e);
-    }
-  }
+async function saveFile(data: SocialFile): Promise<void> {
+  await saveJson(KEY, FALLBACK, data);
 }
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)";
@@ -89,7 +79,7 @@ async function fetchTikTokFollowers(): Promise<number | null> {
 }
 
 export async function GET(request: NextRequest) {
-  const data = loadFile();
+  const data = await loadFile();
   const from = request.nextUrl.searchParams.get("from");
   const today = new Date().toISOString().split("T")[0];
 
@@ -118,7 +108,7 @@ export async function GET(request: NextRequest) {
       p.auto = true;
     }
   }
-  saveFile(data);
+  await saveFile(data);
 
   const platforms = data.platforms.map((p) => {
     let periodStart = p.current;
@@ -143,7 +133,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const data = loadFile();
+  const data = await loadFile();
   const today = new Date().toISOString().split("T")[0];
 
   if (body.name && body.current != null) {
@@ -153,7 +143,7 @@ export async function POST(request: NextRequest) {
         platform.history.push({ date: today, count: platform.current });
       }
       platform.current = body.current;
-      saveFile(data);
+      await saveFile(data);
       return Response.json({ ok: true });
     }
   }

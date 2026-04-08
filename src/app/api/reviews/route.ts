@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
-import fs from "fs";
-import path from "path";
+import { loadJson, saveJson } from "@/lib/blob-store";
 
-const REVIEWS_PATH = path.resolve("./reviews.json");
+const KEY = "reviews.json";
+const FALLBACK = "./reviews.json";
 
 interface ReviewSnapshot {
   date: string;
@@ -22,25 +22,12 @@ interface ReviewsFile {
   platforms: PlatformData[];
 }
 
-function loadFile(): ReviewsFile {
-  try {
-    return JSON.parse(fs.readFileSync(REVIEWS_PATH, "utf-8"));
-  } catch {
-    return { platforms: [] };
-  }
+async function loadFile(): Promise<ReviewsFile> {
+  return loadJson<ReviewsFile>(KEY, FALLBACK, { platforms: [] });
 }
 
-function saveFile(data: ReviewsFile) {
-  try {
-    fs.writeFileSync(REVIEWS_PATH, JSON.stringify(data, null, 2));
-  } catch (e) {
-    // Vercel serverless has a read-only filesystem outside /tmp; persisting
-    // scraped updates is best-effort. The bundled JSON is still served.
-    const code = (e as NodeJS.ErrnoException)?.code;
-    if (code !== "EROFS" && code !== "EACCES") {
-      console.error("[reviews] saveFile failed:", e);
-    }
-  }
+async function saveFile(data: ReviewsFile): Promise<void> {
+  await saveJson(KEY, FALLBACK, data);
 }
 
 async function scrapeTrustpilot(): Promise<{ count: number; rating: number } | null> {
@@ -127,7 +114,7 @@ async function fetchFacebook(): Promise<{ count: number; rating: number } | null
 }
 
 export async function GET(request: NextRequest) {
-  const data = loadFile();
+  const data = await loadFile();
   const from = request.nextUrl.searchParams.get("from");
   const today = new Date().toISOString().split("T")[0];
 
@@ -153,7 +140,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  saveFile(data);
+  await saveFile(data);
 
   // Build response
   const platforms = data.platforms.map((p) => {
@@ -183,7 +170,7 @@ export async function GET(request: NextRequest) {
 // POST to manually update Google/Facebook counts
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const data = loadFile();
+  const data = await loadFile();
   const today = new Date().toISOString().split("T")[0];
 
   if (body.name && body.current != null) {
@@ -196,7 +183,7 @@ export async function POST(request: NextRequest) {
       }
       platform.current = body.current;
       if (body.rating != null) platform.rating = body.rating;
-      saveFile(data);
+      await saveFile(data);
       return Response.json({ ok: true });
     }
   }
