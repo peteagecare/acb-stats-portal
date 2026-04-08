@@ -604,6 +604,11 @@ export default function Dashboard() {
   const [installs, setInstalls] = useState<{
     months: { key: string; label: string; monthName: string; year: number; count: number }[];
   } | null>(null);
+  const [homeVisitBreakdown, setHomeVisitBreakdown] = useState<{
+    total: number;
+    byAction: { value: string; label: string; count: number }[];
+    bySource: { value: string; label: string; count: number }[];
+  } | null>(null);
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const [aiDismissed, setAiDismissed] = useState<Set<number>>(new Set());
   const [aiRejectingIdx, setAiRejectingIdx] = useState<number | null>(null);
@@ -754,12 +759,13 @@ export default function Dashboard() {
 
       // Batch 5: Timeline + unattributed + day-of-week conversion
       setSelectedMetric("contacts");
-      const [timelineRes, unattribRes, dowRes, siteVisitsRes, installsRes] = await Promise.all([
+      const [timelineRes, unattribRes, dowRes, siteVisitsRes, installsRes, hvBreakdownRes] = await Promise.all([
         fetch(`/api/hubspot/contacts-daily?from=${from}&to=${to}&metric=contacts`),
         fetch(`/api/hubspot/unattributed?from=${from}&to=${to}`),
         fetch(`/api/hubspot/dow-conversion?from=${from}&to=${to}`),
         fetch(`/api/hubspot/site-visits?from=${from}&to=${to}`),
         fetch(`/api/hubspot/installs`),
+        fetch(`/api/hubspot/home-visit-breakdown?from=${from}&to=${to}`),
       ]);
       if (unattribRes.ok) {
         setUnattributed(await unattribRes.json());
@@ -783,6 +789,12 @@ export default function Dashboard() {
       } else {
         console.error("[installs] failed:", installsRes.status, await installsRes.text());
         setInstalls(null);
+      }
+      if (hvBreakdownRes.ok) {
+        setHomeVisitBreakdown(await hvBreakdownRes.json());
+      } else {
+        console.error("[home-visit-breakdown] failed:", hvBreakdownRes.status, await hvBreakdownRes.text());
+        setHomeVisitBreakdown(null);
       }
       if (timelineRes.ok) {
         const timelineJson = await timelineRes.json();
@@ -1321,9 +1333,34 @@ export default function Dashboard() {
                 bg="#ECFDF5"
                 rate={leadsTotal > 0 ? `${(((homeVisits ?? 0) / leadsTotal) * 100).toFixed(1)}% of leads` : undefined}
               >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "10px 0" }}>
-                  <span style={{ fontSize: "32px", fontWeight: 800, color: "#059669", lineHeight: 1 }}>{(homeVisits ?? 0).toLocaleString()}</span>
-                </div>
+                {homeVisitBreakdown && homeVisitBreakdown.total > 0 ? (
+                  <>
+                    {homeVisitBreakdown.byAction.length > 0 && (
+                      <>
+                        <div style={{ fontSize: "8px", fontWeight: 700, color: "#10B981", textTransform: "uppercase", letterSpacing: "0.5px", margin: "2px 0 4px" }}>
+                          Conversion Action
+                        </div>
+                        {homeVisitBreakdown.byAction.map((a) => (
+                          <MiniRow key={`act-${a.value}`} label={a.label} count={a.count} />
+                        ))}
+                      </>
+                    )}
+                    {homeVisitBreakdown.bySource.length > 0 && (
+                      <>
+                        <div style={{ fontSize: "8px", fontWeight: 700, color: "#10B981", textTransform: "uppercase", letterSpacing: "0.5px", margin: "10px 0 4px" }}>
+                          Original Lead Source
+                        </div>
+                        {homeVisitBreakdown.bySource.map((s) => (
+                          <MiniRow key={`src-${s.value}`} label={s.label} count={s.count} />
+                        ))}
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "10px 0" }}>
+                    <span style={{ fontSize: "32px", fontWeight: 800, color: "#059669", lineHeight: 1 }}>{(homeVisits ?? 0).toLocaleString()}</span>
+                  </div>
+                )}
               </FunnelCard>
               <ConversionArrow rate={(homeVisits ?? 0) > 0 ? (((wonJobs ?? 0) / (homeVisits ?? 1)) * 100).toFixed(1) : "0"} label="Visit → Won" />
               <FunnelCard
