@@ -10,6 +10,7 @@ const DEFAULT_GOALS = {
   visitsGoalPerMonth: null as number | null,
   contactsGoalPerMonth: null as number | null,
   siteVisitsGoalPerWeek: null as number | null,
+  installsGoalPerMonth: 32 as number | null,
   ppcPercentGoal: null as number | null,
   seoPercentGoal: null as number | null,
   contentPercentGoal: null as number | null,

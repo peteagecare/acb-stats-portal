@@ -15,6 +15,7 @@ interface Goals {
   visitsGoalPerMonth: number | null;
   contactsGoalPerMonth: number | null;
   siteVisitsGoalPerWeek: number | null;
+  installsGoalPerMonth: number | null;
   ppcGoalPerMonth: number | null;
   seoGoalPerMonth: number | null;
   contentGoalPerMonth: number | null;
@@ -31,6 +32,7 @@ const DEFAULT_GOALS: Goals = {
   visitsGoalPerMonth: null,
   contactsGoalPerMonth: null,
   siteVisitsGoalPerWeek: null,
+  installsGoalPerMonth: 32,
   ppcGoalPerMonth: null,
   seoGoalPerMonth: null,
   contentGoalPerMonth: null,
@@ -135,6 +137,7 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
   }, []);
   const [draftContacts, setDraftContacts] = useState(initialGoals.contactsGoalPerMonth !== null ? String(initialGoals.contactsGoalPerMonth) : "");
   const [draftSiteVisitsWeek, setDraftSiteVisitsWeek] = useState(initialGoals.siteVisitsGoalPerWeek !== null ? String(initialGoals.siteVisitsGoalPerWeek) : "");
+  const [draftInstallsMonth, setDraftInstallsMonth] = useState(initialGoals.installsGoalPerMonth !== null ? String(initialGoals.installsGoalPerMonth) : "");
   const [draftPpcNum, setDraftPpcNum] = useState(initialGoals.ppcGoalPerMonth !== null ? String(initialGoals.ppcGoalPerMonth) : "");
   const [draftSeoNum, setDraftSeoNum] = useState(initialGoals.seoGoalPerMonth !== null ? String(initialGoals.seoGoalPerMonth) : "");
   const [draftContentNum, setDraftContentNum] = useState(initialGoals.contentGoalPerMonth !== null ? String(initialGoals.contentGoalPerMonth) : "");
@@ -153,6 +156,7 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
       visitsGoalPerMonth: parseGoalDraft(draftVisitsMonth),
       contactsGoalPerMonth: parseGoalDraft(draftContacts),
       siteVisitsGoalPerWeek: parseGoalDraft(draftSiteVisitsWeek),
+      installsGoalPerMonth: parseGoalDraft(draftInstallsMonth),
       ppcGoalPerMonth: parseGoalDraft(draftPpcNum),
       seoGoalPerMonth: parseGoalDraft(draftSeoNum),
       contentGoalPerMonth: parseGoalDraft(draftContentNum),
@@ -360,6 +364,25 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
               placeholder="e.g. 60"
               value={draftSiteVisitsWeek}
               onChange={(e) => setDraftSiteVisitsWeek(e.target.value)}
+              style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }}
+            />
+          </div>
+
+          {/* Installs per month goal */}
+          <div>
+            <label htmlFor="installsMonthGoal" style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#7C3AED", marginBottom: "4px" }}>
+              Installs / Month
+            </label>
+            <p style={{ fontSize: "11px", color: "#94A3B8", margin: "0 0 8px" }}>
+              Shown as a goal circle on each install month card
+            </p>
+            <input
+              id="installsMonthGoal"
+              type="number"
+              min="1"
+              placeholder="e.g. 32"
+              value={draftInstallsMonth}
+              onChange={(e) => setDraftInstallsMonth(e.target.value)}
               style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }}
             />
           </div>
@@ -578,6 +601,9 @@ export default function Dashboard() {
       bySalesman: Record<string, number>;
     }[];
   } | null>(null);
+  const [installs, setInstalls] = useState<{
+    months: { key: string; label: string; monthName: string; year: number; count: number }[];
+  } | null>(null);
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const [aiDismissed, setAiDismissed] = useState<Set<number>>(new Set());
   const [aiRejectingIdx, setAiRejectingIdx] = useState<number | null>(null);
@@ -728,11 +754,12 @@ export default function Dashboard() {
 
       // Batch 5: Timeline + unattributed + day-of-week conversion
       setSelectedMetric("contacts");
-      const [timelineRes, unattribRes, dowRes, siteVisitsRes] = await Promise.all([
+      const [timelineRes, unattribRes, dowRes, siteVisitsRes, installsRes] = await Promise.all([
         fetch(`/api/hubspot/contacts-daily?from=${from}&to=${to}&metric=contacts`),
         fetch(`/api/hubspot/unattributed?from=${from}&to=${to}`),
         fetch(`/api/hubspot/dow-conversion?from=${from}&to=${to}`),
         fetch(`/api/hubspot/site-visits?from=${from}&to=${to}`),
+        fetch(`/api/hubspot/installs`),
       ]);
       if (unattribRes.ok) {
         setUnattributed(await unattribRes.json());
@@ -750,6 +777,12 @@ export default function Dashboard() {
       } else {
         console.error("[site-visits] failed:", siteVisitsRes.status, await siteVisitsRes.text());
         setSiteVisits(null);
+      }
+      if (installsRes.ok) {
+        setInstalls(await installsRes.json());
+      } else {
+        console.error("[installs] failed:", installsRes.status, await installsRes.text());
+        setInstalls(null);
       }
       if (timelineRes.ok) {
         const timelineJson = await timelineRes.json();
@@ -1856,6 +1889,87 @@ export default function Dashboard() {
                     </div>
                   );
                 })()}
+              </div>
+            )}
+
+            {/* === INSTALLS — 3 month forward calendar (deals: installation_date) === */}
+            {installs && installs.months.length > 0 && (
+              <div>
+                <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  Installs
+                </h2>
+                <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "16px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "12px" }}>
+                    <p style={{ fontSize: "11px", fontWeight: 600, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                      Upcoming Installs
+                    </p>
+                    <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>
+                      Independent of date range · Excludes lost deals
+                    </span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                    {installs.months.map((mo, i) => {
+                      const colours = ["#7C3AED", "#9333EA", "#A855F7"];
+                      const colour = colours[i] ?? "#7C3AED";
+                      const goal = goals.installsGoalPerMonth;
+                      const hit = goal != null && mo.count >= goal;
+                      const ringColour = hit ? "#10B981" : colour;
+                      return (
+                        <div
+                          key={mo.key}
+                          style={{
+                            background: `${colour}08`,
+                            border: `1px solid ${colour}30`,
+                            borderRadius: "10px",
+                            padding: "16px 12px",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            textAlign: "center",
+                          }}
+                        >
+                          {goal != null && goal > 0 && (
+                            <div
+                              style={{
+                                width: "52px",
+                                height: "52px",
+                                borderRadius: "50%",
+                                border: `2px solid ${ringColour}`,
+                                background: hit ? `${ringColour}15` : "white",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                marginBottom: "10px",
+                              }}
+                              title={`Goal: ${goal} installs`}
+                            >
+                              <span style={{ fontSize: "18px", fontWeight: 800, color: ringColour, lineHeight: 1 }}>
+                                {goal}
+                              </span>
+                            </div>
+                          )}
+                          <p style={{ fontSize: "11px", fontWeight: 700, color: colour, margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                            {mo.label}
+                          </p>
+                          <p style={{ fontSize: "10px", color: "#94A3B8", margin: "2px 0 8px" }}>
+                            {mo.monthName} {mo.year}
+                          </p>
+                          <p style={{ fontSize: "40px", fontWeight: 800, color: "#0F172A", margin: 0, lineHeight: 1 }}>
+                            {mo.count.toLocaleString()}
+                          </p>
+                          <p style={{ fontSize: "11px", color: "#64748B", margin: "4px 0 0" }}>
+                            {mo.count === 1 ? "install" : "installs"}
+                          </p>
+                          {goal != null && goal > 0 && (
+                            <p style={{ fontSize: "10px", color: hit ? "#059669" : "#DC2626", margin: "6px 0 0", fontWeight: 700 }}>
+                              {hit ? `+${mo.count - goal} over goal` : `${goal - mo.count} below goal`}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             )}
 
