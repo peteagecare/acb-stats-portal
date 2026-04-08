@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { PieChart, Pie, ResponsiveContainer, Tooltip, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, AreaChart, Area } from "recharts";
 
 interface LeadSource {
@@ -546,7 +546,14 @@ export default function Dashboard() {
     inPeriod: number;
     inPeriodCancelled: number;
     cancelledDuringPeriod: number;
-    upcoming: { label: string; weekStart: string; weekEnd: string; count: number; cancelled: number; cancelledDuringWeek: number }[];
+    upcoming: {
+      label: string;
+      weekStart: string;
+      weekEnd: string;
+      count: number;
+      cancelled: number;
+      bySalesman: Record<string, number>;
+    }[];
   } | null>(null);
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const [aiDismissed, setAiDismissed] = useState<Set<number>>(new Set());
@@ -1707,29 +1714,10 @@ export default function Dashboard() {
                             <p style={{ fontSize: "10px", color: "#64748B", margin: "4px 0 0" }}>
                               {wk.count === 1 ? "visit" : "visits"}
                             </p>
-                            {(wk.cancelledDuringWeek > 0 || wk.cancelled > 0) && (
-                              <div style={{ marginTop: "8px", paddingTop: "8px", borderTop: "1px solid #F1F5F9", width: "100%", display: "flex", flexDirection: "column", gap: "6px" }}>
-                                {wk.cancelledDuringWeek > 0 && (
-                                  <div>
-                                    <p style={{ fontSize: "16px", fontWeight: 800, color: "#DC2626", margin: 0, lineHeight: 1 }}>
-                                      {wk.cancelledDuringWeek}
-                                    </p>
-                                    <p style={{ fontSize: "9px", color: "#64748B", margin: "2px 0 0", lineHeight: 1.3 }}>
-                                      cancelled within week
-                                    </p>
-                                  </div>
-                                )}
-                                {wk.cancelled > 0 && (
-                                  <div>
-                                    <p style={{ fontSize: "16px", fontWeight: 800, color: "#DC2626", margin: 0, lineHeight: 1 }}>
-                                      {wk.cancelled}
-                                    </p>
-                                    <p style={{ fontSize: "9px", color: "#64748B", margin: "2px 0 0", lineHeight: 1.3 }}>
-                                      scheduled, cancelled
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
+                            {wk.cancelled > 0 && (
+                              <p style={{ fontSize: "10px", color: "#DC2626", margin: "4px 0 0", fontWeight: 600 }}>
+                                {wk.cancelled} cancelled
+                              </p>
                             )}
                           </div>
                         );
@@ -1737,6 +1725,80 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </div>
+
+                {/* Salesman workload — 6 rows × 4 weeks, goal 10 visits/week */}
+                {(() => {
+                  const SALESMEN = ["Andy", "Barry", "Brian", "Dean", "Kevin", "Tony"];
+                  const GOAL = 10;
+                  const cellColour = (n: number) => {
+                    if (n >= GOAL) return { bg: "#ECFDF5", border: "#A7F3D0", text: "#059669" };
+                    if (n >= 7) return { bg: "#FFFBEB", border: "#FDE68A", text: "#B45309" };
+                    if (n >= 4) return { bg: "#FFF7ED", border: "#FED7AA", text: "#C2410C" };
+                    return { bg: "#FEF2F2", border: "#FECACA", text: "#DC2626" };
+                  };
+                  return (
+                    <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "16px", marginTop: "10px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "12px" }}>
+                        <p style={{ fontSize: "11px", fontWeight: 600, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                          Salesman Workload
+                        </p>
+                        <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>
+                          Goal: {GOAL} visits per salesman per week
+                        </span>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "minmax(70px, auto) repeat(4, 1fr)", gap: "6px", alignItems: "stretch" }}>
+                        {/* Header row */}
+                        <div />
+                        {siteVisits.upcoming.map((wk) => (
+                          <div key={wk.label} style={{ fontSize: "10px", fontWeight: 700, color: "#64748B", textAlign: "center", textTransform: "uppercase", letterSpacing: "0.5px", paddingBottom: "4px" }}>
+                            {wk.label}
+                          </div>
+                        ))}
+                        {/* One row per salesman */}
+                        {SALESMEN.map((name) => (
+                          <React.Fragment key={name}>
+                            <div style={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", display: "flex", alignItems: "center" }}>
+                              {name}
+                            </div>
+                            {siteVisits.upcoming.map((wk) => {
+                              const n = wk.bySalesman?.[name] ?? 0;
+                              const c = cellColour(n);
+                              const pct = Math.min(100, (n / GOAL) * 100);
+                              return (
+                                <div
+                                  key={`${name}-${wk.label}`}
+                                  style={{
+                                    background: c.bg,
+                                    border: `1px solid ${c.border}`,
+                                    borderRadius: "8px",
+                                    padding: "8px 10px",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    minHeight: "52px",
+                                  }}
+                                >
+                                  <div style={{ display: "flex", alignItems: "baseline", gap: "3px" }}>
+                                    <span style={{ fontSize: "20px", fontWeight: 800, color: c.text, lineHeight: 1 }}>
+                                      {n}
+                                    </span>
+                                    <span style={{ fontSize: "11px", color: "#94A3B8", fontWeight: 600 }}>
+                                      / {GOAL}
+                                    </span>
+                                  </div>
+                                  <div style={{ width: "100%", height: "3px", background: "#F1F5F9", borderRadius: "2px", marginTop: "6px", overflow: "hidden" }}>
+                                    <div style={{ width: `${pct}%`, height: "100%", background: c.text, transition: "width 0.3s ease" }} />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
