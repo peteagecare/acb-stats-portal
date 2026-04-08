@@ -609,6 +609,21 @@ export default function Dashboard() {
     byAction: { value: string; label: string; count: number }[];
     bySource: { value: string; label: string; count: number }[];
   } | null>(null);
+  const [funnelBySource, setFunnelBySource] = useState<{
+    sources: {
+      value: string;
+      label: string;
+      contacts: number;
+      prospects: number;
+      formLeads: number;
+      directBookings: number;
+      homeVisits: number;
+      wonJobs: number;
+      prospectActions: { value: string; count: number }[];
+      leadActions: { value: string; count: number }[];
+    }[];
+  } | null>(null);
+  const [selectedSource, setSelectedSource] = useState<string | null>(null);
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const [aiDismissed, setAiDismissed] = useState<Set<number>>(new Set());
   const [aiRejectingIdx, setAiRejectingIdx] = useState<number | null>(null);
@@ -759,13 +774,14 @@ export default function Dashboard() {
 
       // Batch 5: Timeline + unattributed + day-of-week conversion
       setSelectedMetric("contacts");
-      const [timelineRes, unattribRes, dowRes, siteVisitsRes, installsRes, hvBreakdownRes] = await Promise.all([
+      const [timelineRes, unattribRes, dowRes, siteVisitsRes, installsRes, hvBreakdownRes, funnelSourceRes] = await Promise.all([
         fetch(`/api/hubspot/contacts-daily?from=${from}&to=${to}&metric=contacts`),
         fetch(`/api/hubspot/unattributed?from=${from}&to=${to}`),
         fetch(`/api/hubspot/dow-conversion?from=${from}&to=${to}`),
         fetch(`/api/hubspot/site-visits?from=${from}&to=${to}`),
         fetch(`/api/hubspot/installs`),
         fetch(`/api/hubspot/home-visit-breakdown?from=${from}&to=${to}`),
+        fetch(`/api/hubspot/funnel-by-source?from=${from}&to=${to}`),
       ]);
       if (unattribRes.ok) {
         setUnattributed(await unattribRes.json());
@@ -795,6 +811,12 @@ export default function Dashboard() {
       } else {
         console.error("[home-visit-breakdown] failed:", hvBreakdownRes.status, await hvBreakdownRes.text());
         setHomeVisitBreakdown(null);
+      }
+      if (funnelSourceRes.ok) {
+        setFunnelBySource(await funnelSourceRes.json());
+      } else {
+        console.error("[funnel-by-source] failed:", funnelSourceRes.status, await funnelSourceRes.text());
+        setFunnelBySource(null);
       }
       if (timelineRes.ok) {
         const timelineJson = await timelineRes.json();
@@ -941,6 +963,23 @@ export default function Dashboard() {
   );
   const formLeadsTotal = leads.reduce((sum, a) => sum + a.count, 0);
   const leadsTotal = formLeadsTotal + organicLeads;
+
+  // ── Source filter slice ────────────────────────────────────────
+  // When `selectedSource` is set, every Customer Funnel KPI/breakdown
+  // value is sourced from the cohort view (contacts CREATED in this
+  // period from this source). When null, the existing dashboard values
+  // are used unchanged.
+  const sourceSlice = selectedSource && funnelBySource
+    ? funnelBySource.sources.find((s) => s.value === selectedSource) ?? null
+    : null;
+  const isSourceFiltered = !!sourceSlice;
+  const dispContacts = sourceSlice ? sourceSlice.contacts : sourcesTotal;
+  const dispProspects = sourceSlice ? sourceSlice.prospects : prospectsTotal;
+  const dispFormLeads = sourceSlice ? sourceSlice.formLeads : formLeadsTotal;
+  const dispDirectBookings = sourceSlice ? sourceSlice.directBookings : organicLeads;
+  const dispLeads = sourceSlice ? sourceSlice.formLeads + sourceSlice.directBookings : leadsTotal;
+  const dispHomeVisits = sourceSlice ? sourceSlice.homeVisits : (homeVisits ?? 0);
+  const dispWonJobs = sourceSlice ? sourceSlice.wonJobs : (wonJobs ?? 0);
 
 
   const categoryCards: { title: string; total: number; sources: LeadSource[]; colour: string; bg: string; icon: string }[] = [
@@ -1191,6 +1230,58 @@ export default function Dashboard() {
           <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
 
             {/* === THE CUSTOMER FUNNEL === */}
+            {/* Source filter pills */}
+            {funnelBySource && funnelBySource.sources.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.5px", marginRight: "4px" }}>
+                  Filter by source
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSource(null)}
+                  style={{
+                    padding: "5px 12px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    border: selectedSource === null ? "1px solid #0F172A" : "1px solid #E2E8F0",
+                    background: selectedSource === null ? "#0F172A" : "white",
+                    color: selectedSource === null ? "white" : "#475569",
+                    borderRadius: "999px",
+                    cursor: "pointer",
+                  }}
+                >
+                  All
+                </button>
+                {funnelBySource.sources.filter((s) => s.contacts > 0).map((s) => {
+                  const active = selectedSource === s.value;
+                  return (
+                    <button
+                      type="button"
+                      key={s.value}
+                      onClick={() => setSelectedSource(active ? null : s.value)}
+                      style={{
+                        padding: "5px 12px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        border: active ? "1px solid #2563eb" : "1px solid #E2E8F0",
+                        background: active ? "#2563eb" : "white",
+                        color: active ? "white" : "#475569",
+                        borderRadius: "999px",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {s.label} <span style={{ opacity: 0.7, marginLeft: "4px" }}>{s.contacts}</span>
+                    </button>
+                  );
+                })}
+                {selectedSource && (
+                  <span style={{ fontSize: "11px", color: "#94A3B8", marginLeft: "auto", fontStyle: "italic" }}>
+                    Cohort view: contacts created in this period from this source
+                  </span>
+                )}
+              </div>
+            )}
             {/* === GOALS SUMMARY === */}
             <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px 20px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -1203,10 +1294,10 @@ export default function Dashboard() {
               </div>
               <div style={{ display: "flex", justifyContent: "space-around", marginTop: "12px" }}>
                 {[
-                  { label: "Contacts", current: sourcesTotal, goal: proratedGoal(goals.contactsGoalPerMonth), colour: "#6366F1" },
-                  { label: "Prospects", current: prospectsTotal, goal: proratedGoal(goals.prospectsGoalPerMonth), colour: "#F59E0B" },
-                  { label: "Leads", current: leadsTotal, goal: proratedGoal(goals.leadGoalPerMonth), colour: "#3B82F6" },
-                  { label: "Home Visits", current: homeVisits ?? 0, goal: proratedGoal(goals.visitsGoalPerMonth), colour: "#10B981" },
+                  { label: "Contacts", current: dispContacts, goal: proratedGoal(goals.contactsGoalPerMonth), colour: "#6366F1" },
+                  { label: "Prospects", current: dispProspects, goal: proratedGoal(goals.prospectsGoalPerMonth), colour: "#F59E0B" },
+                  { label: "Leads", current: dispLeads, goal: proratedGoal(goals.leadGoalPerMonth), colour: "#3B82F6" },
+                  { label: "Home Visits", current: dispHomeVisits, goal: proratedGoal(goals.visitsGoalPerMonth), colour: "#10B981" },
                 ].map((g) => {
                   if (!g.goal || g.goal <= 0) return null;
                   const pct = Math.min((g.current / g.goal) * 100, 100);
@@ -1258,12 +1349,12 @@ export default function Dashboard() {
               )}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "10px" }}>
-              <KpiCard label="Website Visitors" value={activeUsers} colour="#8B5CF6" liveNow={liveNow} />
-              <KpiCard label="Contacts" value={sourcesTotal} colour="#6366F1" comparison={previousPeriod ? { current: sourcesTotal, previous: previousPeriod.contacts } : undefined} />
-              <KpiCard label="Prospects" value={prospectsTotal} colour="#F59E0B" comparison={previousPeriod ? { current: prospectsTotal, previous: previousPeriod.prospects } : undefined} goal={proratedGoal(goals.prospectsGoalPerMonth) ? { current: prospectsTotal, target: proratedGoal(goals.prospectsGoalPerMonth)! } : undefined} />
-              <KpiCard label="Leads" value={leadsTotal} colour="#3B82F6" comparison={previousPeriod ? { current: leadsTotal, previous: previousPeriod.leads } : undefined} detail={organicLeads > 0 ? `${formLeadsTotal} Form Leads + ${organicLeads} Direct Bookings` : undefined} goal={proratedGoal(goals.leadGoalPerMonth) ? { current: leadsTotal, target: proratedGoal(goals.leadGoalPerMonth)! } : undefined} />
-              <KpiCard label="Home Visits" value={homeVisits} colour="#10B981" comparison={previousPeriod ? { current: homeVisits ?? 0, previous: previousPeriod.homeVisits } : undefined} goal={proratedGoal(goals.visitsGoalPerMonth) ? { current: homeVisits ?? 0, target: proratedGoal(goals.visitsGoalPerMonth)! } : undefined} />
-              <KpiCard label="Won Jobs" value={wonJobs} colour="#059669" subtitle={wonValue ? `£${wonValue.toLocaleString()} value` : undefined} />
+              <KpiCard label="Website Visitors" value={isSourceFiltered ? null : activeUsers} colour="#8B5CF6" liveNow={isSourceFiltered ? null : liveNow} subtitle={isSourceFiltered ? "n/a when filtered" : undefined} />
+              <KpiCard label="Contacts" value={dispContacts} colour="#6366F1" comparison={!isSourceFiltered && previousPeriod ? { current: sourcesTotal, previous: previousPeriod.contacts } : undefined} />
+              <KpiCard label="Prospects" value={dispProspects} colour="#F59E0B" comparison={!isSourceFiltered && previousPeriod ? { current: prospectsTotal, previous: previousPeriod.prospects } : undefined} goal={!isSourceFiltered && proratedGoal(goals.prospectsGoalPerMonth) ? { current: prospectsTotal, target: proratedGoal(goals.prospectsGoalPerMonth)! } : undefined} />
+              <KpiCard label="Leads" value={dispLeads} colour="#3B82F6" comparison={!isSourceFiltered && previousPeriod ? { current: leadsTotal, previous: previousPeriod.leads } : undefined} detail={dispDirectBookings > 0 ? `${dispFormLeads} Form Leads + ${dispDirectBookings} Direct Bookings` : undefined} goal={!isSourceFiltered && proratedGoal(goals.leadGoalPerMonth) ? { current: leadsTotal, target: proratedGoal(goals.leadGoalPerMonth)! } : undefined} />
+              <KpiCard label="Home Visits" value={dispHomeVisits} colour="#10B981" comparison={!isSourceFiltered && previousPeriod ? { current: homeVisits ?? 0, previous: previousPeriod.homeVisits } : undefined} goal={!isSourceFiltered && proratedGoal(goals.visitsGoalPerMonth) ? { current: homeVisits ?? 0, target: proratedGoal(goals.visitsGoalPerMonth)! } : undefined} />
+              <KpiCard label="Won Jobs" value={dispWonJobs} colour="#059669" subtitle={!isSourceFiltered && wonValue ? `£${wonValue.toLocaleString()} value` : undefined} />
             </div>
             </div>
 
@@ -1275,10 +1366,10 @@ export default function Dashboard() {
               </h2>
               <div style={{ display: "flex", gap: "16px" }}>
                 {[
-                  { label: "Contact → Prospect", rate: sourcesTotal > 0 ? ((prospectsTotal / sourcesTotal) * 100).toFixed(1) : "0" },
-                  { label: "Contact → Lead", rate: sourcesTotal > 0 ? ((leadsTotal / sourcesTotal) * 100).toFixed(1) : "0" },
-                  { label: "Lead → Visit", rate: leadsTotal > 0 ? (((homeVisits ?? 0) / leadsTotal) * 100).toFixed(1) : "0" },
-                  { label: "Visit → Won", rate: (homeVisits ?? 0) > 0 ? (((wonJobs ?? 0) / (homeVisits ?? 1)) * 100).toFixed(1) : "0" },
+                  { label: "Contact → Prospect", rate: dispContacts > 0 ? ((dispProspects / dispContacts) * 100).toFixed(1) : "0" },
+                  { label: "Contact → Lead", rate: dispContacts > 0 ? ((dispLeads / dispContacts) * 100).toFixed(1) : "0" },
+                  { label: "Lead → Visit", rate: dispLeads > 0 ? ((dispHomeVisits / dispLeads) * 100).toFixed(1) : "0" },
+                  { label: "Visit → Won", rate: dispHomeVisits > 0 ? ((dispWonJobs / dispHomeVisits) * 100).toFixed(1) : "0" },
                 ].map((c) => (
                   <span key={c.label} style={{ fontSize: "11px", color: "#64748B" }}>
                     {c.label} <strong style={{ color: "#0F172A" }}>{c.rate}%</strong>
@@ -1290,51 +1381,53 @@ export default function Dashboard() {
               <FunnelCard
                 title="Prospects"
                 subtitle="Browsing, not ready to talk"
-                total={prospectsTotal}
+                total={dispProspects}
                 colour="#F59E0B"
                 bg="#FFFBEB"
-                rate={sourcesTotal > 0 ? `${((prospectsTotal / sourcesTotal) * 100).toFixed(1)}% of contacts` : undefined}
+                rate={dispContacts > 0 ? `${((dispProspects / dispContacts) * 100).toFixed(1)}% of contacts` : undefined}
               >
-                {prospects
-                  .sort((a, b) => b.count - a.count)
-                  .map((action) => (
-                    <MiniRow key={action.value} label={PROSPECT_ACTIONS[action.value]} count={action.count} />
-                  ))}
+                {(sourceSlice
+                  ? sourceSlice.prospectActions.map((a) => ({ value: a.value, count: a.count }))
+                  : prospects.sort((a, b) => b.count - a.count)
+                ).map((action) => (
+                  <MiniRow key={action.value} label={PROSPECT_ACTIONS[action.value] ?? action.value} count={action.count} />
+                ))}
               </FunnelCard>
-              <ConversionArrow rate={prospectsTotal > 0 ? ((leadsTotal / prospectsTotal) * 100).toFixed(1) : "0"} label="Prospect → Lead" />
+              <ConversionArrow rate={dispProspects > 0 ? ((dispLeads / dispProspects) * 100).toFixed(1) : "0"} label="Prospect → Lead" />
               <FunnelCard
                 title="Leads"
                 subtitle="Want to talk"
-                total={leadsTotal}
+                total={dispLeads}
                 colour="#3B82F6"
                 bg="#EFF6FF"
-                rate={sourcesTotal > 0 ? `${((leadsTotal / sourcesTotal) * 100).toFixed(1)}% of contacts` : undefined}
+                rate={dispContacts > 0 ? `${((dispLeads / dispContacts) * 100).toFixed(1)}% of contacts` : undefined}
               >
-                {leads
-                  .sort((a, b) => b.count - a.count)
-                  .map((action) => (
-                    <MiniRow key={action.value} label={LEAD_ACTIONS[action.value]} count={action.count} />
-                  ))}
-                {organicLeads > 0 && (
+                {(sourceSlice
+                  ? sourceSlice.leadActions.map((a) => ({ value: a.value, count: a.count }))
+                  : leads.sort((a, b) => b.count - a.count)
+                ).map((action) => (
+                  <MiniRow key={action.value} label={LEAD_ACTIONS[action.value] ?? action.value} count={action.count} />
+                ))}
+                {dispDirectBookings > 0 && (
                   <>
                     <div style={{ borderTop: "1px dashed #CBD5E1", margin: "6px 0", position: "relative" }}>
                       <span style={{ position: "absolute", top: "-7px", left: "50%", transform: "translateX(-50%)", background: "#EFF6FF", padding: "0 6px", fontSize: "8px", fontWeight: 700, color: "#3B82F6", textTransform: "uppercase", letterSpacing: "0.5px", whiteSpace: "nowrap" }}>Organic</span>
                     </div>
-                    <MiniRow label="Direct bookings (no lead form)" count={organicLeads} highlight />
+                    <MiniRow label="Direct bookings (no lead form)" count={dispDirectBookings} highlight />
                   </>
                 )}
               </FunnelCard>
-              <ConversionArrow rate={leadsTotal > 0 ? (((homeVisits ?? 0) / leadsTotal) * 100).toFixed(1) : "0"} label="Lead → Visit" />
+              <ConversionArrow rate={dispLeads > 0 ? ((dispHomeVisits / dispLeads) * 100).toFixed(1) : "0"} label="Lead → Visit" />
               <FunnelCard
                 title="Home Visits"
                 subtitle="Visit booked"
-                total={homeVisits ?? 0}
+                total={dispHomeVisits}
                 colour="#10B981"
                 bg="#ECFDF5"
                 rate={(() => {
                   const parts: string[] = [];
-                  if (leadsTotal > 0) parts.push(`Lead → Visit ${(((homeVisits ?? 0) / leadsTotal) * 100).toFixed(1)}%`);
-                  if (sourcesTotal > 0) parts.push(`Contact → Visit ${(((homeVisits ?? 0) / sourcesTotal) * 100).toFixed(1)}%`);
+                  if (dispLeads > 0) parts.push(`Lead → Visit ${((dispHomeVisits / dispLeads) * 100).toFixed(1)}%`);
+                  if (dispContacts > 0) parts.push(`Contact → Visit ${((dispHomeVisits / dispContacts) * 100).toFixed(1)}%`);
                   return parts.length > 0 ? parts.join(" · ") : undefined;
                 })()}
               >
@@ -1367,18 +1460,18 @@ export default function Dashboard() {
                   </div>
                 )}
               </FunnelCard>
-              <ConversionArrow rate={(homeVisits ?? 0) > 0 ? (((wonJobs ?? 0) / (homeVisits ?? 1)) * 100).toFixed(1) : "0"} label="Visit → Won" />
+              <ConversionArrow rate={dispHomeVisits > 0 ? ((dispWonJobs / dispHomeVisits) * 100).toFixed(1) : "0"} label="Visit → Won" />
               <FunnelCard
                 title="Won Jobs"
                 subtitle="Deal won"
-                total={wonJobs ?? 0}
+                total={dispWonJobs}
                 colour="#059669"
                 bg="#ECFDF5"
-                rate={(homeVisits ?? 0) > 0 ? `${(((wonJobs ?? 0) / (homeVisits ?? 1)) * 100).toFixed(1)}% of visits` : undefined}
+                rate={dispHomeVisits > 0 ? `${((dispWonJobs / dispHomeVisits) * 100).toFixed(1)}% of visits` : undefined}
               >
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "8px 0", gap: "2px" }}>
-                  <span style={{ fontSize: "32px", fontWeight: 800, color: "#059669", lineHeight: 1 }}>{(wonJobs ?? 0).toLocaleString()}</span>
-                  {wonValue !== null && wonValue > 0 && (
+                  <span style={{ fontSize: "32px", fontWeight: 800, color: "#059669", lineHeight: 1 }}>{dispWonJobs.toLocaleString()}</span>
+                  {!isSourceFiltered && wonValue !== null && wonValue > 0 && (
                     <span style={{ fontSize: "13px", fontWeight: 700, color: "#047857" }}>£{wonValue.toLocaleString()}</span>
                   )}
                 </div>
