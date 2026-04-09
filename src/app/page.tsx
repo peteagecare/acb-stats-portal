@@ -609,6 +609,11 @@ export default function Dashboard() {
     byAction: { value: string; label: string; count: number }[];
     bySource: { value: string; label: string; count: number }[];
   } | null>(null);
+  const [prospectToLead, setProspectToLead] = useState<{
+    totalEverProspect: number;
+    convertedToLead: number;
+    rate: number | null;
+  } | null>(null);
   const [funnelTiming, setFunnelTiming] = useState<{
     prospectToLead: { avgDays: number | null; sample: number };
     leadToVisit: { avgDays: number | null; sample: number };
@@ -798,7 +803,7 @@ export default function Dashboard() {
 
       // Batch 5: Timeline + unattributed + day-of-week conversion
       setSelectedMetric("contacts");
-      const [timelineRes, unattribRes, dowRes, siteVisitsRes, installsRes, hvBreakdownRes, funnelSourceRes, outreachRes, timingRes] = await Promise.all([
+      const [timelineRes, unattribRes, dowRes, siteVisitsRes, installsRes, hvBreakdownRes, funnelSourceRes, outreachRes, timingRes, p2lRes] = await Promise.all([
         fetch(`/api/hubspot/contacts-daily?from=${from}&to=${to}&metric=contacts`),
         fetch(`/api/hubspot/unattributed?from=${from}&to=${to}`),
         fetch(`/api/hubspot/dow-conversion?from=${from}&to=${to}`),
@@ -808,6 +813,7 @@ export default function Dashboard() {
         fetch(`/api/hubspot/funnel-by-source?from=${from}&to=${to}`),
         fetch(`/api/hubspot/outreach-feedback?from=${from}&to=${to}`),
         fetch(`/api/hubspot/funnel-timing?from=${from}&to=${to}`),
+        fetch(`/api/hubspot/prospect-to-lead?from=${from}&to=${to}`),
       ]);
       if (unattribRes.ok) {
         setUnattributed(await unattribRes.json());
@@ -855,6 +861,12 @@ export default function Dashboard() {
       } else {
         console.error("[funnel-timing] failed:", timingRes.status, await timingRes.text());
         setFunnelTiming(null);
+      }
+      if (p2lRes.ok) {
+        setProspectToLead(await p2lRes.json());
+      } else {
+        console.error("[prospect-to-lead] failed:", p2lRes.status, await p2lRes.text());
+        setProspectToLead(null);
       }
       if (timelineRes.ok) {
         const timelineJson = await timelineRes.json();
@@ -1492,7 +1504,16 @@ export default function Dashboard() {
                   <MiniRow key={action.value} label={PROSPECT_ACTIONS[action.value] ?? action.value} count={action.count} />
                 ))}
               </FunnelCard>
-              <ConversionArrow rate={dispProspects > 0 ? ((dispLeads / dispProspects) * 100).toFixed(1) : "0"} label="Prospect → Lead" />
+              <ConversionArrow
+                rate={(() => {
+                  if (isSourceFiltered) return dispProspects > 0 ? ((dispLeads / dispProspects) * 100).toFixed(1) : "0";
+                  if (prospectToLead?.rate != null) return prospectToLead.rate.toFixed(1);
+                  return "—";
+                })()}
+                label="Prospect → Lead"
+                secondaryRate={!isSourceFiltered && prospectToLead ? String(prospectToLead.convertedToLead) : undefined}
+                secondaryLabel={!isSourceFiltered && prospectToLead ? `of ${prospectToLead.totalEverProspect} prospects` : undefined}
+              />
               <FunnelCard
                 title="Leads"
                 subtitle="Want to talk"
