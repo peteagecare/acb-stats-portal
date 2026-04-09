@@ -4,27 +4,45 @@ import { LIFECYCLE_EXCLUSION_FILTER } from "@/lib/hubspot-exclusions";
 const HUBSPOT_API = "https://api.hubapi.com";
 const TZ = "Europe/London";
 
-/** Friendly labels for form titles / conversion actions */
+/** Friendly labels for form titles / conversion actions.
+ *  Keys are lowercase for case-insensitive matching.
+ *  Include all known variations (HubSpot form titles can differ
+ *  slightly from conversion_action values). */
 const FORM_LABELS: Record<string, string> = {
-  "Brochure Download Form": "Brochure Download",
-  "Flipbook Form": "Flipbook",
-  "VAT Exempt Checker": "VAT Exemption Check",
-  "Pricing Guide": "Pricing Guide",
-  "Physical Brochure Request": "Physical Brochure",
-  "Newsletter Sign Up": "Newsletter",
-  "Brochure - Call Me": "Brochure - Call Me",
-  "Request A Callback Form": "Callback Request",
-  "Contact Form": "Contact Form",
-  "Free Home Design Form": "Home Design Form",
-  "Phone Call": "Phone Call",
-  "Walk In Bath Form": "Walk In Bath Form",
-  "Direct Email": "Direct Email",
-  "Brochure - Home Visit": "Brochure - Home Visit",
-  "Pricing Guide Home Visit": "Pricing Guide Home Visit",
+  "brochure download form": "Brochure Download",
+  "brochure download": "Brochure Download",
+  "flipbook form": "Flipbook",
+  "flipbook": "Flipbook",
+  "vat exempt checker": "VAT Exemption Check",
+  "vat exemption checker": "VAT Exemption Check",
+  "vat exemption check": "VAT Exemption Check",
+  "pricing guide": "Pricing Guide",
+  "pricing guide form": "Pricing Guide",
+  "physical brochure request": "Physical Brochure",
+  "physical brochure request form": "Physical Brochure",
+  "newsletter sign up": "Newsletter",
+  "newsletter signup": "Newsletter",
+  "newsletter": "Newsletter",
+  "brochure - call me": "Brochure - Call Me",
+  "request a callback form": "Callback Request",
+  "request a callback": "Callback Request",
+  "callback request": "Callback Request",
+  "contact form": "Contact Form",
+  "contact us form": "Contact Form",
+  "contact us": "Contact Form",
+  "free home design form": "Home Design Form",
+  "free home design": "Home Design Form",
+  "home design form": "Home Design Form",
+  "phone call": "Phone Call",
+  "walk in bath form": "Walk In Bath Form",
+  "walk in bath": "Walk In Bath Form",
+  "direct email": "Direct Email",
+  "brochure - home visit": "Brochure - Home Visit",
+  "pricing guide home visit": "Pricing Guide Home Visit",
 };
 
 function friendlyName(raw: string): string {
-  return FORM_LABELS[raw] ?? raw;
+  return FORM_LABELS[raw.toLowerCase().trim()] ?? raw;
 }
 
 function londonDateToUtcMs(dateStr: string, time: string): number {
@@ -272,10 +290,13 @@ export async function GET(request: NextRequest) {
       // Sort all events by timestamp
       events.sort((a, b) => a.timestamp - b.timestamp);
 
-      // Build the step labels (dedupe consecutive identical steps)
+      // Build the step labels — skip consecutive duplicates (same form
+      // submitted twice in a row after normalisation collapses to one step)
       const steps: string[] = [];
       for (const e of events) {
-        steps.push(e.label);
+        if (steps.length === 0 || steps[steps.length - 1] !== e.label) {
+          steps.push(e.label);
+        }
       }
 
       // Append milestones (not time-sorted — always at the end)
