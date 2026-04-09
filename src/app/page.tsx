@@ -1479,7 +1479,7 @@ export default function Dashboard() {
               <KpiCard label="Contacts" value={dispContacts} colour="#6366F1" comparison={!isSourceFiltered && previousPeriod ? { current: sourcesTotal, previous: previousPeriod.contacts } : undefined} />
               <KpiCard label="Prospects" value={dispProspects} colour="#F59E0B" comparison={!isSourceFiltered && previousPeriod ? { current: prospectsTotal, previous: previousPeriod.prospects } : undefined} goal={!isSourceFiltered && proratedGoal(goals.prospectsGoalPerMonth) ? { current: prospectsTotal, target: proratedGoal(goals.prospectsGoalPerMonth)! } : undefined} />
               <KpiCard label="Leads" value={dispLeads} colour="#3B82F6" comparison={!isSourceFiltered && previousPeriod ? { current: leadsTotal, previous: previousPeriod.leads } : undefined} detail={dispDirectBookings > 0 ? `${dispFormLeads} Form Leads + ${dispDirectBookings} Direct Bookings` : undefined} goal={!isSourceFiltered && proratedGoal(goals.leadGoalPerMonth) ? { current: leadsTotal, target: proratedGoal(goals.leadGoalPerMonth)! } : undefined} />
-              <KpiCard label="Home Visits" value={dispHomeVisits} colour="#10B981" comparison={!isSourceFiltered && previousPeriod ? { current: homeVisits ?? 0, previous: previousPeriod.homeVisits } : undefined} goal={!isSourceFiltered && proratedGoal(goals.visitsGoalPerMonth) ? { current: homeVisits ?? 0, target: proratedGoal(goals.visitsGoalPerMonth)! } : undefined} />
+              <KpiCard label="Home Visits" value={dispHomeVisits} colour="#10B981" subtitle={siteVisits && siteVisits.cancelled > 0 ? `${siteVisits.cancelled} cancelled` : undefined} comparison={!isSourceFiltered && previousPeriod ? { current: homeVisits ?? 0, previous: previousPeriod.homeVisits } : undefined} goal={!isSourceFiltered && proratedGoal(goals.visitsGoalPerMonth) ? { current: homeVisits ?? 0, target: proratedGoal(goals.visitsGoalPerMonth)! } : undefined} />
               <KpiCard label="Won Jobs" value={dispWonJobs} colour="#059669" subtitle={!isSourceFiltered && wonValue ? `£${wonValue.toLocaleString()} value` : undefined} comparison={!isSourceFiltered && previousPeriod ? { current: wonJobs ?? 0, previous: previousPeriod.wonJobs } : undefined} />
             </div>
             </div>
@@ -2958,7 +2958,7 @@ function KpiCard({ label, value, colour, subtitle, detail, goal, comparison, liv
         {value !== null ? value.toLocaleString() : "—"}
       </p>
       {subtitle && (
-        <p style={{ fontSize: "12px", color: "#94A3B8", margin: "6px 0 0" }}>{subtitle}</p>
+        <p style={{ fontSize: "12px", color: subtitle.includes("cancelled") ? "#DC2626" : "#94A3B8", fontWeight: subtitle.includes("cancelled") ? 700 : 400, margin: "6px 0 0" }}>{subtitle}</p>
       )}
       {detail && (
         <p style={{ fontSize: "11px", color: "#3B82F6", margin: "4px 0 0", fontWeight: 600 }}>{detail}</p>
