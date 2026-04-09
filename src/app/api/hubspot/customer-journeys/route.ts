@@ -11,6 +11,8 @@ const TZ = "Europe/London";
 const FORM_LABELS: Record<string, string> = {
   "brochure download form": "Brochure Download",
   "brochure download": "Brochure Download",
+  "download our brochure form": "Brochure Download",
+  "download our brochure": "Brochure Download",
   "flipbook form": "Flipbook",
   "flipbook": "Flipbook",
   "vat exempt checker": "VAT Exemption Check",

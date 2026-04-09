@@ -2634,52 +2634,102 @@ export default function Dashboard() {
                     ))}
                   </div>
 
-                  {/* Touchpoint attribution chart */}
-                  {attrData.length > 0 && (
-                    <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px", marginBottom: "0" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-                        <p style={{ fontSize: "11px", fontWeight: 700, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  {/* Touchpoint attribution — GA-style three-column layout */}
+                  {attrData.length > 0 && (() => {
+                    const totalFirst = attrData.reduce((s, t) => s + t.first, 0);
+                    const totalMid = attrData.reduce((s, t) => s + t.mid, 0);
+                    const totalLast = attrData.reduce((s, t) => s + t.last, 0);
+                    const grandTotal = totalFirst + totalMid + totalLast;
+                    const firstPct = grandTotal ? Math.round((totalFirst / grandTotal) * 100) : 0;
+                    const midPct = grandTotal ? Math.round((totalMid / grandTotal) * 100) : 0;
+                    const lastPct = grandTotal ? 100 - firstPct - midPct : 0;
+
+                    // Sort each column independently by its count
+                    const firstSorted = [...attrData].filter((t) => t.first > 0).sort((a, b) => b.first - a.first);
+                    const midSorted = [...attrData].filter((t) => t.mid > 0).sort((a, b) => b.mid - a.mid);
+                    const lastSorted = [...attrData].filter((t) => t.last > 0).sort((a, b) => b.last - a.last);
+
+                    const renderColumn = (
+                      items: typeof attrData,
+                      field: "first" | "mid" | "last",
+                      colour: string,
+                    ) => {
+                      const maxVal = items.length > 0 ? items[0][field] : 1;
+                      return (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                          {items.map((t) => (
+                            <div key={t.name} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <span style={{ fontSize: "11px", color: "#334155", fontWeight: 500, width: "120px", flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.name}>
+                                {t.name}
+                              </span>
+                              <div style={{ flex: 1, background: "#F1F5F9", borderRadius: "3px", height: "14px", overflow: "hidden" }}>
+                                <div style={{ width: `${(t[field] / maxVal) * 100}%`, height: "100%", background: colour, borderRadius: "3px", transition: "width 0.3s", minWidth: t[field] > 0 ? "2px" : "0" }} />
+                              </div>
+                              <span style={{ fontSize: "11px", fontWeight: 700, color: "#0F172A", width: "30px", textAlign: "right", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
+                                {t[field]}
+                              </span>
+                            </div>
+                          ))}
+                          {items.length === 0 && (
+                            <p style={{ fontSize: "11px", color: "#94A3B8", margin: 0 }}>None</p>
+                          )}
+                        </div>
+                      );
+                    };
+
+                    return (
+                      <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px" }}>
+                        <p style={{ fontSize: "11px", fontWeight: 700, color: "#64748B", margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                           Touchpoint Attribution
                         </p>
-                        <div style={{ display: "flex", gap: "12px" }}>
-                          <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "10px", color: "#64748B" }}>
-                            <span style={{ width: "8px", height: "8px", borderRadius: "2px", background: "#8B5CF6" }} /> First Touch
-                          </span>
-                          <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "10px", color: "#64748B" }}>
-                            <span style={{ width: "8px", height: "8px", borderRadius: "2px", background: "#CBD5E1" }} /> Mid Touch
-                          </span>
-                          <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "10px", color: "#64748B" }}>
-                            <span style={{ width: "8px", height: "8px", borderRadius: "2px", background: "#0EA5E9" }} /> Last Touch
-                          </span>
+
+                        {/* Header arrows with percentages */}
+                        <div style={{ display: "flex", alignItems: "center", marginBottom: "16px" }}>
+                          {[
+                            { label: "Early touchpoints", pct: firstPct, colour: "#8B5CF6" },
+                            { label: "Mid touchpoints", pct: midPct, colour: "#94A3B8" },
+                            { label: "Late touchpoints", pct: lastPct, colour: "#0EA5E9" },
+                          ].map((col, ci) => (
+                            <div key={ci} style={{ flex: 1, display: "flex", alignItems: "center" }}>
+                              <div style={{
+                                flex: 1,
+                                background: "#F8FAFC",
+                                border: "1px dashed #CBD5E1",
+                                borderRadius: ci === 0 ? "8px 0 0 8px" : ci === 2 ? "0 8px 8px 0" : "0",
+                                padding: "8px 12px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: "8px",
+                              }}>
+                                <span style={{ fontSize: "12px", fontWeight: 600, color: "#334155" }}>{col.label}</span>
+                                <span style={{
+                                  fontSize: "11px",
+                                  fontWeight: 700,
+                                  color: "white",
+                                  background: col.colour,
+                                  borderRadius: "10px",
+                                  padding: "1px 8px",
+                                }}>
+                                  {col.pct}%
+                                </span>
+                              </div>
+                              {ci < 2 && (
+                                <span style={{ color: "#CBD5E1", fontSize: "16px", lineHeight: 1, margin: "0 -1px" }}>▸</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Three-column bar charts */}
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
+                          <div>{renderColumn(firstSorted, "first", "#8B5CF6")}</div>
+                          <div>{renderColumn(midSorted, "mid", "#94A3B8")}</div>
+                          <div>{renderColumn(lastSorted, "last", "#0EA5E9")}</div>
                         </div>
                       </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                        {attrData.map((t) => {
-                          const fPct = Math.round((t.first / t.total) * 100);
-                          const mPct = Math.round((t.mid / t.total) * 100);
-                          const lPct = 100 - fPct - mPct;
-                          return (
-                            <div key={t.name}>
-                              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "3px" }}>
-                                <span style={{ fontSize: "12px", fontWeight: 600, color: "#334155" }}>{t.name}</span>
-                                <span style={{ fontSize: "11px", color: "#94A3B8", fontVariantNumeric: "tabular-nums" }}>{t.total}</span>
-                              </div>
-                              <div style={{ display: "flex", height: "6px", borderRadius: "3px", overflow: "hidden" }}>
-                                {fPct > 0 && <div style={{ width: `${fPct}%`, background: "#8B5CF6", transition: "width 0.3s" }} title={`First: ${fPct}%`} />}
-                                {mPct > 0 && <div style={{ width: `${mPct}%`, background: "#CBD5E1", transition: "width 0.3s" }} title={`Mid: ${mPct}%`} />}
-                                {lPct > 0 && <div style={{ width: `${lPct}%`, background: "#0EA5E9", transition: "width 0.3s" }} title={`Last: ${lPct}%`} />}
-                              </div>
-                              <div style={{ display: "flex", gap: "12px", marginTop: "2px" }}>
-                                <span style={{ fontSize: "10px", color: "#8B5CF6", fontWeight: 600 }}>{fPct}% first</span>
-                                {mPct > 0 && <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>{mPct}% mid</span>}
-                                <span style={{ fontSize: "10px", color: "#0EA5E9", fontWeight: 600 }}>{lPct}% last</span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                     {/* With Home Visit */}
