@@ -2459,65 +2459,65 @@ export default function Dashboard() {
                     return { bg: "#FEF2F2", border: "#FECACA", text: "#DC2626" };
                   };
                   return (
-                    <div style={{ background: "white", borderRadius: "18px", border: "none", padding: "16px", marginTop: "10px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "12px" }}>
-                        <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: 0 }}>
+                    <div style={{ marginTop: "12px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "10px" }}>
+                        <p style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", margin: 0 }}>
                           Salesman Workload
                         </p>
-                        <span style={{ fontSize: "10px", color: "#AEAEB2", fontWeight: 600 }}>
-                          Goal: 10 / week (Brian: 6)
+                        <span style={{ fontSize: "10px", color: "#AEAEB2" }}>
+                          Weekly targets
                         </span>
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "minmax(70px, auto) repeat(4, 1fr)", gap: "6px", alignItems: "stretch" }}>
-                        {/* Header row */}
-                        <div />
-                        {siteVisits.upcoming.map((wk) => (
-                          <div key={wk.label} style={{ fontSize: "10px", fontWeight: 600, color: "#86868B", textAlign: "center", paddingBottom: "4px" }}>
-                            {wk.label}
-                          </div>
-                        ))}
-                        {/* One row per salesman */}
-                        {SALESMEN.map((name) => (
-                          <React.Fragment key={name}>
-                            <div style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", display: "flex", alignItems: "center" }}>
-                              {name}
-                            </div>
-                            {siteVisits.upcoming.map((wk) => {
-                              const n = wk.bySalesman?.[name] ?? 0;
-                              const goal = SALESMAN_GOALS[name] ?? 10;
-                              const c = cellColour(n, goal);
-                              const pct = Math.min(100, (n / goal) * 100);
-                              return (
-                                <div
-                                  key={`${name}-${wk.label}`}
-                                  style={{
-                                    background: c.bg,
-                                    border: `1px solid ${c.border}`,
-                                    borderRadius: "8px",
-                                    padding: "8px 10px",
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    minHeight: "52px",
-                                  }}
-                                >
-                                  <div style={{ display: "flex", alignItems: "baseline", gap: "3px" }}>
-                                    <span style={{ fontSize: "20px", fontWeight: 600, color: c.text, lineHeight: 1 }}>
-                                      {n}
-                                    </span>
-                                    <span style={{ fontSize: "11px", color: "#AEAEB2", fontWeight: 600 }}>
-                                      / {goal}
-                                    </span>
-                                  </div>
-                                  <div style={{ width: "100%", height: "3px", background: "#F5F5F7", borderRadius: "2px", marginTop: "6px", overflow: "hidden" }}>
-                                    <div style={{ width: `${pct}%`, height: "100%", background: c.text, transition: "width 0.3s ease" }} />
-                                  </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "10px" }}>
+                        {SALESMEN.map((name) => {
+                          const goal = SALESMAN_GOALS[name] ?? 10;
+                          // Total across all 4 weeks
+                          const thisWeek = siteVisits.upcoming[0]?.bySalesman?.[name] ?? 0;
+                          const nextWeek = siteVisits.upcoming[1]?.bySalesman?.[name] ?? 0;
+                          const total4w = siteVisits.upcoming.reduce((s, wk) => s + (wk.bySalesman?.[name] ?? 0), 0);
+                          const ringSize = 64;
+                          const sw = 4;
+                          const r = (ringSize - sw) / 2;
+                          const circ = 2 * Math.PI * r;
+                          const pctFill = Math.min((thisWeek / goal) * 100, 100);
+                          const dashOff = circ - (pctFill / 100) * circ;
+                          const hit = thisWeek >= goal;
+                          const ringCol = hit ? "#10B981" : thisWeek >= goal * 0.5 ? "#F59E0B" : "#DC2626";
+                          return (
+                            <div
+                              key={name}
+                              style={{
+                                background: "white",
+                                borderRadius: "20px",
+                                boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
+                                padding: "16px 12px",
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                gap: "8px",
+                              }}
+                            >
+                              {/* Mini progress ring — this week */}
+                              <div style={{ position: "relative", width: `${ringSize}px`, height: `${ringSize}px` }}>
+                                <svg width={ringSize} height={ringSize} style={{ transform: "rotate(-90deg)" }}>
+                                  <circle cx={ringSize / 2} cy={ringSize / 2} r={r} fill="none" stroke="#F5F5F7" strokeWidth={sw} />
+                                  <circle cx={ringSize / 2} cy={ringSize / 2} r={r} fill="none" stroke={ringCol} strokeWidth={sw} strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dashOff} style={{ transition: "stroke-dashoffset 0.5s cubic-bezier(0.25,0.1,0.25,1)" }} />
+                                </svg>
+                                <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                                  <span style={{ fontSize: "18px", fontWeight: 600, color: "#1D1D1F", lineHeight: 1 }}>{thisWeek}</span>
+                                  <span style={{ fontSize: "8px", color: "#AEAEB2" }}>/ {goal}</span>
                                 </div>
-                              );
-                            })}
-                          </React.Fragment>
-                        ))}
+                              </div>
+
+                              <p style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", margin: 0 }}>{name}</p>
+                              <div style={{ display: "flex", gap: "8px", fontSize: "10px", color: "#86868B" }}>
+                                <span>Next: <strong style={{ color: "#1D1D1F" }}>{nextWeek}</strong></span>
+                                <span style={{ color: "#D2D2D7" }}>|</span>
+                                <span>4wk: <strong style={{ color: "#1D1D1F" }}>{total4w}</strong></span>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );
