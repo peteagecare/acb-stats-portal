@@ -1511,8 +1511,6 @@ export default function Dashboard() {
                   return "—";
                 })()}
                 label="Prospect → Lead"
-                secondaryRate={!isSourceFiltered && prospectToLead ? String(prospectToLead.convertedToLead) : undefined}
-                secondaryLabel={!isSourceFiltered && prospectToLead ? `of ${prospectToLead.totalEverProspect} prospects` : undefined}
               />
               <FunnelCard
                 title="Leads"
