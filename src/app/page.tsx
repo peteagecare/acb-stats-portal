@@ -1827,6 +1827,11 @@ export default function Dashboard() {
                 rate={dispLeads > 0 ? `Lead → Visit ${((dispHomeVisits / dispLeads) * 100).toFixed(1)}%` : undefined}
                 comparison={!isSourceFiltered && previousPeriod ? { current: homeVisits ?? 0, previous: previousPeriod.homeVisits } : undefined}
               >
+                {!isSourceFiltered && siteVisits && siteVisits.cancelled > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "4px", marginBottom: "2px" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 500, color: "#DC2626" }}>{siteVisits.cancelled} cancelled</span>
+                  </div>
+                )}
                 {!isSourceFiltered && homeVisitBreakdown && homeVisitBreakdown.total > 0 ? (
                   <>
                     {homeVisitBreakdown.byAction.length > 0 && (
@@ -3473,68 +3478,139 @@ function LifecyclePipeline({ stages, periodStages }: { stages: { label: string; 
 }
 
 
+const KPI_ICONS: Record<string, { icon: React.ReactNode; bg: string }> = {
+  "Website Visitors": {
+    bg: "#F3F0FF",
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="12" cy="12" r="3" stroke="#8B5CF6" strokeWidth="2"/></svg>,
+  },
+  "Contacts": {
+    bg: "#EDE9FE",
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="#6366F1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="9" cy="7" r="4" stroke="#6366F1" strokeWidth="2"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke="#6366F1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  },
+  "Prospects": {
+    bg: "#FFFBEB",
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M13.8 12H3" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  },
+  "Leads": {
+    bg: "#EFF6FF",
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="#0071E3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  },
+  "Home Visits": {
+    bg: "#ECFDF5",
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 22V12h6v10" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  },
+  "Won Jobs": {
+    bg: "#ECFDF5",
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  },
+};
+
 function KpiCard({ label, value, colour, subtitle, detail, goal, comparison, liveNow }: { label: string; value: number | null; colour: string; subtitle?: string; detail?: string; goal?: { current: number; target: number }; comparison?: { current: number; previous: number }; liveNow?: number | null }) {
   const pct = goal ? Math.min((goal.current / goal.target) * 100, 100) : 0;
   const met = goal ? goal.current >= goal.target : false;
+  const kpiIcon = KPI_ICONS[label];
 
   return (
     <div
       style={{
         background: "white",
-        borderRadius: "18px",
-        padding: "14px 16px",
-        borderTop: "none",
-        borderRight: "none",
-        borderBottom: "none",
-        borderLeft: `3px solid ${colour}`,
-        transition: "all 0.15s ease",
+        borderRadius: "20px",
+        boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
+        padding: "18px 20px",
+        display: "flex",
+        flexDirection: "column",
+        gap: "10px",
       }}
     >
-      <p style={{ fontSize: "10px", fontWeight: 600, color: "#86868B", margin: "0 0 4px" }}>
-        {label}
-      </p>
-      <p style={{ fontSize: "24px", fontWeight: 600, color: "#1D1D1F", margin: 0, lineHeight: 1 }}>
-        {value !== null ? value.toLocaleString() : "—"}
-      </p>
-      {subtitle && (
-        <p style={{ fontSize: "12px", color: subtitle.includes("cancelled") ? "#DC2626" : "#94A3B8", fontWeight: subtitle.includes("cancelled") ? 700 : 400, margin: "6px 0 0" }}>{subtitle}</p>
-      )}
-      {detail && (
-        <p style={{ fontSize: "11px", color: "#0071E3", margin: "4px 0 0", fontWeight: 600 }}>{detail}</p>
-      )}
-      {goal && (() => {
-        const pctOfPace = goal.target > 0 ? (goal.current / goal.target) * 100 : 0;
-        const delta = goal.current - goal.target;
-        const ahead = delta >= 0;
-        return (
-          <div style={{ marginTop: "6px" }}>
-            <div style={{ background: "#F5F5F7", borderRadius: "3px", height: "3px", overflow: "hidden" }}>
-              <div style={{ width: `${pct}%`, height: "100%", borderRadius: "3px", background: met ? "#10B981" : colour, transition: "width 0.4s ease" }} />
-            </div>
-            <p style={{ fontSize: "10px", fontWeight: 600, color: met ? "#059669" : "#64748B", margin: "3px 0 0" }}>
-              {goal.current} / {goal.target} goal · {pctOfPace.toFixed(0)}%
-            </p>
-            <p style={{ fontSize: "10px", fontWeight: 600, color: ahead ? "#059669" : "#DC2626", margin: "2px 0 0" }}>
-              {ahead ? "▲" : "▼"} {Math.abs(delta)} {ahead ? "ahead of pace" : "behind pace"}
-            </p>
+      {/* Header: icon + label */}
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        {kpiIcon && (
+          <div style={{
+            width: "36px",
+            height: "36px",
+            borderRadius: "10px",
+            background: kpiIcon.bg,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}>
+            {kpiIcon.icon}
           </div>
-        );
-      })()}
-      {comparison && (
-        <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "4px" }}>
-          <span style={{ fontSize: "11px", fontWeight: 600, color: comparison.current >= comparison.previous ? "#059669" : "#DC2626" }}>
-            {comparison.current >= comparison.previous ? "▲" : "▼"} {Math.abs(comparison.current - comparison.previous)}
-          </span>
-          <span style={{ fontSize: "10px", color: "#AEAEB2" }}>vs prev period</span>
-        </div>
-      )}
+        )}
+        <p style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", margin: 0 }}>
+          {label}
+        </p>
+      </div>
+
+      {/* Big number + delta badge */}
+      <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
+        <span style={{ fontSize: "28px", fontWeight: 600, color: "#1D1D1F", lineHeight: 1, letterSpacing: "-0.5px" }}>
+          {value !== null ? value.toLocaleString() : "—"}
+        </span>
+        {comparison && (() => {
+          const delta = comparison.current - comparison.previous;
+          const better = delta >= 0;
+          return (
+            <span style={{
+              fontSize: "11px",
+              fontWeight: 500,
+              color: better ? "#059669" : "#DC2626",
+              background: better ? "#F0FDF4" : "#FEF2F2",
+              borderRadius: "6px",
+              padding: "2px 6px",
+            }}>
+              {better ? "↑" : "↓"} {Math.abs(delta).toLocaleString()}
+            </span>
+          );
+        })()}
+      </div>
+
+      {/* Live now indicator */}
       {liveNow != null && (
-        <div style={{ marginTop: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
           <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#10B981", display: "inline-block", animation: "pulse 2s infinite" }} />
           <span style={{ fontSize: "12px", fontWeight: 600, color: "#059669" }}>{liveNow}</span>
           <span style={{ fontSize: "11px", color: "#86868B" }}>on site now</span>
         </div>
       )}
+
+      {/* Subtitle (e.g. cancelled visits, won value) */}
+      {subtitle && (
+        <p style={{
+          fontSize: "12px",
+          color: subtitle.includes("cancelled") ? "#DC2626" : "#AEAEB2",
+          fontWeight: subtitle.includes("cancelled") ? 500 : 400,
+          margin: 0,
+        }}>{subtitle}</p>
+      )}
+
+      {/* Detail row (e.g. Form Leads + Direct Bookings) */}
+      {detail && (
+        <p style={{ fontSize: "11px", color: "#0071E3", margin: 0, fontWeight: 500 }}>{detail}</p>
+      )}
+
+      {/* Goal progress */}
+      {goal && (() => {
+        const pctOfPace = goal.target > 0 ? (goal.current / goal.target) * 100 : 0;
+        const delta = goal.current - goal.target;
+        const ahead = delta >= 0;
+        return (
+          <div>
+            <div style={{ background: "#F5F5F7", borderRadius: "999px", height: "4px", overflow: "hidden" }}>
+              <div style={{ width: `${pct}%`, height: "100%", borderRadius: "999px", background: met ? "#10B981" : colour, transition: "width 0.4s cubic-bezier(0.25, 0.1, 0.25, 1)" }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
+              <span style={{ fontSize: "10px", color: "#86868B" }}>
+                {goal.current} / {goal.target} · {pctOfPace.toFixed(0)}%
+              </span>
+              <span style={{ fontSize: "10px", fontWeight: 500, color: ahead ? "#059669" : "#DC2626" }}>
+                {ahead ? "↑" : "↓"} {Math.abs(delta)} {ahead ? "ahead" : "behind"}
+              </span>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
