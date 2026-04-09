@@ -666,6 +666,12 @@ export default function Dashboard() {
   const [aiChatMessages, setAiChatMessages] = useState<{ role: "user" | "ai"; text: string }[]>([]);
   const [aiChatInput, setAiChatInput] = useState("");
   const [aiChatLoading, setAiChatLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchAnswer, setSearchAnswer] = useState<string | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchHistory, setSearchHistory] = useState<{ role: "user" | "ai"; text: string }[]>([]);
+  const searchRef = useRef<HTMLDivElement>(null);
 
   // Load rejected insights from server
   useEffect(() => {
@@ -1034,6 +1040,67 @@ export default function Dashboard() {
     }
   }
 
+  async function handleSearch() {
+    if (!searchQuery.trim()) return;
+    const question = searchQuery.trim();
+    setSearchLoading(true);
+    setSearchOpen(true);
+    setSearchHistory((prev) => [...prev, { role: "user", text: question }]);
+    try {
+      const res = await fetch("/api/ai-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question,
+          history: searchHistory,
+          dashboardData: {
+            dateFrom: from,
+            dateTo: to,
+            visitors: activeUsers,
+            contacts: sourcesTotal,
+            prospects: prospectsTotal,
+            leads: leadsTotal,
+            homeVisits: homeVisits ?? 0,
+            wonJobs: wonJobs ?? 0,
+            wonValue: wonValue ?? 0,
+            unattributedContacts: unattributed.contactsWithoutSource,
+            organicLeads,
+            sources: sources.filter((s) => s.count > 0),
+            conversionActions: conversionActions.filter((a) => a.count > 0),
+            sourceBreakdown,
+            funnelTiming,
+            wonBySource,
+            prevContacts: previousPeriod?.contacts,
+            prevLeads: previousPeriod?.leads,
+          },
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSearchAnswer(data.answer);
+        setSearchHistory((prev) => [...prev, { role: "ai", text: data.answer }]);
+      } else {
+        setSearchAnswer("Sorry, I couldn't process that question. Please try again.");
+      }
+    } catch {
+      setSearchAnswer("Network error. Please try again.");
+    } finally {
+      setSearchLoading(false);
+      setSearchQuery("");
+    }
+  }
+
+  // Close search dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   function proratedGoal(monthlyGoal: number | null): number | null {
     if (!monthlyGoal || monthlyGoal <= 0) return null;
     const fromDate = new Date(from + "T00:00:00");
@@ -1112,6 +1179,86 @@ export default function Dashboard() {
               <p style={{ fontSize: "10px", margin: 0, color: "#86868B" }}>Marketing Funnel</p>
             </div>
           </div>
+
+          {/* AI Search Bar */}
+          <div ref={searchRef} style={{ position: "relative", flex: "0 1 420px", minWidth: "200px" }}>
+            <div style={{ display: "flex", alignItems: "center", background: "rgba(0,0,0,0.04)", borderRadius: "12px", padding: "0 12px", gap: "8px" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, opacity: 0.4 }}>
+                <circle cx="11" cy="11" r="7" stroke="#1D1D1F" strokeWidth="2" />
+                <path d="M20 20l-3.5-3.5" stroke="#1D1D1F" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => { if (searchHistory.length > 0) setSearchOpen(true); }}
+                onKeyDown={(e) => { if (e.key === "Enter" && !searchLoading) handleSearch(); }}
+                placeholder="Ask anything about your data..."
+                style={{
+                  flex: 1,
+                  border: "none",
+                  background: "transparent",
+                  fontSize: "13px",
+                  color: "#1D1D1F",
+                  padding: "10px 0",
+                  outline: "none",
+                }}
+              />
+              {searchLoading && (
+                <div style={{ width: "14px", height: "14px", border: "2px solid rgba(0,0,0,0.08)", borderTop: "2px solid #0071E3", borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
+              )}
+            </div>
+
+            {/* Search results dropdown */}
+            {searchOpen && (searchAnswer || searchHistory.length > 0) && (
+              <div style={{
+                position: "absolute",
+                top: "calc(100% + 8px)",
+                left: 0,
+                right: 0,
+                background: "white",
+                borderRadius: "16px",
+                boxShadow: "0 8px 40px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.04)",
+                padding: "16px",
+                zIndex: 300,
+                maxHeight: "400px",
+                overflowY: "auto",
+              }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {searchHistory.map((msg, i) => (
+                    <div key={i} style={{
+                      alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
+                      maxWidth: "90%",
+                    }}>
+                      {msg.role === "user" ? (
+                        <p style={{ fontSize: "12px", color: "#86868B", margin: 0, textAlign: "right" }}>{msg.text}</p>
+                      ) : (
+                        <div style={{ background: "#F5F5F7", borderRadius: "12px", padding: "12px 14px" }}>
+                          <p style={{ fontSize: "13px", color: "#1D1D1F", margin: 0, lineHeight: 1.6 }}>{msg.text}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {searchLoading && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "4px 0" }}>
+                      <div style={{ width: "12px", height: "12px", border: "2px solid rgba(0,0,0,0.06)", borderTop: "2px solid #0071E3", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                      <span style={{ fontSize: "12px", color: "#AEAEB2" }}>Thinking...</span>
+                    </div>
+                  )}
+                </div>
+                {searchHistory.length > 0 && !searchLoading && (
+                  <button
+                    type="button"
+                    onClick={() => { setSearchHistory([]); setSearchAnswer(null); setSearchOpen(false); }}
+                    style={{ fontSize: "11px", color: "#AEAEB2", background: "none", border: "none", cursor: "pointer", marginTop: "10px", padding: 0 }}
+                  >
+                    Clear conversation
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             {/* Quick date range links */}
             {(() => {
