@@ -1,7 +1,27 @@
 @import "tailwindcss";
 
+:root {
+  --bg-page: #F5F5F7;
+  --bg-card: #FFFFFF;
+  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.04), 0 0.5px 2px rgba(0, 0, 0, 0.02);
+  --shadow-card-hover: 0 4px 20px rgba(0, 0, 0, 0.06), 0 2px 6px rgba(0, 0, 0, 0.03);
+  --shadow-modal: 0 24px 80px rgba(0, 0, 0, 0.12), 0 8px 24px rgba(0, 0, 0, 0.06);
+  --radius-card: 18px;
+  --radius-pill: 999px;
+  --radius-button: 12px;
+  --color-text-primary: #1D1D1F;
+  --color-text-secondary: #86868B;
+  --color-text-tertiary: #AEAEB2;
+  --color-accent: #0071E3;
+  --color-border: rgba(0, 0, 0, 0.06);
+  --ease-apple: cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
 body {
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--bg-page);
 }
 
 @keyframes pulse {
@@ -18,15 +38,7 @@ body {
   to { transform: translateX(0); }
 }
 
-/* ───────────────────────────────────────────────────────────────
-   Mobile responsiveness
-   The dashboard uses inline styles throughout, so the rules below
-   override them with !important inside the .dashboard-root scope.
-   This keeps the desktop layout untouched while collapsing grids
-   and resizing key elements on small screens.
-   ─────────────────────────────────────────────────────────────── */
-
-/* Tablet — collapse multi-column grids to a 2-column layout */
+/* ── Tablet — 2-column grids ── */
 @media (max-width: 1024px) {
   .dashboard-root [style*="grid-template-columns: repeat(6"],
   .dashboard-root [style*="grid-template-columns: repeat(4"] {
@@ -34,23 +46,21 @@ body {
   }
 }
 
-/* Phone — single column for everything */
+/* ── Phone — single column, responsive everything ── */
 @media (max-width: 768px) {
   .dashboard-root {
     font-size: 14px;
   }
 
-  /* Force every inline grid to one column */
   .dashboard-root [style*="grid-template-columns"] {
     grid-template-columns: 1fr !important;
     gap: 12px !important;
   }
 
-  /* Header: stack vertically, allow wrapping */
   .dashboard-header-bar {
     flex-direction: column !important;
     height: auto !important;
-    padding: 12px 0 !important;
+    padding: 12px 16px !important;
     gap: 10px !important;
     align-items: stretch !important;
   }
@@ -59,7 +69,6 @@ body {
     justify-content: center !important;
   }
 
-  /* Quick range pill row: scroll horizontally if needed */
   .dashboard-quick-ranges {
     overflow-x: auto !important;
     max-width: 100% !important;
@@ -67,16 +76,13 @@ body {
     -webkit-overflow-scrolling: touch !important;
   }
 
-  /* Main content padding shrink */
   .dashboard-main {
     padding: 12px !important;
   }
 
-  /* Reduce KPI card font sizes a touch */
   .dashboard-root h1 { font-size: 16px !important; }
   .dashboard-root h2 { font-size: 15px !important; }
 
-  /* Make wide tables horizontally scrollable */
   .dashboard-root table {
     min-width: 100%;
     font-size: 12px !important;
@@ -86,21 +92,20 @@ body {
     -webkit-overflow-scrolling: touch !important;
   }
 
-  /* Settings modal full-screen on phones */
+  /* Modal: sheet-style on mobile */
   .dashboard-modal-card {
     max-width: 100% !important;
     width: 100% !important;
-    border-radius: 0 !important;
-    max-height: 100vh !important;
-    height: 100vh !important;
+    border-radius: 18px 18px 0 0 !important;
+    max-height: 90vh !important;
+    height: auto !important;
+    margin-top: auto !important;
   }
 
-  /* Charts responsive — tighten margins */
   .recharts-responsive-container {
     min-width: 0 !important;
   }
 
-  /* Automations page: stack flow + detail panel */
   .automations-layout {
     flex-direction: column !important;
   }
@@ -109,6 +114,21 @@ body {
     position: static !important;
     height: auto !important;
     border-left: none !important;
-    border-top: 1px solid #334155 !important;
+    border-top: 1px solid rgba(0, 0, 0, 0.06) !important;
+  }
+
+  /* Journey touchpoint pills wrap nicely on mobile */
+  .dashboard-root [style*="flexWrap: \"wrap\""] {
+    gap: 3px !important;
+  }
+}
+
+/* ── Small phone (SE, etc.) ── */
+@media (max-width: 390px) {
+  .dashboard-main {
+    padding: 8px !important;
+  }
+  .dashboard-header-bar {
+    padding: 8px 12px !important;
   }
 }

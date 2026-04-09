@@ -221,7 +221,7 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
         style={{
           position: "relative",
           background: "#fff",
-          borderRadius: "16px",
+          borderRadius: "22px",
           width: "100%",
           maxWidth: "440px",
           maxHeight: "90vh",
@@ -238,17 +238,17 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
             borderBottom: "1px solid #F1F5F9",
           }}
         >
-          <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#0F172A" }}>
+          <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 600, color: "#1D1D1F" }}>
             Goals
           </h2>
           <button
             onClick={onClose}
             style={{
-              background: "#F1F5F9",
+              background: "#F5F5F7",
               border: "none",
               cursor: "pointer",
               padding: "6px",
-              color: "#64748B",
+              color: "#86868B",
               fontSize: "16px",
               lineHeight: 1,
               borderRadius: "8px",
@@ -265,14 +265,14 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
 
         <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "20px" }}>
           {/* LEAD GOAL — hero style */}
-          <div style={{ background: "#EFF6FF", borderRadius: "12px", padding: "20px", border: "2px solid #3B82F6" }}>
+          <div style={{ background: "#EFF6FF", borderRadius: "18px", padding: "20px", border: "2px solid #0071E3" }}>
             <label
               htmlFor="leadGoal"
-              style={{ display: "block", fontSize: "15px", fontWeight: 700, color: "#1D4ED8", marginBottom: "4px" }}
+              style={{ display: "block", fontSize: "15px", fontWeight: 600, color: "#1D4ED8", marginBottom: "4px" }}
             >
               Lead Goal Per Month
             </label>
-            <p style={{ fontSize: "12px", color: "#64748B", margin: "0 0 12px" }}>
+            <p style={{ fontSize: "12px", color: "#86868B", margin: "0 0 12px" }}>
               Your primary KPI. How many leads should we generate each month?
             </p>
             <input
@@ -284,11 +284,11 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
               onChange={(e) => setDraftLead(e.target.value)}
               style={{
                 width: "100%",
-                border: "2px solid #3B82F6",
-                borderRadius: "10px",
+                border: "2px solid #0071E3",
+                borderRadius: "18px",
                 padding: "12px 14px",
                 fontSize: "18px",
-                fontWeight: 700,
+                fontWeight: 600,
                 color: "#1D4ED8",
                 boxSizing: "border-box",
                 background: "white",
@@ -302,7 +302,7 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
               <label htmlFor="prospectsGoal" style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#B45309", marginBottom: "4px" }}>
                 Prospects / Month
               </label>
-              <p style={{ fontSize: "11px", color: "#94A3B8", margin: "0 0 8px" }}>
+              <p style={{ fontSize: "11px", color: "#AEAEB2", margin: "0 0 8px" }}>
                 Target prospect actions
               </p>
               <input
@@ -312,14 +312,14 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
                 placeholder="e.g. 120"
                 value={draftProspects}
                 onChange={(e) => setDraftProspects(e.target.value)}
-                style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }}
+                style={{ width: "100%", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "14px", padding: "10px 14px", fontSize: "14px", color: "#1D1D1F", boxSizing: "border-box", background: "#FAFAFA" }}
               />
             </div>
             <div style={{ flex: 1 }}>
               <label htmlFor="visitsMonthGoal" style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#047857", marginBottom: "4px" }}>
                 Home Visits / Month
               </label>
-              <p style={{ fontSize: "11px", color: "#94A3B8", margin: "0 0 8px" }}>
+              <p style={{ fontSize: "11px", color: "#AEAEB2", margin: "0 0 8px" }}>
                 Target visits booked
               </p>
               <input
@@ -329,12 +329,12 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
                 placeholder="e.g. 20"
                 value={draftVisitsMonth}
                 onChange={(e) => setDraftVisitsMonth(e.target.value)}
-                style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }}
+                style={{ width: "100%", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "14px", padding: "10px 14px", fontSize: "14px", color: "#1D1D1F", boxSizing: "border-box", background: "#FAFAFA" }}
               />
             </div>
           </div>
 
-          <p style={{ fontSize: "11px", color: "#94A3B8", margin: "-8px 0 0", textAlign: "center" }}>
+          <p style={{ fontSize: "11px", color: "#AEAEB2", margin: "-8px 0 0", textAlign: "center" }}>
             All goals auto-adjust to your selected date range
           </p>
 
@@ -346,15 +346,15 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
               Contacts / Month (overall)
             </label>
             <input id="contactsGoal" type="number" min="1" placeholder="e.g. 800" value={draftContacts} onChange={(e) => setDraftContacts(e.target.value)}
-              style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
+              style={{ width: "100%", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "14px", padding: "10px 14px", fontSize: "14px", color: "#1D1D1F", boxSizing: "border-box", background: "#FAFAFA" }} />
           </div>
 
           {/* Site visits per week goal */}
           <div>
-            <label htmlFor="siteVisitsWeekGoal" style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#3B82F6", marginBottom: "4px" }}>
+            <label htmlFor="siteVisitsWeekGoal" style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#0071E3", marginBottom: "4px" }}>
               Site Visits / Week
             </label>
-            <p style={{ fontSize: "11px", color: "#94A3B8", margin: "0 0 8px" }}>
+            <p style={{ fontSize: "11px", color: "#AEAEB2", margin: "0 0 8px" }}>
               Shown as a goal circle on each upcoming-week card
             </p>
             <input
@@ -364,7 +364,7 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
               placeholder="e.g. 60"
               value={draftSiteVisitsWeek}
               onChange={(e) => setDraftSiteVisitsWeek(e.target.value)}
-              style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }}
+              style={{ width: "100%", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "14px", padding: "10px 14px", fontSize: "14px", color: "#1D1D1F", boxSizing: "border-box", background: "#FAFAFA" }}
             />
           </div>
 
@@ -373,7 +373,7 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
             <label htmlFor="installsMonthGoal" style={{ display: "block", fontSize: "13px", fontWeight: 600, color: "#7C3AED", marginBottom: "4px" }}>
               Installs / Month
             </label>
-            <p style={{ fontSize: "11px", color: "#94A3B8", margin: "0 0 8px" }}>
+            <p style={{ fontSize: "11px", color: "#AEAEB2", margin: "0 0 8px" }}>
               Shown as a goal circle on each install month card
             </p>
             <input
@@ -383,7 +383,7 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
               placeholder="e.g. 32"
               value={draftInstallsMonth}
               onChange={(e) => setDraftInstallsMonth(e.target.value)}
-              style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }}
+              style={{ width: "100%", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "14px", padding: "10px 14px", fontSize: "14px", color: "#1D1D1F", boxSizing: "border-box", background: "#FAFAFA" }}
             />
           </div>
 
@@ -391,22 +391,22 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
 
           {/* Manual overrides */}
           <div>
-            <p style={{ fontSize: "13px", fontWeight: 600, color: "#0F172A", marginBottom: "6px" }}>
+            <p style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", marginBottom: "6px" }}>
               Manual Updates
             </p>
-            <p style={{ fontSize: "11px", color: "#94A3B8", margin: "0 0 12px" }}>
+            <p style={{ fontSize: "11px", color: "#AEAEB2", margin: "0 0 12px" }}>
               These can{"'"}t be fetched automatically — update when they change.
             </p>
             <div style={{ display: "flex", gap: "12px" }}>
               <div style={{ flex: 1 }}>
                 <label htmlFor="fbReviews" style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#1877F2", marginBottom: "4px" }}>Facebook Reviews</label>
                 <input id="fbReviews" type="number" min="0" placeholder="e.g. 3" value={draftFbReviews} onChange={(e) => setDraftFbReviews(e.target.value)}
-                  style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
+                  style={{ width: "100%", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "14px", padding: "10px 14px", fontSize: "14px", color: "#1D1D1F", boxSizing: "border-box", background: "#FAFAFA" }} />
               </div>
               <div style={{ flex: 1 }}>
                 <label htmlFor="liSam" style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#0A66C2", marginBottom: "4px" }}>LinkedIn (Sam) Followers</label>
                 <input id="liSam" type="number" min="0" placeholder="e.g. 500" value={draftLinkedInSam} onChange={(e) => setDraftLinkedInSam(e.target.value)}
-                  style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
+                  style={{ width: "100%", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "14px", padding: "10px 14px", fontSize: "14px", color: "#1D1D1F", boxSizing: "border-box", background: "#FAFAFA" }} />
               </div>
             </div>
           </div>
@@ -415,7 +415,7 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
 
           {/* Ad Spend */}
           <div>
-            <p style={{ fontSize: "13px", fontWeight: 600, color: "#0F172A", marginBottom: "6px" }}>
+            <p style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", marginBottom: "6px" }}>
               Ad Spend (for selected period)
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -425,14 +425,14 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
                 { label: "Bing Ads", colour: "#00809D", spend: draftBingSpend, setSpend: setDraftBingSpend, clicks: draftBingClicks, setClicks: setDraftBingClicks },
               ].map((ad) => (
                 <div key={ad.label} style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <span style={{ fontSize: "11px", fontWeight: 700, color: ad.colour, minWidth: "80px" }}>{ad.label}</span>
+                  <span style={{ fontSize: "11px", fontWeight: 600, color: ad.colour, minWidth: "80px" }}>{ad.label}</span>
                   <div style={{ flex: 1 }}>
                     <input type="number" min="0" step="0.01" placeholder="£ spend" value={ad.spend} onChange={(e) => ad.setSpend(e.target.value)}
-                      style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "8px 10px", fontSize: "13px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
+                      style={{ width: "100%", border: "none", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", borderRadius: "8px", padding: "8px 10px", fontSize: "13px", color: "#1D1D1F", boxSizing: "border-box", background: "#FAFAFA" }} />
                   </div>
                   <div style={{ flex: 1 }}>
                     <input type="number" min="0" placeholder="clicks" value={ad.clicks} onChange={(e) => ad.setClicks(e.target.value)}
-                      style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "8px 10px", fontSize: "13px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
+                      style={{ width: "100%", border: "none", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", borderRadius: "8px", padding: "8px 10px", fontSize: "13px", color: "#1D1D1F", boxSizing: "border-box", background: "#FAFAFA" }} />
                   </div>
                 </div>
               ))}
@@ -442,32 +442,32 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
           <div style={{ borderTop: "1px solid #F1F5F9" }} />
 
           <div>
-            <p style={{ fontSize: "13px", fontWeight: 600, color: "#0F172A", marginBottom: "6px" }}>
+            <p style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", marginBottom: "6px" }}>
               Source Channel Goals (%)
             </p>
-            <p style={{ fontSize: "12px", color: "#94A3B8", margin: "0 0 12px" }}>
+            <p style={{ fontSize: "12px", color: "#AEAEB2", margin: "0 0 12px" }}>
               Target percentage of leads + prospects from each channel.
             </p>
             <div style={{ display: "flex", gap: "10px" }}>
               <div style={{ flex: 1 }}>
                 <label htmlFor="ppcGoal" style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#EF4444", marginBottom: "4px" }}>PPC %</label>
                 <input id="ppcGoal" type="number" min="0" max="100" placeholder="e.g. 60" value={draftPpc} onChange={(e) => setDraftPpc(e.target.value)}
-                  style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
+                  style={{ width: "100%", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "14px", padding: "10px 14px", fontSize: "14px", color: "#1D1D1F", boxSizing: "border-box", background: "#FAFAFA" }} />
               </div>
               <div style={{ flex: 1 }}>
                 <label htmlFor="seoGoal" style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#10B981", marginBottom: "4px" }}>SEO %</label>
                 <input id="seoGoal" type="number" min="0" max="100" placeholder="e.g. 25" value={draftSeo} onChange={(e) => setDraftSeo(e.target.value)}
-                  style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
+                  style={{ width: "100%", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "14px", padding: "10px 14px", fontSize: "14px", color: "#1D1D1F", boxSizing: "border-box", background: "#FAFAFA" }} />
               </div>
               <div style={{ flex: 1 }}>
                 <label htmlFor="contentGoal" style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#8B5CF6", marginBottom: "4px" }}>Content %</label>
                 <input id="contentGoal" type="number" min="0" max="100" placeholder="e.g. 15" value={draftContent} onChange={(e) => setDraftContent(e.target.value)}
-                  style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
+                  style={{ width: "100%", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "14px", padding: "10px 14px", fontSize: "14px", color: "#1D1D1F", boxSizing: "border-box", background: "#FAFAFA" }} />
               </div>
               <div style={{ flex: 1 }}>
-                <label htmlFor="otherGoal" style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#64748B", marginBottom: "4px" }}>Other %</label>
+                <label htmlFor="otherGoal" style={{ display: "block", fontSize: "11px", fontWeight: 600, color: "#86868B", marginBottom: "4px" }}>Other %</label>
                 <input id="otherGoal" type="number" min="0" max="100" placeholder="e.g. 15" value={draftOther} onChange={(e) => setDraftOther(e.target.value)}
-                  style={{ width: "100%", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", fontSize: "14px", color: "#0F172A", boxSizing: "border-box", background: "#F8FAFC" }} />
+                  style={{ width: "100%", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "14px", padding: "10px 14px", fontSize: "14px", color: "#1D1D1F", boxSizing: "border-box", background: "#FAFAFA" }} />
               </div>
             </div>
             {(() => {
@@ -481,7 +481,7 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
                     </p>
                   )}
                   {contactsNum && contactsNum > 0 && total > 0 && (
-                    <p style={{ fontSize: "11px", color: "#64748B", margin: "6px 0 0" }}>
+                    <p style={{ fontSize: "11px", color: "#86868B", margin: "6px 0 0" }}>
                       = PPC <strong>{Math.round(contactsNum * (parseGoalDraft(draftPpc) ?? 0) / 100)}</strong> / SEO <strong>{Math.round(contactsNum * (parseGoalDraft(draftSeo) ?? 0) / 100)}</strong> / Content <strong>{Math.round(contactsNum * (parseGoalDraft(draftContent) ?? 0) / 100)}</strong> / Other <strong>{Math.round(contactsNum * (parseGoalDraft(draftOther) ?? 0) / 100)}</strong> per month
                     </p>
                   )}
@@ -506,10 +506,10 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
               padding: "9px 20px",
               fontSize: "13px",
               fontWeight: 600,
-              borderRadius: "10px",
-              border: "1px solid #E2E8F0",
+              borderRadius: "18px",
+              border: "none", boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
               background: "white",
-              color: "#64748B",
+              color: "#86868B",
               cursor: "pointer",
             }}
           >
@@ -522,7 +522,7 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
               padding: "9px 20px",
               fontSize: "13px",
               fontWeight: 600,
-              borderRadius: "10px",
+              borderRadius: "18px",
               border: "none",
               background: saving ? "#64748B" : "#0F172A",
               color: "white",
@@ -1087,9 +1087,9 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="dashboard-root" style={{ minHeight: "100vh", background: "#F1F5F9" }}>
+    <div className="dashboard-root" style={{ minHeight: "100vh", background: "#F5F5F7" }}>
       {/* Header */}
-      <header style={{ background: "#0F172A", padding: "0 16px" }}>
+      <header style={{ background: "rgba(255,255,255,0.72)", backdropFilter: "saturate(180%) blur(20px)", WebkitBackdropFilter: "saturate(180%) blur(20px)", borderBottom: "1px solid rgba(0,0,0,0.08)", padding: "0 16px", position: "sticky", top: 0, zIndex: 200 }}>
         <div
           className="dashboard-header-bar"
           style={{
@@ -1098,7 +1098,7 @@ export default function Dashboard() {
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            height: "48px",
+            height: "56px",
             flexWrap: "wrap",
             gap: "8px",
           }}
@@ -1106,10 +1106,10 @@ export default function Dashboard() {
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <img src="/acb-logo.png" alt="ACB" style={{ height: "28px", objectFit: "contain" }} />
             <div>
-              <h1 style={{ fontSize: "13px", fontWeight: 700, margin: 0, color: "white", letterSpacing: "-0.3px" }}>
+              <h1 style={{ fontSize: "14px", fontWeight: 600, margin: 0, color: "#1D1D1F", letterSpacing: "-0.3px" }}>
                 ACB Stats
               </h1>
-              <p style={{ fontSize: "10px", margin: 0, color: "#64748B" }}>Marketing Funnel</p>
+              <p style={{ fontSize: "10px", margin: 0, color: "#86868B" }}>Marketing Funnel</p>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -1143,7 +1143,7 @@ export default function Dashboard() {
               ];
 
               return (
-                <div className="dashboard-quick-ranges" style={{ display: "flex", gap: "2px", background: "#1E293B", borderRadius: "8px", padding: "3px" }}>
+                <div className="dashboard-quick-ranges" style={{ display: "flex", gap: "2px", background: "rgba(0,0,0,0.04)", borderRadius: "8px", padding: "3px" }}>
                   {ranges.map((r) => {
                     const active = from === r.from && to === r.to;
                     return (
@@ -1152,9 +1152,9 @@ export default function Dashboard() {
                         onClick={() => applyQuickRange(r.from, r.to)}
                         style={{
                           fontSize: "11px",
-                          fontWeight: active ? 700 : 500,
-                          color: active ? "white" : "#94A3B8",
-                          background: active ? "#3B82F6" : "transparent",
+                          fontWeight: active ? 600 : 400,
+                          color: active ? "white" : "#86868B",
+                          background: active ? "#0071E3" : "transparent",
                           border: "none",
                           borderRadius: "6px",
                           padding: "4px 10px",
@@ -1171,7 +1171,7 @@ export default function Dashboard() {
               );
             })()}
             {/* Date range inline in header */}
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#1E293B", borderRadius: "10px", padding: "6px 12px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(0,0,0,0.04)", borderRadius: "18px", padding: "6px 12px" }}>
               <input
                 type="date"
                 value={from}
@@ -1179,13 +1179,12 @@ export default function Dashboard() {
                 style={{
                   border: "none",
                   background: "transparent",
-                  color: "#CBD5E1",
+                  color: "#1D1D1F",
                   fontSize: "13px",
                   outline: "none",
-                  colorScheme: "dark",
                 }}
               />
-              <span style={{ color: "#475569", fontSize: "12px" }}>&mdash;</span>
+              <span style={{ color: "#86868B", fontSize: "12px" }}>&mdash;</span>
               <input
                 type="date"
                 value={to}
@@ -1193,10 +1192,9 @@ export default function Dashboard() {
                 style={{
                   border: "none",
                   background: "transparent",
-                  color: "#CBD5E1",
+                  color: "#1D1D1F",
                   fontSize: "13px",
                   outline: "none",
-                  colorScheme: "dark",
                 }}
               />
             </div>
@@ -1204,10 +1202,10 @@ export default function Dashboard() {
               onClick={fetchData}
               disabled={loading}
               style={{
-                background: loading ? "#334155" : "#3B82F6",
+                background: loading ? "#334155" : "#0071E3",
                 color: "white",
                 fontWeight: 600,
-                borderRadius: "10px",
+                borderRadius: "18px",
                 padding: "8px 18px",
                 fontSize: "13px",
                 border: "none",
@@ -1221,12 +1219,12 @@ export default function Dashboard() {
               onClick={() => setShowSettings(true)}
               title="Settings"
               style={{
-                background: "#1E293B",
+                background: "rgba(0,0,0,0.04)",
                 border: "none",
-                borderRadius: "10px",
+                borderRadius: "18px",
                 padding: "8px",
                 cursor: "pointer",
-                color: "#94A3B8",
+                color: "#AEAEB2",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -1260,8 +1258,10 @@ export default function Dashboard() {
             position: "sticky",
             top: 0,
             zIndex: 100,
-            background: isSourceFiltered ? "#1E293B" : "#F8FAFC",
-            borderBottom: isSourceFiltered ? "2px solid #2563eb" : "1px solid #E2E8F0",
+            background: "rgba(255,255,255,0.8)",
+            backdropFilter: "saturate(180%) blur(20px)",
+            WebkitBackdropFilter: "saturate(180%) blur(20px)",
+            borderBottom: "1px solid rgba(0,0,0,0.06)",
             padding: "8px 16px",
             display: "flex",
             alignItems: "center",
@@ -1269,7 +1269,7 @@ export default function Dashboard() {
             flexWrap: "wrap",
           }}
         >
-          <span style={{ fontSize: "10px", fontWeight: 700, color: isSourceFiltered ? "#94A3B8" : "#64748B", textTransform: "uppercase", letterSpacing: "0.5px", marginRight: "4px" }}>
+          <span style={{ fontSize: "10px", fontWeight: 500, color: "#86868B", marginRight: "4px" }}>
             Source
           </span>
           <button
@@ -1278,10 +1278,10 @@ export default function Dashboard() {
             style={{
               padding: "4px 10px",
               fontSize: "11px",
-              fontWeight: 700,
-              border: !isSourceFiltered ? "1px solid #0F172A" : "1px solid #475569",
-              background: !isSourceFiltered ? "#0F172A" : "transparent",
-              color: !isSourceFiltered ? "white" : "#94A3B8",
+              fontWeight: 600,
+              border: !isSourceFiltered ? "1px solid #1D1D1F" : "1px solid rgba(0,0,0,0.1)",
+              background: !isSourceFiltered ? "#1D1D1F" : "transparent",
+              color: !isSourceFiltered ? "white" : "#86868B",
               borderRadius: "999px",
               cursor: "pointer",
             }}
@@ -1298,10 +1298,10 @@ export default function Dashboard() {
                 style={{
                   padding: "4px 10px",
                   fontSize: "11px",
-                  fontWeight: 700,
-                  border: active ? "1px solid #2563eb" : `1px solid ${isSourceFiltered ? "#475569" : "#E2E8F0"}`,
-                  background: active ? "#2563eb" : "transparent",
-                  color: active ? "white" : isSourceFiltered ? "#94A3B8" : "#475569",
+                  fontWeight: 600,
+                  border: active ? "1px solid #0071E3" : "1px solid rgba(0,0,0,0.1)",
+                  background: active ? "#0071E3" : "transparent",
+                  color: active ? "white" : "#86868B",
                   borderRadius: "999px",
                   cursor: "pointer",
                   whiteSpace: "nowrap",
@@ -1312,7 +1312,7 @@ export default function Dashboard() {
             );
           })}
           {isSourceFiltered && sourceSlice && (
-            <span style={{ fontSize: "10px", color: "#64748B", marginLeft: "auto" }}>
+            <span style={{ fontSize: "10px", color: "#86868B", marginLeft: "auto" }}>
               Cohort view · {sourceSlice.contacts} contacts
             </span>
           )}
@@ -1326,7 +1326,7 @@ export default function Dashboard() {
               background: "#FEF2F2",
               border: "1px solid #FECACA",
               color: "#DC2626",
-              borderRadius: "12px",
+              borderRadius: "18px",
               padding: "12px 16px",
               marginBottom: "20px",
               fontSize: "13px",
@@ -1336,53 +1336,33 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Full-screen loader — hides everything until data is ready */}
+        {/* Full-screen loader — Apple-style minimal */}
         {!dataReady && (() => {
-          const size = 220;
-          const centre = size / 2;
-          const radius = 100;
-          const circumference = 2 * Math.PI * radius;
-          const offset = circumference - (loadProgress / 100) * circumference;
+          const barWidth = 200;
           return (
             <div
               style={{
                 position: "fixed",
                 inset: 0,
                 zIndex: 2000,
-                background: "white",
+                background: "#F5F5F7",
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: "24px",
+                gap: "32px",
               }}
             >
-              {/* Circular progress ring with logo inside */}
-              <div style={{ position: "relative", width: `${size}px`, height: `${size}px` }}>
-                <svg width={size} height={size} style={{ position: "absolute", top: 0, left: 0, transform: "rotate(-90deg)" }}>
-                  <circle cx={centre} cy={centre} r={radius} fill="none" stroke="#F1F5F9" strokeWidth="4" />
-                  <circle
-                    cx={centre} cy={centre} r={radius} fill="none"
-                    stroke="#3B82F6"
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                    strokeDasharray={circumference}
-                    strokeDashoffset={offset}
-                    style={{ transition: "stroke-dashoffset 0.4s ease" }}
-                  />
-                </svg>
-                <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <img src="/acb-logo.png" alt="Age Care Bathrooms" style={{ height: "70px", objectFit: "contain" }} />
-                </div>
-              </div>
+              <img src="/acb-logo.png" alt="Age Care Bathrooms" style={{ height: "64px", objectFit: "contain" }} />
 
               <div style={{ textAlign: "center" }}>
-                <p style={{ fontSize: "24px", fontWeight: 800, color: "#0F172A", margin: "0 0 4px" }}>
-                  {loadProgress}%
-                </p>
-                <p style={{ fontSize: "13px", color: "#94A3B8", margin: 0 }}>
+                <p style={{ fontSize: "17px", fontWeight: 500, color: "#1D1D1F", margin: "0 0 20px", letterSpacing: "-0.2px" }}>
                   {loadProgress < 15 ? "Connecting..." : loadProgress < 55 ? "Loading contacts..." : loadProgress < 85 ? "Analysing sources..." : "Almost there..."}
                 </p>
+                {/* Thin progress bar */}
+                <div style={{ width: `${barWidth}px`, height: "3px", borderRadius: "999px", background: "#E5E5EA", overflow: "hidden" }}>
+                  <div style={{ width: `${loadProgress}%`, height: "100%", borderRadius: "999px", background: "#1D1D1F", transition: "width 0.4s cubic-bezier(0.25, 0.1, 0.25, 1)" }} />
+                </div>
               </div>
             </div>
           );
@@ -1395,7 +1375,7 @@ export default function Dashboard() {
             {/* Source filter pills */}
             {funnelBySource && funnelBySource.sources.length > 0 && (
               <div ref={inlineFilterRef} style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.5px", marginRight: "4px" }}>
+                <span style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", marginRight: "4px" }}>
                   Filter by source
                 </span>
                 <button
@@ -1404,10 +1384,10 @@ export default function Dashboard() {
                   style={{
                     padding: "5px 12px",
                     fontSize: "12px",
-                    fontWeight: 700,
-                    border: selectedSource === null ? "1px solid #0F172A" : "1px solid #E2E8F0",
+                    fontWeight: 600,
+                    border: selectedSource === null ? "1px solid #0F172A" : "1px solid rgba(0,0,0,0.06)",
                     background: selectedSource === null ? "#0F172A" : "white",
-                    color: selectedSource === null ? "white" : "#475569",
+                    color: selectedSource === null ? "white" : "#86868B",
                     borderRadius: "999px",
                     cursor: "pointer",
                   }}
@@ -1424,10 +1404,10 @@ export default function Dashboard() {
                       style={{
                         padding: "5px 12px",
                         fontSize: "12px",
-                        fontWeight: 700,
-                        border: active ? "1px solid #2563eb" : "1px solid #E2E8F0",
-                        background: active ? "#2563eb" : "white",
-                        color: active ? "white" : "#475569",
+                        fontWeight: 600,
+                        border: active ? "1px solid #0071E3" : "1px solid rgba(0,0,0,0.06)",
+                        background: active ? "#0071E3" : "white",
+                        color: active ? "white" : "#86868B",
                         borderRadius: "999px",
                         cursor: "pointer",
                         whiteSpace: "nowrap",
@@ -1438,19 +1418,19 @@ export default function Dashboard() {
                   );
                 })}
                 {selectedSource && (
-                  <span style={{ fontSize: "11px", color: "#94A3B8", marginLeft: "auto", fontStyle: "italic" }}>
+                  <span style={{ fontSize: "11px", color: "#AEAEB2", marginLeft: "auto", fontStyle: "italic" }}>
                     Cohort view: contacts created in this period from this source
                   </span>
                 )}
               </div>
             )}
             {/* === GOALS SUMMARY === */}
-            <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px 20px" }}>
+            <div style={{ background: "white", borderRadius: "18px", border: "none", padding: "14px 20px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                <h2 style={{ fontSize: "13px", fontWeight: 600, color: "#86868B", margin: 0 }}>
                   Goals
                 </h2>
-                <span style={{ fontSize: "11px", color: "#94A3B8" }}>
+                <span style={{ fontSize: "11px", color: "#AEAEB2" }}>
                   Targets adjust to your selected date range
                 </span>
               </div>
@@ -1458,7 +1438,7 @@ export default function Dashboard() {
                 {[
                   { label: "Contacts", current: dispContacts, goal: proratedGoal(goals.contactsGoalPerMonth), colour: "#6366F1" },
                   { label: "Prospects", current: dispProspects, goal: proratedGoal(goals.prospectsGoalPerMonth), colour: "#F59E0B" },
-                  { label: "Leads", current: dispLeads, goal: proratedGoal(goals.leadGoalPerMonth), colour: "#3B82F6" },
+                  { label: "Leads", current: dispLeads, goal: proratedGoal(goals.leadGoalPerMonth), colour: "#0071E3" },
                   { label: "Home Visits", current: dispHomeVisits, goal: proratedGoal(goals.visitsGoalPerMonth), colour: "#10B981" },
                 ].map((g) => {
                   if (!g.goal || g.goal <= 0) return null;
@@ -1484,12 +1464,12 @@ export default function Dashboard() {
                           />
                         </svg>
                         <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                          <span style={{ fontSize: "22px", fontWeight: 800, color: met ? "#059669" : "#0F172A", lineHeight: 1 }}>{g.current}</span>
-                          <span style={{ fontSize: "11px", color: "#94A3B8", fontWeight: 500 }}>/ {g.goal}</span>
+                          <span style={{ fontSize: "22px", fontWeight: 600, color: met ? "#059669" : "#0F172A", lineHeight: 1 }}>{g.current}</span>
+                          <span style={{ fontSize: "11px", color: "#AEAEB2", fontWeight: 500 }}>/ {g.goal}</span>
                         </div>
                       </div>
                       <span style={{ fontSize: "13px", fontWeight: 600, color: met ? "#059669" : "#334155" }}>{g.label}</span>
-                      <span style={{ fontSize: "12px", fontWeight: 700, color: met ? "#059669" : g.colour }}>{met ? "Goal met" : `${pct.toFixed(0)}%`}</span>
+                      <span style={{ fontSize: "12px", fontWeight: 600, color: met ? "#059669" : g.colour }}>{met ? "Goal met" : `${pct.toFixed(0)}%`}</span>
                     </div>
                   );
                 })}
@@ -1498,7 +1478,7 @@ export default function Dashboard() {
 
             <div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
-              <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              <h2 style={{ fontSize: "13px", fontWeight: 600, color: "#86868B", margin: 0 }}>
                 The Customer Funnel
               </h2>
               {unattributed.contactsWithoutSource > 0 && (
@@ -1514,7 +1494,7 @@ export default function Dashboard() {
               <KpiCard label="Website Visitors" value={isSourceFiltered ? null : activeUsers} colour="#8B5CF6" liveNow={isSourceFiltered ? null : liveNow} subtitle={isSourceFiltered ? "n/a when filtered" : undefined} />
               <KpiCard label="Contacts" value={dispContacts} colour="#6366F1" comparison={!isSourceFiltered && previousPeriod ? { current: sourcesTotal, previous: previousPeriod.contacts } : undefined} />
               <KpiCard label="Prospects" value={dispProspects} colour="#F59E0B" comparison={!isSourceFiltered && previousPeriod ? { current: prospectsTotal, previous: previousPeriod.prospects } : undefined} goal={!isSourceFiltered && proratedGoal(goals.prospectsGoalPerMonth) ? { current: prospectsTotal, target: proratedGoal(goals.prospectsGoalPerMonth)! } : undefined} />
-              <KpiCard label="Leads" value={dispLeads} colour="#3B82F6" comparison={!isSourceFiltered && previousPeriod ? { current: leadsTotal, previous: previousPeriod.leads } : undefined} detail={dispDirectBookings > 0 ? `${dispFormLeads} Form Leads + ${dispDirectBookings} Direct Bookings` : undefined} goal={!isSourceFiltered && proratedGoal(goals.leadGoalPerMonth) ? { current: leadsTotal, target: proratedGoal(goals.leadGoalPerMonth)! } : undefined} />
+              <KpiCard label="Leads" value={dispLeads} colour="#0071E3" comparison={!isSourceFiltered && previousPeriod ? { current: leadsTotal, previous: previousPeriod.leads } : undefined} detail={dispDirectBookings > 0 ? `${dispFormLeads} Form Leads + ${dispDirectBookings} Direct Bookings` : undefined} goal={!isSourceFiltered && proratedGoal(goals.leadGoalPerMonth) ? { current: leadsTotal, target: proratedGoal(goals.leadGoalPerMonth)! } : undefined} />
               <KpiCard label="Home Visits" value={dispHomeVisits} colour="#10B981" subtitle={siteVisits && siteVisits.cancelled > 0 ? `${siteVisits.cancelled} cancelled` : undefined} comparison={!isSourceFiltered && previousPeriod ? { current: homeVisits ?? 0, previous: previousPeriod.homeVisits } : undefined} goal={!isSourceFiltered && proratedGoal(goals.visitsGoalPerMonth) ? { current: homeVisits ?? 0, target: proratedGoal(goals.visitsGoalPerMonth)! } : undefined} />
               <KpiCard label="Won Jobs" value={dispWonJobs} colour="#059669" subtitle={!isSourceFiltered && wonValue ? `£${wonValue.toLocaleString()} value` : undefined} comparison={!isSourceFiltered && previousPeriod ? { current: wonJobs ?? 0, previous: previousPeriod.wonJobs } : undefined} />
             </div>
@@ -1524,11 +1504,11 @@ export default function Dashboard() {
             <div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px", flexWrap: "wrap", gap: "8px" }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
-                <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                <h2 style={{ fontSize: "13px", fontWeight: 600, color: "#86868B", margin: 0 }}>
                   Funnel Breakdown
                 </h2>
                 {!isSourceFiltered && previousPeriod && (
-                  <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>
+                  <span style={{ fontSize: "10px", color: "#AEAEB2", fontWeight: 600 }}>
                     vs {(() => {
                       const fmt = (s: string) => {
                         const [, m, d] = s.split("-");
@@ -1558,10 +1538,10 @@ export default function Dashboard() {
                   const delta = c.prev != null ? c.rate - c.prev : null;
                   const better = delta != null && delta >= 0;
                   return (
-                    <span key={c.label} style={{ fontSize: "11px", color: "#64748B", display: "inline-flex", alignItems: "baseline", gap: "5px" }}>
-                      {c.label} <strong style={{ color: "#0F172A" }}>{c.rate.toFixed(1)}%</strong>
+                    <span key={c.label} style={{ fontSize: "11px", color: "#86868B", display: "inline-flex", alignItems: "baseline", gap: "5px" }}>
+                      {c.label} <strong style={{ color: "#1D1D1F" }}>{c.rate.toFixed(1)}%</strong>
                       {delta != null && (
-                        <span style={{ fontSize: "10px", fontWeight: 700, color: better ? "#059669" : "#DC2626" }}>
+                        <span style={{ fontSize: "10px", fontWeight: 600, color: better ? "#059669" : "#DC2626" }}>
                           {better ? "▲" : "▼"} {Math.abs(delta).toFixed(1)}pp
                         </span>
                       )}
@@ -1574,25 +1554,25 @@ export default function Dashboard() {
               (() => {
                 const fmt = (avg: number | null, sample: number) =>
                   avg == null
-                    ? <span style={{ color: "#CBD5E1" }}>—</span>
+                    ? <span style={{ color: "#D2D2D7" }}>—</span>
                     : <>
-                        <strong style={{ color: "#0F172A" }}>{avg.toFixed(1)} days</strong>
-                        <span style={{ color: "#94A3B8", marginLeft: "3px" }}>(n={sample})</span>
+                        <strong style={{ color: "#1D1D1F" }}>{avg.toFixed(1)} days</strong>
+                        <span style={{ color: "#AEAEB2", marginLeft: "3px" }}>(n={sample})</span>
                       </>;
                 return (
-                  <div style={{ background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "8px 14px", marginBottom: "10px", display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
-                    <span style={{ fontSize: "10px", fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  <div style={{ background: "#FAFAFA", border: "none", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", borderRadius: "8px", padding: "8px 14px", marginBottom: "10px", display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: "10px", fontWeight: 600, color: "#86868B" }}>
                       Avg time in funnel
                     </span>
-                    <span style={{ fontSize: "11px", color: "#64748B" }}>
+                    <span style={{ fontSize: "11px", color: "#86868B" }}>
                       Prospect → Lead {fmt(funnelTiming.prospectToLead.avgDays, funnelTiming.prospectToLead.sample)}
                     </span>
-                    <span style={{ color: "#CBD5E1", fontSize: "11px" }}>·</span>
-                    <span style={{ fontSize: "11px", color: "#64748B" }}>
+                    <span style={{ color: "#D2D2D7", fontSize: "11px" }}>·</span>
+                    <span style={{ fontSize: "11px", color: "#86868B" }}>
                       Lead → Visit {fmt(funnelTiming.leadToVisit.avgDays, funnelTiming.leadToVisit.sample)}
                     </span>
-                    <span style={{ color: "#CBD5E1", fontSize: "11px" }}>·</span>
-                    <span style={{ fontSize: "11px", color: "#64748B" }}>
+                    <span style={{ color: "#D2D2D7", fontSize: "11px" }}>·</span>
+                    <span style={{ fontSize: "11px", color: "#86868B" }}>
                       Prospect → Visit {fmt(funnelTiming.prospectToVisit.avgDays, funnelTiming.prospectToVisit.sample)}
                     </span>
                   </div>
@@ -1623,7 +1603,7 @@ export default function Dashboard() {
                   if (bySource.length === 0) return null;
                   return (
                     <>
-                      <div style={{ fontSize: "8px", fontWeight: 700, color: "#F59E0B", textTransform: "uppercase", letterSpacing: "0.5px", margin: "10px 0 4px" }}>
+                      <div style={{ fontSize: "8px", fontWeight: 600, color: "#F59E0B", margin: "10px 0 4px" }}>
                         Original Lead Source
                       </div>
                       {bySource.map((s) => (
@@ -1645,7 +1625,7 @@ export default function Dashboard() {
                 title="Leads"
                 subtitle="Want to talk"
                 total={dispLeads}
-                colour="#3B82F6"
+                colour="#0071E3"
                 bg="#EFF6FF"
                 rate={dispContacts > 0 ? `${((dispLeads / dispContacts) * 100).toFixed(1)}% of contacts` : undefined}
                 comparison={!isSourceFiltered && previousPeriod ? { current: leadsTotal, previous: previousPeriod.leads } : undefined}
@@ -1659,7 +1639,7 @@ export default function Dashboard() {
                 {dispDirectBookings > 0 && (
                   <>
                     <div style={{ borderTop: "1px dashed #CBD5E1", margin: "6px 0", position: "relative" }}>
-                      <span style={{ position: "absolute", top: "-7px", left: "50%", transform: "translateX(-50%)", background: "#EFF6FF", padding: "0 6px", fontSize: "8px", fontWeight: 700, color: "#3B82F6", textTransform: "uppercase", letterSpacing: "0.5px", whiteSpace: "nowrap" }}>Organic</span>
+                      <span style={{ position: "absolute", top: "-7px", left: "50%", transform: "translateX(-50%)", background: "#EFF6FF", padding: "0 6px", fontSize: "8px", fontWeight: 600, color: "#0071E3", whiteSpace: "nowrap" }}>Organic</span>
                     </div>
                     <MiniRow label="Direct bookings (no lead form)" count={dispDirectBookings} highlight />
                   </>
@@ -1672,7 +1652,7 @@ export default function Dashboard() {
                   if (bySource.length === 0) return null;
                   return (
                     <>
-                      <div style={{ fontSize: "8px", fontWeight: 700, color: "#3B82F6", textTransform: "uppercase", letterSpacing: "0.5px", margin: "10px 0 4px" }}>
+                      <div style={{ fontSize: "8px", fontWeight: 600, color: "#0071E3", margin: "10px 0 4px" }}>
                         Original Lead Source
                       </div>
                       {bySource.map((s) => (
@@ -1701,7 +1681,7 @@ export default function Dashboard() {
                   <>
                     {homeVisitBreakdown.byAction.length > 0 && (
                       <>
-                        <div style={{ fontSize: "8px", fontWeight: 700, color: "#10B981", textTransform: "uppercase", letterSpacing: "0.5px", margin: "2px 0 4px" }}>
+                        <div style={{ fontSize: "8px", fontWeight: 600, color: "#10B981", margin: "2px 0 4px" }}>
                           Conversion Action
                         </div>
                         {homeVisitBreakdown.byAction.map((a) => (
@@ -1711,7 +1691,7 @@ export default function Dashboard() {
                     )}
                     {homeVisitBreakdown.bySource.length > 0 && (
                       <>
-                        <div style={{ fontSize: "8px", fontWeight: 700, color: "#10B981", textTransform: "uppercase", letterSpacing: "0.5px", margin: "10px 0 4px" }}>
+                        <div style={{ fontSize: "8px", fontWeight: 600, color: "#10B981", margin: "10px 0 4px" }}>
                           Original Lead Source
                         </div>
                         {homeVisitBreakdown.bySource.map((s) => (
@@ -1722,7 +1702,7 @@ export default function Dashboard() {
                   </>
                 ) : (
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "10px 0" }}>
-                    <span style={{ fontSize: "32px", fontWeight: 800, color: "#059669", lineHeight: 1 }}>{dispHomeVisits.toLocaleString()}</span>
+                    <span style={{ fontSize: "32px", fontWeight: 600, color: "#059669", lineHeight: 1 }}>{dispHomeVisits.toLocaleString()}</span>
                   </div>
                 )}
               </FunnelCard>
@@ -1737,14 +1717,14 @@ export default function Dashboard() {
                 comparison={!isSourceFiltered && previousPeriod ? { current: wonJobs ?? 0, previous: previousPeriod.wonJobs } : undefined}
               >
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "8px 0", gap: "2px" }}>
-                  <span style={{ fontSize: "32px", fontWeight: 800, color: "#059669", lineHeight: 1 }}>{dispWonJobs.toLocaleString()}</span>
+                  <span style={{ fontSize: "32px", fontWeight: 600, color: "#059669", lineHeight: 1 }}>{dispWonJobs.toLocaleString()}</span>
                   {!isSourceFiltered && wonValue !== null && wonValue > 0 && (
-                    <span style={{ fontSize: "13px", fontWeight: 700, color: "#047857" }}>£{wonValue.toLocaleString()}</span>
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: "#047857" }}>£{wonValue.toLocaleString()}</span>
                   )}
                 </div>
                 {!isSourceFiltered && wonBySource.length > 0 && (
                   <>
-                    <div style={{ fontSize: "8px", fontWeight: 700, color: "#059669", textTransform: "uppercase", letterSpacing: "0.5px", margin: "10px 0 4px" }}>
+                    <div style={{ fontSize: "8px", fontWeight: 600, color: "#059669", margin: "10px 0 4px" }}>
                       Original Lead Source
                     </div>
                     {wonBySource.map((s) => (
@@ -1758,7 +1738,7 @@ export default function Dashboard() {
             </div>
 
             <div>
-            <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            <h2 style={{ fontSize: "13px", fontWeight: 600, color: "#86868B", margin: "0 0 10px" }}>
               Contacts Per Team
             </h2>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px" }}>
@@ -1791,26 +1771,26 @@ export default function Dashboard() {
             {/* === AD SPEND === */}
             {adSpend.length > 0 && adSpendTotal > 0 && (
               <div>
-                <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                <h2 style={{ fontSize: "13px", fontWeight: 600, color: "#86868B", margin: "0 0 10px" }}>
                   Ad Spend
                 </h2>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px" }}>
                   {/* Total card */}
-                  <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px 16px", borderLeft: "3px solid #0F172A" }}>
-                    <p style={{ fontSize: "10px", fontWeight: 600, color: "#64748B", margin: "0 0 4px", textTransform: "uppercase" }}>Total Spend</p>
-                    <p style={{ fontSize: "24px", fontWeight: 800, color: "#0F172A", margin: 0, lineHeight: 1 }}>
+                  <div style={{ background: "white", borderRadius: "18px", border: "none", padding: "14px 16px", borderLeft: "3px solid #0F172A" }}>
+                    <p style={{ fontSize: "10px", fontWeight: 600, color: "#86868B", margin: "0 0 4px", textTransform: "uppercase" }}>Total Spend</p>
+                    <p style={{ fontSize: "24px", fontWeight: 600, color: "#1D1D1F", margin: 0, lineHeight: 1 }}>
                       £{adSpendTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                   </div>
                   {/* Per platform */}
                   {adSpend.filter((p) => p.spend > 0).map((p) => (
-                    <div key={p.name} style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px 16px", borderLeft: `3px solid ${p.colour}` }}>
-                      <p style={{ fontSize: "10px", fontWeight: 600, color: "#64748B", margin: "0 0 4px", textTransform: "uppercase" }}>{p.name}</p>
-                      <p style={{ fontSize: "24px", fontWeight: 800, color: "#0F172A", margin: 0, lineHeight: 1 }}>
+                    <div key={p.name} style={{ background: "white", borderRadius: "18px", border: "none", padding: "14px 16px", borderLeft: `3px solid ${p.colour}` }}>
+                      <p style={{ fontSize: "10px", fontWeight: 600, color: "#86868B", margin: "0 0 4px", textTransform: "uppercase" }}>{p.name}</p>
+                      <p style={{ fontSize: "24px", fontWeight: 600, color: "#1D1D1F", margin: 0, lineHeight: 1 }}>
                         £{p.spend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </p>
                       {p.clicks > 0 && (
-                        <p style={{ fontSize: "11px", color: "#94A3B8", margin: "4px 0 0" }}>
+                        <p style={{ fontSize: "11px", color: "#AEAEB2", margin: "4px 0 0" }}>
                           {p.clicks.toLocaleString()} clicks · £{(p.spend / p.clicks).toFixed(2)} CPC
                         </p>
                       )}
@@ -1822,7 +1802,7 @@ export default function Dashboard() {
 
             {/* === CHART + LIFECYCLE STAGES side by side === */}
             <div>
-            <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            <h2 style={{ fontSize: "13px", fontWeight: 600, color: "#86868B", margin: "0 0 10px" }}>
               Trends & Lifecycle
             </h2>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -1831,16 +1811,16 @@ export default function Dashboard() {
                 const metrics = [
                   { key: "contacts", label: "Contacts", colour: "#6366F1" },
                   { key: "prospects", label: "Prospects", colour: "#F59E0B" },
-                  { key: "leads", label: "Leads", colour: "#3B82F6" },
+                  { key: "leads", label: "Leads", colour: "#0071E3" },
                   { key: "visits", label: "Home Visits", colour: "#10B981" },
                   { key: "visitors", label: "Visitors", colour: "#8B5CF6" },
                 ];
                 const active = metrics.find((m) => m.key === selectedMetric) ?? metrics[0];
 
                 return (
-                  <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px", position: "relative" }}>
+                  <div style={{ background: "white", borderRadius: "18px", border: "none", padding: "14px", position: "relative" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                      <div style={{ display: "flex", gap: "2px", background: "#F1F5F9", borderRadius: "8px", padding: "3px" }}>
+                      <div style={{ display: "flex", gap: "2px", background: "#F5F5F7", borderRadius: "8px", padding: "3px" }}>
                         {metrics.map((m) => (
                           <button
                             key={m.key}
@@ -1862,13 +1842,13 @@ export default function Dashboard() {
                           </button>
                         ))}
                       </div>
-                      <p style={{ fontSize: "11px", color: "#94A3B8", margin: 0 }}>
+                      <p style={{ fontSize: "11px", color: "#AEAEB2", margin: 0 }}>
                         {timelineData.reduce((s, d) => s + d.count, 0).toLocaleString()} total
                       </p>
                     </div>
                     {timelineLoading && (
-                      <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 2, background: "rgba(255,255,255,0.85)", borderRadius: "10px", padding: "12px 24px" }}>
-                        <p style={{ fontSize: "13px", color: "#64748B", margin: 0, fontWeight: 600 }}>Loading...</p>
+                      <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 2, background: "rgba(255,255,255,0.85)", borderRadius: "18px", padding: "12px 24px" }}>
+                        <p style={{ fontSize: "13px", color: "#86868B", margin: 0, fontWeight: 600 }}>Loading...</p>
                       </div>
                     )}
                     <div style={{ width: "100%", height: 320, opacity: timelineLoading ? 0.3 : 1, transition: "opacity 0.2s" }}>
@@ -1895,7 +1875,7 @@ export default function Dashboard() {
                               labelFormatter={(d) => String(d)}
                               formatter={(value) => [Number(value).toLocaleString(), active.label]}
                               cursor={{ fill: "#F1F5F9" }}
-                              contentStyle={{ borderRadius: "10px", border: "1px solid #E2E8F0", fontSize: "12px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
+                              contentStyle={{ borderRadius: "18px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.08)", fontSize: "12px" }}
                             />
                             <Bar
                               dataKey="count"
@@ -1915,7 +1895,7 @@ export default function Dashboard() {
                           </BarChart>
                         </ResponsiveContainer>
                       ) : (
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#94A3B8", fontSize: "13px" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#AEAEB2", fontSize: "13px" }}>
                           Select a metric to see the trend
                         </div>
                       )}
@@ -1989,15 +1969,15 @@ export default function Dashboard() {
                   const weRate = weContacts > 0 ? (weVisits / weContacts) * 100 : 0;
 
                   return (
-                    <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px", display: "flex", flexDirection: "column", flex: 1, minHeight: "240px" }}>
+                    <div style={{ background: "white", borderRadius: "18px", border: "none", padding: "14px", display: "flex", flexDirection: "column", flex: 1, minHeight: "240px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-                        <p style={{ fontSize: "11px", fontWeight: 600, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: 0 }}>
                           Visit Conversion by Day
                         </p>
-                        <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>% that book a visit</span>
+                        <span style={{ fontSize: "10px", color: "#AEAEB2", fontWeight: 600 }}>% that book a visit</span>
                       </div>
-                      <p style={{ fontSize: "11px", color: "#64748B", margin: "0 0 10px", lineHeight: 1.4 }}>
-                        Showing <strong style={{ color: "#0F172A" }}>{segLabel}</strong>. The percentage of contacts entering on each day who go on to book a home visit.
+                      <p style={{ fontSize: "11px", color: "#86868B", margin: "0 0 10px", lineHeight: 1.4 }}>
+                        Showing <strong style={{ color: "#1D1D1F" }}>{segLabel}</strong>. The percentage of contacts entering on each day who go on to book a home visit.
                       </p>
 
                       {/* Segment selector */}
@@ -2009,9 +1989,9 @@ export default function Dashboard() {
                             width: "100%",
                             padding: "8px 10px",
                             fontSize: "12px",
-                            color: "#0F172A",
-                            background: "#F8FAFC",
-                            border: "1px solid #E2E8F0",
+                            color: "#1D1D1F",
+                            background: "#FAFAFA",
+                            border: "none", boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
                             borderRadius: "8px",
                             marginBottom: "10px",
                             cursor: "pointer",
@@ -2043,14 +2023,14 @@ export default function Dashboard() {
                       {/* Weekday vs weekend headline */}
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "12px" }}>
                         <div style={{ background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: "8px", padding: "8px 10px" }}>
-                          <p style={{ fontSize: "10px", color: "#047857", margin: 0, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>Weekday</p>
-                          <p style={{ fontSize: "20px", fontWeight: 800, color: "#059669", margin: "2px 0 0", lineHeight: 1.1 }}>{wdRate.toFixed(1)}%</p>
-                          <p style={{ fontSize: "10px", color: "#64748B", margin: "2px 0 0" }}>{wdVisits} of {wdContacts}</p>
+                          <p style={{ fontSize: "10px", color: "#047857", margin: 0, fontWeight: 600 }}>Weekday</p>
+                          <p style={{ fontSize: "20px", fontWeight: 600, color: "#059669", margin: "2px 0 0", lineHeight: 1.1 }}>{wdRate.toFixed(1)}%</p>
+                          <p style={{ fontSize: "10px", color: "#86868B", margin: "2px 0 0" }}>{wdVisits} of {wdContacts}</p>
                         </div>
                         <div style={{ background: weRate < wdRate ? "#FEF2F2" : "#ECFDF5", border: `1px solid ${weRate < wdRate ? "#FECACA" : "#A7F3D0"}`, borderRadius: "8px", padding: "8px 10px" }}>
-                          <p style={{ fontSize: "10px", color: weRate < wdRate ? "#B91C1C" : "#047857", margin: 0, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>Weekend</p>
-                          <p style={{ fontSize: "20px", fontWeight: 800, color: weRate < wdRate ? "#DC2626" : "#059669", margin: "2px 0 0", lineHeight: 1.1 }}>{weRate.toFixed(1)}%</p>
-                          <p style={{ fontSize: "10px", color: "#64748B", margin: "2px 0 0" }}>{weVisits} of {weContacts}</p>
+                          <p style={{ fontSize: "10px", color: weRate < wdRate ? "#B91C1C" : "#047857", margin: 0, fontWeight: 600 }}>Weekend</p>
+                          <p style={{ fontSize: "20px", fontWeight: 600, color: weRate < wdRate ? "#DC2626" : "#059669", margin: "2px 0 0", lineHeight: 1.1 }}>{weRate.toFixed(1)}%</p>
+                          <p style={{ fontSize: "10px", color: "#86868B", margin: "2px 0 0" }}>{weVisits} of {weContacts}</p>
                         </div>
                       </div>
                       {/* Per-day conversion bars */}
@@ -2063,7 +2043,7 @@ export default function Dashboard() {
                             <div key={day} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", height: "100%" }}>
                               <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", flex: 1, minHeight: 0 }}>
                                 {segContacts[i] > 0 && (
-                                  <span style={{ fontSize: "10px", fontWeight: 700, color: isBest ? "#059669" : "#0F172A", marginBottom: "2px" }}>
+                                  <span style={{ fontSize: "10px", fontWeight: 600, color: isBest ? "#059669" : "#0F172A", marginBottom: "2px" }}>
                                     {rates[i].toFixed(0)}%
                                   </span>
                                 )}
@@ -2097,27 +2077,27 @@ export default function Dashboard() {
             {/* === SITE VISITS — in-period count + 4-week forward calendar === */}
             {!isSourceFiltered && siteVisits && (
               <div>
-                <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                <h2 style={{ fontSize: "13px", fontWeight: 600, color: "#86868B", margin: "0 0 10px" }}>
                   Site Visits
                 </h2>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 3fr", gap: "10px" }}>
                   {/* In-period count */}
-                  <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "16px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-                    <p style={{ fontSize: "11px", fontWeight: 600, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  <div style={{ background: "white", borderRadius: "18px", border: "none", padding: "16px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                    <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: 0 }}>
                       Booked In Period
                     </p>
-                    <p style={{ fontSize: "11px", color: "#94A3B8", margin: "2px 0 8px" }}>
+                    <p style={{ fontSize: "11px", color: "#AEAEB2", margin: "2px 0 8px" }}>
                       Visits booked in this date range, excluding cancelled
                     </p>
-                    <p style={{ fontSize: "44px", fontWeight: 800, color: "#0F172A", margin: 0, lineHeight: 1 }}>
+                    <p style={{ fontSize: "44px", fontWeight: 600, color: "#1D1D1F", margin: 0, lineHeight: 1 }}>
                       {siteVisits.inPeriod.toLocaleString()}
                     </p>
                     {siteVisits.cancelled > 0 && (
                       <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #F1F5F9" }}>
-                        <p style={{ fontSize: "20px", fontWeight: 800, color: "#DC2626", margin: 0, lineHeight: 1 }}>
+                        <p style={{ fontSize: "20px", fontWeight: 600, color: "#DC2626", margin: 0, lineHeight: 1 }}>
                           {siteVisits.cancelled.toLocaleString()}
                         </p>
-                        <p style={{ fontSize: "11px", color: "#64748B", margin: "2px 0 0", lineHeight: 1.3 }}>
+                        <p style={{ fontSize: "11px", color: "#86868B", margin: "2px 0 0", lineHeight: 1.3 }}>
                           cancelled
                         </p>
                       </div>
@@ -2125,19 +2105,19 @@ export default function Dashboard() {
                   </div>
 
                   {/* 4-week forward calendar — independent of selected date range */}
-                  <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "16px" }}>
+                  <div style={{ background: "white", borderRadius: "18px", border: "none", padding: "16px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "12px" }}>
-                      <p style={{ fontSize: "11px", fontWeight: 600, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                      <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: 0 }}>
                         Upcoming Calendar
                       </p>
-                      <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>
+                      <span style={{ fontSize: "10px", color: "#AEAEB2", fontWeight: 600 }}>
                         Independent of date range
                       </span>
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px" }}>
                       {siteVisits.upcoming.map((wk, i) => {
-                        const colours = ["#3B82F6", "#6366F1", "#8B5CF6", "#A855F7"];
-                        const colour = colours[i] ?? "#3B82F6";
+                        const colours = ["#0071E3", "#6366F1", "#8B5CF6", "#A855F7"];
+                        const colour = colours[i] ?? "#0071E3";
                         const fmtDay = (s: string) => {
                           const [, m, d] = s.split("-");
                           return `${parseInt(d, 10)}/${parseInt(m, 10)}`;
@@ -2148,7 +2128,7 @@ export default function Dashboard() {
                             style={{
                               background: `${colour}08`,
                               border: `1px solid ${colour}30`,
-                              borderRadius: "10px",
+                              borderRadius: "18px",
                               padding: "12px 10px",
                               display: "flex",
                               flexDirection: "column",
@@ -2175,22 +2155,22 @@ export default function Dashboard() {
                                   }}
                                   title={`Goal: ${goal} visits`}
                                 >
-                                  <span style={{ fontSize: "16px", fontWeight: 800, color: ringColour, lineHeight: 1 }}>
+                                  <span style={{ fontSize: "16px", fontWeight: 600, color: ringColour, lineHeight: 1 }}>
                                     {goal}
                                   </span>
                                 </div>
                               );
                             })()}
-                            <p style={{ fontSize: "10px", fontWeight: 700, color: colour, margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                            <p style={{ fontSize: "10px", fontWeight: 600, color: colour, margin: 0 }}>
                               {wk.label}
                             </p>
-                            <p style={{ fontSize: "10px", color: "#94A3B8", margin: "2px 0 6px" }}>
+                            <p style={{ fontSize: "10px", color: "#AEAEB2", margin: "2px 0 6px" }}>
                               {fmtDay(wk.weekStart)} – {fmtDay(wk.weekEnd)}
                             </p>
-                            <p style={{ fontSize: "32px", fontWeight: 800, color: "#0F172A", margin: 0, lineHeight: 1 }}>
+                            <p style={{ fontSize: "32px", fontWeight: 600, color: "#1D1D1F", margin: 0, lineHeight: 1 }}>
                               {wk.count.toLocaleString()}
                             </p>
-                            <p style={{ fontSize: "10px", color: "#64748B", margin: "4px 0 0" }}>
+                            <p style={{ fontSize: "10px", color: "#86868B", margin: "4px 0 0" }}>
                               {wk.count === 1 ? "visit" : "visits"}
                             </p>
                             {wk.cancelled > 0 && (
@@ -2224,12 +2204,12 @@ export default function Dashboard() {
                     return { bg: "#FEF2F2", border: "#FECACA", text: "#DC2626" };
                   };
                   return (
-                    <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "16px", marginTop: "10px" }}>
+                    <div style={{ background: "white", borderRadius: "18px", border: "none", padding: "16px", marginTop: "10px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "12px" }}>
-                        <p style={{ fontSize: "11px", fontWeight: 600, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: 0 }}>
                           Salesman Workload
                         </p>
-                        <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>
+                        <span style={{ fontSize: "10px", color: "#AEAEB2", fontWeight: 600 }}>
                           Goal: 10 / week (Brian: 6)
                         </span>
                       </div>
@@ -2237,14 +2217,14 @@ export default function Dashboard() {
                         {/* Header row */}
                         <div />
                         {siteVisits.upcoming.map((wk) => (
-                          <div key={wk.label} style={{ fontSize: "10px", fontWeight: 700, color: "#64748B", textAlign: "center", textTransform: "uppercase", letterSpacing: "0.5px", paddingBottom: "4px" }}>
+                          <div key={wk.label} style={{ fontSize: "10px", fontWeight: 600, color: "#86868B", textAlign: "center", paddingBottom: "4px" }}>
                             {wk.label}
                           </div>
                         ))}
                         {/* One row per salesman */}
                         {SALESMEN.map((name) => (
                           <React.Fragment key={name}>
-                            <div style={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", display: "flex", alignItems: "center" }}>
+                            <div style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", display: "flex", alignItems: "center" }}>
                               {name}
                             </div>
                             {siteVisits.upcoming.map((wk) => {
@@ -2268,14 +2248,14 @@ export default function Dashboard() {
                                   }}
                                 >
                                   <div style={{ display: "flex", alignItems: "baseline", gap: "3px" }}>
-                                    <span style={{ fontSize: "20px", fontWeight: 800, color: c.text, lineHeight: 1 }}>
+                                    <span style={{ fontSize: "20px", fontWeight: 600, color: c.text, lineHeight: 1 }}>
                                       {n}
                                     </span>
-                                    <span style={{ fontSize: "11px", color: "#94A3B8", fontWeight: 600 }}>
+                                    <span style={{ fontSize: "11px", color: "#AEAEB2", fontWeight: 600 }}>
                                       / {goal}
                                     </span>
                                   </div>
-                                  <div style={{ width: "100%", height: "3px", background: "#F1F5F9", borderRadius: "2px", marginTop: "6px", overflow: "hidden" }}>
+                                  <div style={{ width: "100%", height: "3px", background: "#F5F5F7", borderRadius: "2px", marginTop: "6px", overflow: "hidden" }}>
                                     <div style={{ width: `${pct}%`, height: "100%", background: c.text, transition: "width 0.3s ease" }} />
                                   </div>
                                 </div>
@@ -2293,15 +2273,15 @@ export default function Dashboard() {
             {/* === INSTALLS — 3 month forward calendar (deals: installation_date) === */}
             {!isSourceFiltered && installs && installs.months.length > 0 && (
               <div>
-                <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                <h2 style={{ fontSize: "13px", fontWeight: 600, color: "#86868B", margin: "0 0 10px" }}>
                   Installs
                 </h2>
-                <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "16px" }}>
+                <div style={{ background: "white", borderRadius: "18px", border: "none", padding: "16px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "12px" }}>
-                    <p style={{ fontSize: "11px", fontWeight: 600, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: 0 }}>
                       Upcoming Installs
                     </p>
-                    <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>
+                    <span style={{ fontSize: "10px", color: "#AEAEB2", fontWeight: 600 }}>
                       Independent of date range · Excludes lost deals
                     </span>
                   </div>
@@ -2318,7 +2298,7 @@ export default function Dashboard() {
                           style={{
                             background: `${colour}08`,
                             border: `1px solid ${colour}30`,
-                            borderRadius: "10px",
+                            borderRadius: "18px",
                             padding: "16px 12px",
                             display: "flex",
                             flexDirection: "column",
@@ -2341,25 +2321,25 @@ export default function Dashboard() {
                               }}
                               title={`Goal: ${goal} installs`}
                             >
-                              <span style={{ fontSize: "18px", fontWeight: 800, color: ringColour, lineHeight: 1 }}>
+                              <span style={{ fontSize: "18px", fontWeight: 600, color: ringColour, lineHeight: 1 }}>
                                 {goal}
                               </span>
                             </div>
                           )}
-                          <p style={{ fontSize: "11px", fontWeight: 700, color: colour, margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                          <p style={{ fontSize: "11px", fontWeight: 600, color: colour, margin: 0 }}>
                             {mo.label}
                           </p>
-                          <p style={{ fontSize: "10px", color: "#94A3B8", margin: "2px 0 8px" }}>
+                          <p style={{ fontSize: "10px", color: "#AEAEB2", margin: "2px 0 8px" }}>
                             {mo.monthName} {mo.year}
                           </p>
-                          <p style={{ fontSize: "40px", fontWeight: 800, color: "#0F172A", margin: 0, lineHeight: 1 }}>
+                          <p style={{ fontSize: "40px", fontWeight: 600, color: "#1D1D1F", margin: 0, lineHeight: 1 }}>
                             {mo.count.toLocaleString()}
                           </p>
-                          <p style={{ fontSize: "11px", color: "#64748B", margin: "4px 0 0" }}>
+                          <p style={{ fontSize: "11px", color: "#86868B", margin: "4px 0 0" }}>
                             {mo.count === 1 ? "install" : "installs"}
                           </p>
                           {goal != null && goal > 0 && (
-                            <p style={{ fontSize: "10px", color: hit ? "#059669" : "#DC2626", margin: "6px 0 0", fontWeight: 700 }}>
+                            <p style={{ fontSize: "10px", color: hit ? "#059669" : "#DC2626", margin: "6px 0 0", fontWeight: 600 }}>
                               {hit ? `+${mo.count - goal} over goal` : `${goal - mo.count} below goal`}
                             </p>
                           )}
@@ -2375,10 +2355,10 @@ export default function Dashboard() {
             {!isSourceFiltered && outreachFeedback && outreachFeedback.feedback.length > 0 && (
               <div>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "10px" }}>
-                  <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  <h2 style={{ fontSize: "13px", fontWeight: 600, color: "#86868B", margin: 0 }}>
                     Initial Outreach Feedback
                   </h2>
-                  <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>
+                  <span style={{ fontSize: "10px", color: "#AEAEB2", fontWeight: 600 }}>
                     {outreachFeedback.total} call{outreachFeedback.total !== 1 ? "s" : ""} with feedback in this period
                   </span>
                 </div>
@@ -2395,8 +2375,8 @@ export default function Dashboard() {
                       const l = label.toLowerCase();
                       if (l.includes("home visit booked")) return { bar: "#10B981", text: "#059669" };
                       if (l.includes("grant")) return { bar: "#10B981", text: "#059669" };
-                      if (l.includes("discussing with family")) return { bar: "#3B82F6", text: "#2563EB" };
-                      if (l.includes("timing") || l.includes("not yet ready")) return { bar: "#3B82F6", text: "#2563EB" };
+                      if (l.includes("discussing with family")) return { bar: "#0071E3", text: "#2563EB" };
+                      if (l.includes("timing") || l.includes("not yet ready")) return { bar: "#0071E3", text: "#2563EB" };
                       if (l.includes("brochure only")) return { bar: "#F59E0B", text: "#B45309" };
                       if (l.includes("too expensive")) return { bar: "#F59E0B", text: "#B45309" };
                       if (l.includes("competitor")) return { bar: "#F59E0B", text: "#B45309" };
@@ -2410,8 +2390,8 @@ export default function Dashboard() {
                     };
                     const maxCount = Math.max(...outreachFeedback.feedback.map((f) => f.count), 1);
                     return (
-                      <div key={dim} style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px" }}>
-                        <p style={{ fontSize: "11px", fontWeight: 700, color: "#64748B", margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                      <div key={dim} style={{ background: "white", borderRadius: "18px", border: "none", padding: "14px" }}>
+                        <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: "0 0 12px" }}>
                           {titles[dim]}
                         </p>
                         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -2422,23 +2402,23 @@ export default function Dashboard() {
                             return (
                               <div key={f.value}>
                                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "3px" }}>
-                                  <span style={{ fontSize: "12px", fontWeight: 700, color: c.text }}>
+                                  <span style={{ fontSize: "12px", fontWeight: 600, color: c.text }}>
                                     {f.label}
                                   </span>
-                                  <span style={{ fontSize: "13px", fontWeight: 800, color: "#0F172A", fontVariantNumeric: "tabular-nums" }}>
+                                  <span style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", fontVariantNumeric: "tabular-nums" }}>
                                     {f.count}
                                   </span>
                                 </div>
-                                <div style={{ background: "#F1F5F9", borderRadius: "3px", height: "4px", overflow: "hidden" }}>
+                                <div style={{ background: "#F5F5F7", borderRadius: "3px", height: "4px", overflow: "hidden" }}>
                                   <div style={{ width: `${pct}%`, height: "100%", background: c.bar, borderRadius: "3px", transition: "width 0.3s ease" }} />
                                 </div>
                                 {top3.length > 0 && (
-                                  <p style={{ fontSize: "10px", color: "#64748B", margin: "4px 0 0", lineHeight: 1.3 }}>
+                                  <p style={{ fontSize: "10px", color: "#86868B", margin: "4px 0 0", lineHeight: 1.3 }}>
                                     {top3.map((s, i) => (
                                       <span key={s.value}>
-                                        {i > 0 && <span style={{ color: "#CBD5E1" }}> · </span>}
+                                        {i > 0 && <span style={{ color: "#D2D2D7" }}> · </span>}
                                         <span>{s.label}</span>{" "}
-                                        <strong style={{ color: "#334155" }}>{s.count}</strong>
+                                        <strong style={{ color: "#3A3A3C" }}>{s.count}</strong>
                                       </span>
                                     ))}
                                   </p>
@@ -2533,7 +2513,7 @@ export default function Dashboard() {
                 if (step === "Home Visit") return "#0EA5E9";
                 if (step.includes("Cancelled")) return "#EF4444";
                 if (step.includes("Phone") || step.includes("Call")) return "#F59E0B";
-                if (step === "We Emailed") return "#3B82F6";
+                if (step === "We Emailed") return "#0071E3";
                 if (step === "They Emailed") return "#06B6D4";
                 if (step.startsWith("Waiting")) return "#F97316";
                 return "#8B5CF6";
@@ -2544,9 +2524,9 @@ export default function Dashboard() {
                 fontWeight: 600,
                 padding: "3px 10px",
                 borderRadius: "20px",
-                border: active ? "1px solid #2563eb" : "1px solid #E2E8F0",
+                border: active ? "1px solid #0071E3" : "1px solid rgba(0,0,0,0.06)",
                 background: active ? "#EFF6FF" : "white",
-                color: active ? "#2563eb" : "#64748B",
+                color: active ? "#0071E3" : "#64748B",
                 cursor: "pointer",
                 whiteSpace: "nowrap",
               });
@@ -2565,7 +2545,7 @@ export default function Dashboard() {
                             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px", flex: 1, minWidth: 0 }}>
                               {j.steps.map((step, si) => (
                                 <span key={si} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                                  {si > 0 && <span style={{ color: "#CBD5E1", fontSize: "11px", fontWeight: 700 }}>→</span>}
+                                  {si > 0 && <span style={{ color: "#D2D2D7", fontSize: "11px", fontWeight: 600 }}>→</span>}
                                   <span style={{
                                     fontSize: "11px",
                                     fontWeight: 600,
@@ -2580,11 +2560,11 @@ export default function Dashboard() {
                                 </span>
                               ))}
                             </div>
-                            <span style={{ fontSize: "14px", fontWeight: 800, color: "#0F172A", marginLeft: "12px", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                            <span style={{ fontSize: "14px", fontWeight: 600, color: "#1D1D1F", marginLeft: "12px", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
                               {j.count}
                             </span>
                           </div>
-                          <div style={{ background: "#F1F5F9", borderRadius: "3px", height: "3px", overflow: "hidden" }}>
+                          <div style={{ background: "#F5F5F7", borderRadius: "3px", height: "3px", overflow: "hidden" }}>
                             <div style={{ width: `${pct}%`, height: "100%", background: barColour, borderRadius: "3px", transition: "width 0.3s ease" }} />
                           </div>
                         </div>
@@ -2597,7 +2577,7 @@ export default function Dashboard() {
                         style={{
                           fontSize: "11px",
                           fontWeight: 600,
-                          color: "#2563eb",
+                          color: "#0071E3",
                           background: "#EFF6FF",
                           border: "1px solid #BFDBFE",
                           borderRadius: "8px",
@@ -2617,10 +2597,10 @@ export default function Dashboard() {
               return (
                 <div>
                   <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "10px" }}>
-                    <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    <h2 style={{ fontSize: "13px", fontWeight: 600, color: "#86868B", margin: 0 }}>
                       Customer Journeys
                     </h2>
-                    <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>
+                    <span style={{ fontSize: "10px", color: "#AEAEB2", fontWeight: 600 }}>
                       {filtered.length} contact{filtered.length !== 1 ? "s" : ""}{isFiltered ? ` (of ${customerJourneys.totalContacts})` : ""}
                     </span>
                   </div>
@@ -2683,20 +2663,20 @@ export default function Dashboard() {
                         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                           {items.map((t) => (
                             <div key={t.name} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                              <span style={{ fontSize: "11px", color: "#334155", fontWeight: 500, width: "110px", flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.name}>
+                              <span style={{ fontSize: "11px", color: "#3A3A3C", fontWeight: 500, width: "110px", flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.name}>
                                 {t.name}
                               </span>
-                              <div style={{ flex: 1, background: "#F1F5F9", borderRadius: "3px", height: "14px", overflow: "hidden" }}>
+                              <div style={{ flex: 1, background: "#F5F5F7", borderRadius: "3px", height: "14px", overflow: "hidden" }}>
                                 <div style={{ width: `${(t[field] / maxVal) * 100}%`, height: "100%", background: colour, borderRadius: "3px", transition: "width 0.3s", minWidth: t[field] > 0 ? "2px" : "0" }} />
                               </div>
-                              <span style={{ fontSize: "11px", fontWeight: 700, color: "#0F172A", width: "24px", textAlign: "right", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
+                              <span style={{ fontSize: "11px", fontWeight: 600, color: "#1D1D1F", width: "24px", textAlign: "right", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
                                 {t[field]}
                               </span>
                               <span
                                 title={`${t.convRate}% of contacts with this touchpoint reached Home Visit or Won`}
                                 style={{
                                   fontSize: "9px",
-                                  fontWeight: 700,
+                                  fontWeight: 600,
                                   color: convRateColour(t.convRate),
                                   background: `${convRateColour(t.convRate)}12`,
                                   borderRadius: "4px",
@@ -2710,20 +2690,20 @@ export default function Dashboard() {
                             </div>
                           ))}
                           {items.length === 0 && (
-                            <p style={{ fontSize: "11px", color: "#94A3B8", margin: 0 }}>None</p>
+                            <p style={{ fontSize: "11px", color: "#AEAEB2", margin: 0 }}>None</p>
                           )}
                         </div>
                       );
                     };
 
                     return (
-                      <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px" }}>
+                      <div style={{ background: "white", borderRadius: "18px", border: "none", padding: "14px" }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-                          <p style={{ fontSize: "11px", fontWeight: 700, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                          <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: 0 }}>
                             Touchpoint Attribution
                           </p>
                           <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "9px", fontWeight: 600 }}>
-                            <span style={{ color: "#64748B" }}>Conv. rate:</span>
+                            <span style={{ color: "#86868B" }}>Conv. rate:</span>
                             <span style={{ color: "#059669" }}>30%+</span>
                             <span style={{ color: "#F59E0B" }}>15-29%</span>
                             <span style={{ color: "#DC2626" }}>&lt;15%</span>
@@ -2740,7 +2720,7 @@ export default function Dashboard() {
                             <div key={ci} style={{ flex: 1, display: "flex", alignItems: "center" }}>
                               <div style={{
                                 flex: 1,
-                                background: "#F8FAFC",
+                                background: "#FAFAFA",
                                 border: "1px dashed #CBD5E1",
                                 borderRadius: ci === 0 ? "8px 0 0 8px" : ci === 2 ? "0 8px 8px 0" : "0",
                                 padding: "8px 12px",
@@ -2749,20 +2729,20 @@ export default function Dashboard() {
                                 justifyContent: "center",
                                 gap: "8px",
                               }}>
-                                <span style={{ fontSize: "12px", fontWeight: 600, color: "#334155" }}>{col.label}</span>
+                                <span style={{ fontSize: "12px", fontWeight: 600, color: "#3A3A3C" }}>{col.label}</span>
                                 <span style={{
                                   fontSize: "11px",
-                                  fontWeight: 700,
+                                  fontWeight: 600,
                                   color: "white",
                                   background: col.colour,
-                                  borderRadius: "10px",
+                                  borderRadius: "18px",
                                   padding: "1px 8px",
                                 }}>
                                   {col.pct}%
                                 </span>
                               </div>
                               {ci < 2 && (
-                                <span style={{ color: "#CBD5E1", fontSize: "16px", lineHeight: 1, margin: "0 -1px" }}>▸</span>
+                                <span style={{ color: "#D2D2D7", fontSize: "16px", lineHeight: 1, margin: "0 -1px" }}>▸</span>
                               )}
                             </div>
                           ))}
@@ -2780,31 +2760,31 @@ export default function Dashboard() {
 
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                     {/* With Home Visit */}
-                    <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <div style={{ background: "white", borderRadius: "18px", border: "none", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
                       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "4px" }}>
-                        <p style={{ fontSize: "11px", fontWeight: 700, color: "#0EA5E9", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        <p style={{ fontSize: "11px", fontWeight: 600, color: "#0EA5E9", margin: 0 }}>
                           Reached Home Visit
                         </p>
-                        <span style={{ fontSize: "13px", fontWeight: 800, color: "#0F172A" }}>
+                        <span style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F" }}>
                           {withVisitTotal}
                         </span>
                       </div>
                       {withVisit.length > 0 ? renderJourneyList(withVisit, "#0EA5E9", journeyShowVisit, () => setJourneyShowVisit((n) => n + 10)) : (
-                        <p style={{ fontSize: "12px", color: "#94A3B8", margin: 0 }}>None{isFiltered ? " matching filters" : " in this period"}</p>
+                        <p style={{ fontSize: "12px", color: "#AEAEB2", margin: 0 }}>None{isFiltered ? " matching filters" : " in this period"}</p>
                       )}
                     </div>
                     {/* Without Home Visit */}
-                    <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <div style={{ background: "white", borderRadius: "18px", border: "none", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
                       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "4px" }}>
-                        <p style={{ fontSize: "11px", fontWeight: 700, color: "#8B5CF6", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        <p style={{ fontSize: "11px", fontWeight: 600, color: "#8B5CF6", margin: 0 }}>
                           Not Yet Reached Home Visit
                         </p>
-                        <span style={{ fontSize: "13px", fontWeight: 800, color: "#0F172A" }}>
+                        <span style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F" }}>
                           {withoutVisitTotal}
                         </span>
                       </div>
                       {withoutVisit.length > 0 ? renderJourneyList(withoutVisit, "#8B5CF6", journeyShowNoVisit, () => setJourneyShowNoVisit((n) => n + 10)) : (
-                        <p style={{ fontSize: "12px", color: "#94A3B8", margin: 0 }}>None{isFiltered ? " matching filters" : " in this period"}</p>
+                        <p style={{ fontSize: "12px", color: "#AEAEB2", margin: 0 }}>None{isFiltered ? " matching filters" : " in this period"}</p>
                       )}
                     </div>
                   </div>
@@ -2820,17 +2800,17 @@ export default function Dashboard() {
               const reviewsCols = hasReviews && hasSocial ? "1fr 1fr" : "1fr";
               return (
             <div>
-            <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            <h2 style={{ fontSize: "13px", fontWeight: 600, color: "#86868B", margin: "0 0 10px" }}>
               Reviews & Social
             </h2>
             <div style={{ display: "grid", gridTemplateColumns: reviewsCols, gap: "10px" }}>
               {/* REVIEWS */}
               {reviews.length > 0 && reviews.some((r) => r.total > 0) && (
-                <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "12px" }}>
+                <div style={{ background: "white", borderRadius: "18px", border: "none", padding: "12px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "8px" }}>
-                    <p style={{ fontSize: "11px", fontWeight: 600, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>Reviews</p>
-                    <p style={{ fontSize: "12px", color: "#94A3B8", margin: 0 }}>
-                      <span style={{ fontWeight: 800, color: "#0F172A", fontSize: "15px" }}>{reviewsTotal.toLocaleString()}</span> total
+                    <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: 0 }}>Reviews</p>
+                    <p style={{ fontSize: "12px", color: "#AEAEB2", margin: 0 }}>
+                      <span style={{ fontWeight: 600, color: "#1D1D1F", fontSize: "15px" }}>{reviewsTotal.toLocaleString()}</span> total
                     </p>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: `repeat(${reviews.filter((r) => r.total > 0).length}, 1fr)`, gap: "6px" }}>
@@ -2838,14 +2818,14 @@ export default function Dashboard() {
                       <a key={r.name} href={r.url || undefined} target="_blank" rel="noopener noreferrer"
                         style={{ textDecoration: "none", background: `${r.colour}08`, borderRadius: "8px", border: `1px solid ${r.colour}25`, padding: "8px 10px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2px" }}>
-                          <span style={{ fontSize: "11px", fontWeight: 700, color: r.colour }}>{r.name}</span>
-                          {r.rating > 0 && <span style={{ fontSize: "10px", fontWeight: 700, color: "#0F172A" }}>★ {r.rating}</span>}
+                          <span style={{ fontSize: "11px", fontWeight: 600, color: r.colour }}>{r.name}</span>
+                          {r.rating > 0 && <span style={{ fontSize: "10px", fontWeight: 600, color: "#1D1D1F" }}>★ {r.rating}</span>}
                         </div>
                         <div style={{ display: "flex", alignItems: "baseline", gap: "4px" }}>
-                          <span style={{ fontSize: "18px", fontWeight: 800, color: "#0F172A", lineHeight: 1 }}>{r.total.toLocaleString()}</span>
-                          <span style={{ fontSize: "9px", color: "#64748B" }}>reviews</span>
+                          <span style={{ fontSize: "18px", fontWeight: 600, color: "#1D1D1F", lineHeight: 1 }}>{r.total.toLocaleString()}</span>
+                          <span style={{ fontSize: "9px", color: "#86868B" }}>reviews</span>
                           {r.increase !== null && r.increase > 0 && (
-                            <span style={{ fontSize: "9px", fontWeight: 700, color: "#059669", background: "#ECFDF5", borderRadius: "4px", padding: "1px 5px" }}>+{r.increase}</span>
+                            <span style={{ fontSize: "9px", fontWeight: 600, color: "#059669", background: "#ECFDF5", borderRadius: "4px", padding: "1px 5px" }}>+{r.increase}</span>
                           )}
                         </div>
                       </a>
@@ -2856,11 +2836,11 @@ export default function Dashboard() {
 
               {/* SOCIAL */}
               {social.length > 0 && social.some((s) => s.total > 0) && (
-                <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "12px" }}>
+                <div style={{ background: "white", borderRadius: "18px", border: "none", padding: "12px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "8px" }}>
-                    <p style={{ fontSize: "11px", fontWeight: 600, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>Social Followers</p>
-                    <p style={{ fontSize: "12px", color: "#94A3B8", margin: 0 }}>
-                      <span style={{ fontWeight: 800, color: "#0F172A", fontSize: "15px" }}>{socialTotal.toLocaleString()}</span> total
+                    <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: 0 }}>Social Followers</p>
+                    <p style={{ fontSize: "12px", color: "#AEAEB2", margin: 0 }}>
+                      <span style={{ fontWeight: 600, color: "#1D1D1F", fontSize: "15px" }}>{socialTotal.toLocaleString()}</span> total
                     </p>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: `repeat(${social.filter((s) => s.total > 0).length}, 1fr)`, gap: "6px" }}>
@@ -2868,14 +2848,14 @@ export default function Dashboard() {
                       <a key={s.name} href={s.url || undefined} target="_blank" rel="noopener noreferrer"
                         style={{ textDecoration: "none", background: `${s.colour}08`, borderRadius: "8px", border: `1px solid ${s.colour}25`, padding: "8px 10px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2px" }}>
-                          <span style={{ fontSize: "11px", fontWeight: 700, color: s.colour }}>{s.name}</span>
-                          {!s.auto && <span style={{ fontSize: "8px", color: "#94A3B8", background: "#F1F5F9", borderRadius: "3px", padding: "1px 4px" }}>manual</span>}
+                          <span style={{ fontSize: "11px", fontWeight: 600, color: s.colour }}>{s.name}</span>
+                          {!s.auto && <span style={{ fontSize: "8px", color: "#AEAEB2", background: "#F5F5F7", borderRadius: "3px", padding: "1px 4px" }}>manual</span>}
                         </div>
                         <div style={{ display: "flex", alignItems: "baseline", gap: "4px" }}>
-                          <span style={{ fontSize: "18px", fontWeight: 800, color: "#0F172A", lineHeight: 1 }}>{s.total.toLocaleString()}</span>
-                          <span style={{ fontSize: "9px", color: "#64748B" }}>followers</span>
+                          <span style={{ fontSize: "18px", fontWeight: 600, color: "#1D1D1F", lineHeight: 1 }}>{s.total.toLocaleString()}</span>
+                          <span style={{ fontSize: "9px", color: "#86868B" }}>followers</span>
                           {s.increase !== null && s.increase > 0 && (
-                            <span style={{ fontSize: "9px", fontWeight: 700, color: "#059669", background: "#ECFDF5", borderRadius: "4px", padding: "1px 5px" }}>+{s.increase.toLocaleString()}</span>
+                            <span style={{ fontSize: "9px", fontWeight: 600, color: "#059669", background: "#ECFDF5", borderRadius: "4px", padding: "1px 5px" }}>+{s.increase.toLocaleString()}</span>
                           )}
                         </div>
                       </a>
@@ -2906,10 +2886,10 @@ export default function Dashboard() {
           background: aiLoading ? "#A78BFA" : "#8B5CF6",
           color: "white",
           border: "none",
-          borderRadius: "14px",
+          borderRadius: "20px",
           padding: "12px 20px",
           fontSize: "13px",
-          fontWeight: 700,
+          fontWeight: 600,
           cursor: aiLoading ? "not-allowed" : "pointer",
           boxShadow: "0 4px 20px rgba(139, 92, 246, 0.4)",
           display: "flex",
@@ -2933,17 +2913,17 @@ export default function Dashboard() {
             bottom: 0,
             width: "440px",
             zIndex: 1001,
-            background: "#F8FAFC",
+            background: "#FAFAFA",
             boxShadow: "-8px 0 30px rgba(0,0,0,0.12)",
             display: "flex",
             flexDirection: "column",
             animation: "slideIn 0.25s ease",
           }}>
             {/* Header */}
-            <div style={{ padding: "20px 24px", borderBottom: "1px solid #E2E8F0", background: "white", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(0,0,0,0.06)", background: "white", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
-                <h2 style={{ fontSize: "16px", fontWeight: 700, color: "#0F172A", margin: 0 }}>AI Marketing Insights</h2>
-                <p style={{ fontSize: "11px", color: "#94A3B8", margin: "2px 0 0" }}>Powered by Claude</p>
+                <h2 style={{ fontSize: "16px", fontWeight: 600, color: "#1D1D1F", margin: 0 }}>AI Marketing Insights</h2>
+                <p style={{ fontSize: "11px", color: "#AEAEB2", margin: "2px 0 0" }}>Powered by Claude</p>
               </div>
               <div style={{ display: "flex", gap: "8px" }}>
                 <button
@@ -2955,7 +2935,7 @@ export default function Dashboard() {
                 </button>
                 <button
                   onClick={() => setAiOpen(false)}
-                  style={{ background: "#F1F5F9", border: "none", borderRadius: "8px", width: "32px", height: "32px", cursor: "pointer", fontSize: "16px", color: "#64748B", display: "flex", alignItems: "center", justifyContent: "center" }}
+                  style={{ background: "#F5F5F7", border: "none", borderRadius: "8px", width: "32px", height: "32px", cursor: "pointer", fontSize: "16px", color: "#86868B", display: "flex", alignItems: "center", justifyContent: "center" }}
                 >
                   ✕
                 </button>
@@ -2967,7 +2947,7 @@ export default function Dashboard() {
               {aiLoading && (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 0", gap: "12px" }}>
                   <div style={{ width: "32px", height: "32px", border: "3px solid #E2E8F0", borderTop: "3px solid #8B5CF6", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-                  <p style={{ fontSize: "13px", color: "#64748B", margin: 0 }}>Analysing your marketing data...</p>
+                  <p style={{ fontSize: "13px", color: "#86868B", margin: 0 }}>Analysing your marketing data...</p>
                 </div>
               )}
               {!aiLoading && aiInsights.map((insight, i) => {
@@ -2977,20 +2957,20 @@ export default function Dashboard() {
                 return (
                   <div key={i} style={{
                     background: "white",
-                    borderRadius: "12px",
-                    border: "1px solid #E2E8F0",
+                    borderRadius: "18px",
+                    border: "none", boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
                     padding: "16px",
                     display: "flex",
                     flexDirection: "column",
                     gap: "12px",
                   }}>
-                    <div style={{ fontSize: "13px", color: "#334155", lineHeight: 1.6 }}>
-                      <span style={{ fontSize: "11px", fontWeight: 700, color: "#8B5CF6", background: "#F5F3FF", borderRadius: "4px", padding: "2px 6px", marginRight: "8px" }}>
+                    <div style={{ fontSize: "13px", color: "#3A3A3C", lineHeight: 1.6 }}>
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: "#8B5CF6", background: "#F5F3FF", borderRadius: "4px", padding: "2px 6px", marginRight: "8px" }}>
                         {i + 1}
                       </span>
                       {parts.map((part, j) =>
                         j % 2 === 1
-                          ? <strong key={j} style={{ color: "#0F172A" }}>{part}</strong>
+                          ? <strong key={j} style={{ color: "#1D1D1F" }}>{part}</strong>
                           : <span key={j}>{part}</span>
                       )}
                     </div>
@@ -3026,9 +3006,9 @@ export default function Dashboard() {
                           flex: 1,
                           fontSize: "12px",
                           fontWeight: 600,
-                          color: "#64748B",
-                          background: "#F8FAFC",
-                          border: "1px solid #E2E8F0",
+                          color: "#86868B",
+                          background: "#FAFAFA",
+                          border: "none", boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
                           borderRadius: "8px",
                           padding: "8px",
                           cursor: "pointer",
@@ -3056,7 +3036,7 @@ export default function Dashboard() {
                               setAiRejectingIdx(null);
                             }
                           }}
-                          style={{ flex: 1, fontSize: "12px", border: "1px solid #E2E8F0", borderRadius: "6px", padding: "6px 10px", background: "#F8FAFC" }}
+                          style={{ flex: 1, fontSize: "12px", border: "none", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", borderRadius: "6px", padding: "6px 10px", background: "#FAFAFA" }}
                         />
                         <button
                           onClick={() => {
@@ -3091,23 +3071,23 @@ export default function Dashboard() {
 
               {/* Chat messages */}
               {aiChatMessages.length > 0 && (
-                <div style={{ borderTop: "1px solid #E2E8F0", paddingTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                <div style={{ borderTop: "1px solid rgba(0,0,0,0.06)", paddingTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
                   {aiChatMessages.map((msg, i) => (
                     <div key={i} style={{
                       background: msg.role === "user" ? "#EFF6FF" : "white",
                       border: `1px solid ${msg.role === "user" ? "#BFDBFE" : "#E2E8F0"}`,
-                      borderRadius: "10px",
+                      borderRadius: "18px",
                       padding: "10px 14px",
                       alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
                       maxWidth: "90%",
                     }}>
-                      <p style={{ fontSize: "12px", color: "#334155", margin: 0, lineHeight: 1.5 }}>{msg.text}</p>
+                      <p style={{ fontSize: "12px", color: "#3A3A3C", margin: 0, lineHeight: 1.5 }}>{msg.text}</p>
                     </div>
                   ))}
                   {aiChatLoading && (
                     <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px" }}>
                       <div style={{ width: "12px", height: "12px", border: "2px solid #E2E8F0", borderTop: "2px solid #8B5CF6", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-                      <span style={{ fontSize: "11px", color: "#94A3B8" }}>Thinking...</span>
+                      <span style={{ fontSize: "11px", color: "#AEAEB2" }}>Thinking...</span>
                     </div>
                   )}
                 </div>
@@ -3115,7 +3095,7 @@ export default function Dashboard() {
             </div>
 
             {/* Chat input */}
-            <div style={{ padding: "12px 24px 16px", borderTop: "1px solid #E2E8F0", background: "white" }}>
+            <div style={{ padding: "12px 24px 16px", borderTop: "1px solid rgba(0,0,0,0.06)", background: "white" }}>
               <div style={{ display: "flex", gap: "8px" }}>
                 <input
                   type="text"
@@ -3123,7 +3103,7 @@ export default function Dashboard() {
                   value={aiChatInput}
                   onChange={(e) => setAiChatInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter" && !aiChatLoading) sendAiChat(); }}
-                  style={{ flex: 1, fontSize: "13px", border: "1px solid #E2E8F0", borderRadius: "10px", padding: "10px 14px", background: "#F8FAFC" }}
+                  style={{ flex: 1, fontSize: "13px", border: "none", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", borderRadius: "18px", padding: "10px 14px", background: "#FAFAFA" }}
                 />
                 <button
                   onClick={sendAiChat}
@@ -3134,7 +3114,7 @@ export default function Dashboard() {
                     color: "white",
                     background: aiChatLoading ? "#A78BFA" : "#8B5CF6",
                     border: "none",
-                    borderRadius: "10px",
+                    borderRadius: "18px",
                     padding: "10px 16px",
                     cursor: aiChatLoading ? "not-allowed" : "pointer",
                   }}
@@ -3157,7 +3137,7 @@ export default function Dashboard() {
 const LIFECYCLE_COLOURS: Record<string, string> = {
   "Prospect": "#8B5CF6",
   "Warm - Prospect": "#A78BFA",
-  "Lead": "#3B82F6",
+  "Lead": "#0071E3",
   "Home Visit/Deal ": "#0EA5E9",
   "Won - Waiting": "#14B8A6",
   "Completed": "#10B981",
@@ -3186,22 +3166,22 @@ function LifecyclePipeline({ stages, periodStages }: { stages: { label: string; 
     <div
       style={{
         background: "white",
-        borderRadius: "14px",
-        border: "1px solid #E2E8F0",
+        borderRadius: "20px",
+        border: "none", boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
         padding: "16px 20px",
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "14px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <p style={{ fontSize: "12px", fontWeight: 700, color: "#475569", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+          <p style={{ fontSize: "12px", fontWeight: 600, color: "#86868B", margin: 0 }}>
             Lifecycle Stages
           </p>
-          <span style={{ fontSize: "10px", color: "#94A3B8", background: "#F1F5F9", borderRadius: "6px", padding: "2px 8px", fontWeight: 500 }}>
+          <span style={{ fontSize: "10px", color: "#AEAEB2", background: "#F5F5F7", borderRadius: "6px", padding: "2px 8px", fontWeight: 500 }}>
             Live totals
           </span>
         </div>
-        <p style={{ fontSize: "12px", color: "#94A3B8", margin: 0, fontVariantNumeric: "tabular-nums" }}>
-          <span style={{ fontWeight: 800, color: "#0F172A", fontSize: "15px" }}>{total.toLocaleString()}</span> contacts
+        <p style={{ fontSize: "12px", color: "#AEAEB2", margin: 0, fontVariantNumeric: "tabular-nums" }}>
+          <span style={{ fontWeight: 600, color: "#1D1D1F", fontSize: "15px" }}>{total.toLocaleString()}</span> contacts
         </p>
       </div>
 
@@ -3244,23 +3224,23 @@ function LifecyclePipeline({ stages, periodStages }: { stages: { label: string; 
                       boxShadow: isLead ? `0 0 20px ${colour}35, 0 0 40px ${colour}15` : `0 2px 8px ${colour}15`,
                     }}
                   >
-                    <span style={{ fontSize: size > 72 ? "17px" : size > 60 ? "14px" : "12px", fontWeight: 800, color: colour, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
+                    <span style={{ fontSize: size > 72 ? "17px" : size > 60 ? "14px" : "12px", fontWeight: 600, color: colour, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
                       {stage.count.toLocaleString()}
                     </span>
                     <span style={{ fontSize: "9px", fontWeight: 600, color: `${colour}99`, lineHeight: 1 }}>
                       {pct}%
                     </span>
                   </div>
-                  <span style={{ fontSize: "11px", fontWeight: isLead ? 800 : 600, color: isLead ? colour : "#475569", textAlign: "center", lineHeight: 1.2 }}>
+                  <span style={{ fontSize: "11px", fontWeight: isLead ? 800 : 600, color: isLead ? colour : "#86868B", textAlign: "center", lineHeight: 1.2 }}>
                     {stage.label}
                   </span>
                   {hasPeriod && (
                     <span style={{
                       fontSize: "10px",
-                      fontWeight: 700,
+                      fontWeight: 600,
                       color: periodCount > 0 ? "#059669" : "#CBD5E1",
                       background: periodCount > 0 ? "#ECFDF5" : "#F8FAFC",
-                      borderRadius: "10px",
+                      borderRadius: "18px",
                       padding: "3px 12px",
                       fontVariantNumeric: "tabular-nums",
                     }}>
@@ -3281,7 +3261,7 @@ function LifecyclePipeline({ stages, periodStages }: { stages: { label: string; 
         {/* Other stages table */}
         {otherStages.length > 0 && (
           <div style={{ minWidth: "190px", flexShrink: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-            <p style={{ fontSize: "10px", fontWeight: 700, color: "#94A3B8", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.8px" }}>
+            <p style={{ fontSize: "10px", fontWeight: 600, color: "#AEAEB2", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.8px" }}>
               Other Stages
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
@@ -3301,8 +3281,8 @@ function LifecyclePipeline({ stages, periodStages }: { stages: { label: string; 
                     }}
                   >
                     <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: colour, flexShrink: 0 }} />
-                    <span style={{ color: "#475569", fontWeight: 500, fontSize: "11px", flex: 1 }}>{stage.label}</span>
-                    <span style={{ fontWeight: 700, color: "#0F172A", fontSize: "12px", fontVariantNumeric: "tabular-nums", minWidth: "36px", textAlign: "right" }}>
+                    <span style={{ color: "#86868B", fontWeight: 500, fontSize: "11px", flex: 1 }}>{stage.label}</span>
+                    <span style={{ fontWeight: 600, color: "#1D1D1F", fontSize: "12px", fontVariantNumeric: "tabular-nums", minWidth: "36px", textAlign: "right" }}>
                       {stage.count.toLocaleString()}
                     </span>
                     {hasPeriod && (
@@ -3319,7 +3299,7 @@ function LifecyclePipeline({ stages, periodStages }: { stages: { label: string; 
       </div>
 
       {hasPeriod && (
-        <p style={{ fontSize: "10px", color: "#94A3B8", margin: "10px 0 0", textAlign: "center" }}>
+        <p style={{ fontSize: "10px", color: "#AEAEB2", margin: "10px 0 0", textAlign: "center" }}>
           Green badges show contacts created in the selected date range
         </p>
       )}
@@ -3336,26 +3316,26 @@ function KpiCard({ label, value, colour, subtitle, detail, goal, comparison, liv
     <div
       style={{
         background: "white",
-        borderRadius: "10px",
+        borderRadius: "18px",
         padding: "14px 16px",
-        borderTop: "1px solid #E8ECF0",
-        borderRight: "1px solid #E8ECF0",
-        borderBottom: "1px solid #E8ECF0",
+        borderTop: "none",
+        borderRight: "none",
+        borderBottom: "none",
         borderLeft: `3px solid ${colour}`,
         transition: "all 0.15s ease",
       }}
     >
-      <p style={{ fontSize: "10px", fontWeight: 600, color: "#64748B", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+      <p style={{ fontSize: "10px", fontWeight: 600, color: "#86868B", margin: "0 0 4px" }}>
         {label}
       </p>
-      <p style={{ fontSize: "24px", fontWeight: 800, color: "#0F172A", margin: 0, lineHeight: 1 }}>
+      <p style={{ fontSize: "24px", fontWeight: 600, color: "#1D1D1F", margin: 0, lineHeight: 1 }}>
         {value !== null ? value.toLocaleString() : "—"}
       </p>
       {subtitle && (
         <p style={{ fontSize: "12px", color: subtitle.includes("cancelled") ? "#DC2626" : "#94A3B8", fontWeight: subtitle.includes("cancelled") ? 700 : 400, margin: "6px 0 0" }}>{subtitle}</p>
       )}
       {detail && (
-        <p style={{ fontSize: "11px", color: "#3B82F6", margin: "4px 0 0", fontWeight: 600 }}>{detail}</p>
+        <p style={{ fontSize: "11px", color: "#0071E3", margin: "4px 0 0", fontWeight: 600 }}>{detail}</p>
       )}
       {goal && (() => {
         const pctOfPace = goal.target > 0 ? (goal.current / goal.target) * 100 : 0;
@@ -3363,13 +3343,13 @@ function KpiCard({ label, value, colour, subtitle, detail, goal, comparison, liv
         const ahead = delta >= 0;
         return (
           <div style={{ marginTop: "6px" }}>
-            <div style={{ background: "#F1F5F9", borderRadius: "3px", height: "3px", overflow: "hidden" }}>
+            <div style={{ background: "#F5F5F7", borderRadius: "3px", height: "3px", overflow: "hidden" }}>
               <div style={{ width: `${pct}%`, height: "100%", borderRadius: "3px", background: met ? "#10B981" : colour, transition: "width 0.4s ease" }} />
             </div>
             <p style={{ fontSize: "10px", fontWeight: 600, color: met ? "#059669" : "#64748B", margin: "3px 0 0" }}>
               {goal.current} / {goal.target} goal · {pctOfPace.toFixed(0)}%
             </p>
-            <p style={{ fontSize: "10px", fontWeight: 700, color: ahead ? "#059669" : "#DC2626", margin: "2px 0 0" }}>
+            <p style={{ fontSize: "10px", fontWeight: 600, color: ahead ? "#059669" : "#DC2626", margin: "2px 0 0" }}>
               {ahead ? "▲" : "▼"} {Math.abs(delta)} {ahead ? "ahead of pace" : "behind pace"}
             </p>
           </div>
@@ -3377,17 +3357,17 @@ function KpiCard({ label, value, colour, subtitle, detail, goal, comparison, liv
       })()}
       {comparison && (
         <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "4px" }}>
-          <span style={{ fontSize: "11px", fontWeight: 700, color: comparison.current >= comparison.previous ? "#059669" : "#DC2626" }}>
+          <span style={{ fontSize: "11px", fontWeight: 600, color: comparison.current >= comparison.previous ? "#059669" : "#DC2626" }}>
             {comparison.current >= comparison.previous ? "▲" : "▼"} {Math.abs(comparison.current - comparison.previous)}
           </span>
-          <span style={{ fontSize: "10px", color: "#94A3B8" }}>vs prev period</span>
+          <span style={{ fontSize: "10px", color: "#AEAEB2" }}>vs prev period</span>
         </div>
       )}
       {liveNow != null && (
         <div style={{ marginTop: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
           <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#10B981", display: "inline-block", animation: "pulse 2s infinite" }} />
-          <span style={{ fontSize: "12px", fontWeight: 700, color: "#059669" }}>{liveNow}</span>
-          <span style={{ fontSize: "11px", color: "#64748B" }}>on site now</span>
+          <span style={{ fontSize: "12px", fontWeight: 600, color: "#059669" }}>{liveNow}</span>
+          <span style={{ fontSize: "11px", color: "#86868B" }}>on site now</span>
         </div>
       )}
     </div>
@@ -3425,9 +3405,9 @@ function SourcePanel({
     <div
       style={{
         background: "white",
-        borderRadius: "12px",
+        borderRadius: "18px",
         padding: "14px",
-        border: "1px solid #E2E8F0",
+        border: "none", boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
         display: "flex",
         flexDirection: "column",
         gap: "10px",
@@ -3450,13 +3430,13 @@ function SourcePanel({
             <div style={{ width: "12px", height: "12px", borderRadius: "50%", background: colour }} />
           </div>
           <div>
-            <p style={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", margin: 0 }}>{title}</p>
-            <p style={{ fontSize: "10px", color: "#94A3B8", margin: "1px 0 0" }}>{icon}</p>
+            <p style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", margin: 0 }}>{title}</p>
+            <p style={{ fontSize: "10px", color: "#AEAEB2", margin: "1px 0 0" }}>{icon}</p>
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "flex-end", gap: "6px" }}>
-            <p style={{ fontSize: "24px", fontWeight: 800, color: colour, margin: 0, lineHeight: 1 }}>
+            <p style={{ fontSize: "24px", fontWeight: 600, color: colour, margin: 0, lineHeight: 1 }}>
               {total.toLocaleString()}
             </p>
             {teamGoal && teamGoal > 0 && (
@@ -3465,7 +3445,7 @@ function SourcePanel({
               </p>
             )}
           </div>
-          <p style={{ fontSize: "11px", color: "#94A3B8", margin: "2px 0 0" }}>{pctStr}%</p>
+          <p style={{ fontSize: "11px", color: "#AEAEB2", margin: "2px 0 0" }}>{pctStr}%</p>
         </div>
       </div>
 
@@ -3473,25 +3453,25 @@ function SourcePanel({
       {breakdown && (breakdown.prospects > 0 || breakdown.leads > 0) && (
         <div style={{ display: "flex", gap: "8px" }}>
           <div style={{ flex: 1, background: "#FFFBEB", borderRadius: "8px", padding: "8px 12px", border: "1px solid #FDE68A" }}>
-            <p style={{ fontSize: "10px", fontWeight: 600, color: "#92400E", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>Prospects</p>
-            <p style={{ fontSize: "18px", fontWeight: 800, color: "#B45309", margin: "2px 0 0", lineHeight: 1 }}>{breakdown.prospects.toLocaleString()}</p>
+            <p style={{ fontSize: "10px", fontWeight: 600, color: "#92400E", margin: 0 }}>Prospects</p>
+            <p style={{ fontSize: "18px", fontWeight: 600, color: "#B45309", margin: "2px 0 0", lineHeight: 1 }}>{breakdown.prospects.toLocaleString()}</p>
           </div>
           <div style={{ flex: 1, background: "#EFF6FF", borderRadius: "8px", padding: "8px 12px", border: "1px solid #BFDBFE" }}>
-            <p style={{ fontSize: "10px", fontWeight: 600, color: "#1E40AF", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>Leads</p>
-            <p style={{ fontSize: "18px", fontWeight: 800, color: "#1D4ED8", margin: "2px 0 0", lineHeight: 1 }}>{breakdown.leads.toLocaleString()}</p>
+            <p style={{ fontSize: "10px", fontWeight: 600, color: "#1E40AF", margin: 0 }}>Leads</p>
+            <p style={{ fontSize: "18px", fontWeight: 600, color: "#1D4ED8", margin: "2px 0 0", lineHeight: 1 }}>{breakdown.leads.toLocaleString()}</p>
           </div>
         </div>
       )}
 
       {/* Goal vs actual */}
       {goalPercent && goalPercent > 0 && (
-        <div style={{ background: "#F8FAFC", borderRadius: "8px", padding: "8px 12px", border: "1px solid #E2E8F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: "11px", color: "#64748B" }}>
+        <div style={{ background: "#FAFAFA", borderRadius: "8px", padding: "8px 12px", border: "none", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: "11px", color: "#86868B" }}>
             Goal: <strong>{goalPercent}%</strong> of contacts
           </span>
           <span style={{
             fontSize: "11px",
-            fontWeight: 700,
+            fontWeight: 600,
             color: pct >= goalPercent ? "#059669" : "#DC2626",
             background: pct >= goalPercent ? "#ECFDF5" : "#FEF2F2",
             borderRadius: "6px",
@@ -3503,7 +3483,7 @@ function SourcePanel({
       )}
 
       {/* Share bar */}
-      <div style={{ background: "#F1F5F9", borderRadius: "4px", height: "4px", overflow: "hidden", position: "relative" }}>
+      <div style={{ background: "#F5F5F7", borderRadius: "4px", height: "4px", overflow: "hidden", position: "relative" }}>
         <div
           style={{
             width: `${sourcesTotal > 0 ? (total / sourcesTotal) * 100 : 0}%`,
@@ -3522,14 +3502,14 @@ function SourcePanel({
       <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
         {filtered.map((s) => (
           <div key={s.value} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: "11px", color: "#334155" }}>{s.label}</span>
-            <span style={{ fontSize: "11px", fontWeight: 700, color: "#0F172A", fontVariantNumeric: "tabular-nums" }}>
+            <span style={{ fontSize: "11px", color: "#3A3A3C" }}>{s.label}</span>
+            <span style={{ fontSize: "11px", fontWeight: 600, color: "#1D1D1F", fontVariantNumeric: "tabular-nums" }}>
               {s.count.toLocaleString()}
             </span>
           </div>
         ))}
         {filtered.length === 0 && (
-          <p style={{ fontSize: "11px", color: "#CBD5E1", margin: 0 }}>No data</p>
+          <p style={{ fontSize: "11px", color: "#D2D2D7", margin: 0 }}>No data</p>
         )}
       </div>
     </div>
@@ -3558,21 +3538,21 @@ function ConversionArrow({
         minWidth: "44px",
       }}
     >
-      <span style={{ fontSize: "13px", fontWeight: 800, color: "#0F172A", lineHeight: 1 }}>
+      <span style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", lineHeight: 1 }}>
         {rate}%
       </span>
       <svg width="24" height="16" viewBox="0 0 24 16" style={{ margin: "4px 0" }}>
         <path d="M4 8 L16 8 M12 3 L18 8 L12 13" stroke="#94A3B8" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-      <span style={{ fontSize: "9px", color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.3px", textAlign: "center", lineHeight: 1.2 }}>
+      <span style={{ fontSize: "9px", color: "#AEAEB2", textTransform: "uppercase", letterSpacing: "0.3px", textAlign: "center", lineHeight: 1.2 }}>
         {label}
       </span>
       {secondaryRate !== undefined && secondaryLabel && (
-        <div style={{ marginTop: "10px", paddingTop: "8px", borderTop: "1px solid #E2E8F0", display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
-          <span style={{ fontSize: "12px", fontWeight: 800, color: "#0F172A", lineHeight: 1 }}>
+        <div style={{ marginTop: "10px", paddingTop: "8px", borderTop: "1px solid rgba(0,0,0,0.06)", display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}>
+          <span style={{ fontSize: "12px", fontWeight: 600, color: "#1D1D1F", lineHeight: 1 }}>
             {secondaryRate}%
           </span>
-          <span style={{ fontSize: "9px", color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.3px", textAlign: "center", lineHeight: 1.2 }}>
+          <span style={{ fontSize: "9px", color: "#AEAEB2", textTransform: "uppercase", letterSpacing: "0.3px", textAlign: "center", lineHeight: 1.2 }}>
             {secondaryLabel}
           </span>
         </div>
@@ -3604,8 +3584,8 @@ function FunnelCard({
     <div
       style={{
         background: "white",
-        borderRadius: "14px",
-        border: "1px solid #E2E8F0",
+        borderRadius: "20px",
+        border: "none", boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
         overflow: "hidden",
       }}
     >
@@ -3620,25 +3600,25 @@ function FunnelCard({
         }}
       >
         <div>
-          <p style={{ fontSize: "12px", fontWeight: 700, color: "#0F172A", margin: 0 }}>{title}</p>
-          <p style={{ fontSize: "10px", color: "#64748B", margin: "1px 0 0" }}>{subtitle}</p>
+          <p style={{ fontSize: "12px", fontWeight: 600, color: "#1D1D1F", margin: 0 }}>{title}</p>
+          <p style={{ fontSize: "10px", color: "#86868B", margin: "1px 0 0" }}>{subtitle}</p>
         </div>
         <div style={{ textAlign: "right" }}>
-          <span style={{ fontSize: "20px", fontWeight: 800, color: colour, lineHeight: 1 }}>
+          <span style={{ fontSize: "20px", fontWeight: 600, color: colour, lineHeight: 1 }}>
             {total.toLocaleString()}
           </span>
           {comparison && (() => {
             const delta = comparison.current - comparison.previous;
             const better = delta >= 0;
             return (
-              <p style={{ fontSize: "10px", fontWeight: 700, color: better ? "#059669" : "#DC2626", margin: "2px 0 0" }}>
+              <p style={{ fontSize: "10px", fontWeight: 600, color: better ? "#059669" : "#DC2626", margin: "2px 0 0" }}>
                 {better ? "▲" : "▼"} {Math.abs(delta).toLocaleString()}{" "}
-                <span style={{ color: "#94A3B8", fontWeight: 500 }}>vs prev</span>
+                <span style={{ color: "#AEAEB2", fontWeight: 500 }}>vs prev</span>
               </p>
             );
           })()}
           {rate && (
-            <p style={{ fontSize: "10px", fontWeight: 600, color: "#64748B", margin: "2px 0 0" }}>{rate}</p>
+            <p style={{ fontSize: "10px", fontWeight: 600, color: "#86868B", margin: "2px 0 0" }}>{rate}</p>
           )}
         </div>
       </div>
@@ -3653,7 +3633,7 @@ function MiniRow({ label, count, highlight }: { label: string; count: number; hi
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: highlight ? "#DBEAFE" : "transparent", borderRadius: highlight ? "6px" : 0, padding: highlight ? "4px 8px" : 0 }}>
       <span style={{ fontSize: "12px", color: highlight ? "#1D4ED8" : "#334155", fontWeight: highlight ? 600 : 400 }}>{label}</span>
-      <span style={{ fontSize: "12px", fontWeight: 700, color: highlight ? "#1D4ED8" : "#0F172A", fontVariantNumeric: "tabular-nums" }}>
+      <span style={{ fontSize: "12px", fontWeight: 600, color: highlight ? "#1D4ED8" : "#0F172A", fontVariantNumeric: "tabular-nums" }}>
         {count.toLocaleString()}
       </span>
     </div>
@@ -3717,23 +3697,23 @@ function GoalBar({
     <div
       style={{
         background: "white",
-        borderRadius: "14px",
+        borderRadius: "20px",
         padding: "18px 20px",
         border: `1px solid ${met ? "#A7F3D0" : "#E2E8F0"}`,
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-        <span style={{ fontSize: "13px", fontWeight: 600, color: "#0F172A" }}>{label}</span>
+        <span style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F" }}>{label}</span>
         <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
-          <span style={{ fontSize: "20px", fontWeight: 800, color: barColour }}>{current}</span>
-          <span style={{ fontSize: "13px", color: "#94A3B8" }}>/ {goal}</span>
+          <span style={{ fontSize: "20px", fontWeight: 600, color: barColour }}>{current}</span>
+          <span style={{ fontSize: "13px", color: "#AEAEB2" }}>/ {goal}</span>
           <span
             style={{
               fontSize: "11px",
-              fontWeight: 700,
+              fontWeight: 600,
               color: barColour,
               background: met ? "#D1FAE5" : `${colour}15`,
-              borderRadius: "10px",
+              borderRadius: "18px",
               padding: "2px 8px",
             }}
           >
@@ -3742,7 +3722,7 @@ function GoalBar({
         </div>
       </div>
 
-      <div style={{ position: "relative", background: "#F1F5F9", borderRadius: "4px", height: "6px", overflow: "visible", marginBottom: "8px" }}>
+      <div style={{ position: "relative", background: "#F5F5F7", borderRadius: "4px", height: "6px", overflow: "visible", marginBottom: "8px" }}>
         <div
           style={{
             width: `${pct}%`,
@@ -3761,7 +3741,7 @@ function GoalBar({
               top: "-3px",
               width: "2px",
               height: "12px",
-              background: "#475569",
+              background: "#86868B",
               borderRadius: "1px",
               opacity: 0.5,
             }}
@@ -3780,12 +3760,12 @@ function GoalBar({
         >
           {met ? "Goal met!" : justStarted ? paceLabel : onTrack ? "On track" : "Behind pace"}
           {!met && !justStarted && (
-            <span style={{ fontWeight: 400, color: "#94A3B8", marginLeft: "6px" }}>
+            <span style={{ fontWeight: 400, color: "#AEAEB2", marginLeft: "6px" }}>
               — {paceLabel.toLowerCase()}
             </span>
           )}
         </span>
-        <span style={{ fontSize: "11px", color: "#94A3B8" }}>{periodLabel}</span>
+        <span style={{ fontSize: "11px", color: "#AEAEB2" }}>{periodLabel}</span>
       </div>
     </div>
   );

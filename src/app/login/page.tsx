@@ -81,14 +81,41 @@ function LoginForm() {
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
     flex: 1,
-    padding: "10px 0",
-    fontSize: "13px",
-    fontWeight: 600,
+    padding: "12px 0",
+    fontSize: "14px",
+    fontWeight: active ? 500 : 400,
     border: "none",
-    borderBottom: active ? "2px solid #2563eb" : "2px solid transparent",
+    borderBottom: active ? "2px solid #1D1D1F" : "2px solid transparent",
     background: "transparent",
-    color: active ? "#2563eb" : "#6b7280",
+    color: active ? "#1D1D1F" : "#AEAEB2",
     cursor: "pointer",
+    transition: "all 0.25s cubic-bezier(0.25, 0.1, 0.25, 1)",
+  });
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "16px 18px",
+    fontSize: "16px",
+    borderRadius: "14px",
+    border: "1px solid rgba(0,0,0,0.1)",
+    outline: "none",
+    background: "#FAFAFA",
+    color: "#1D1D1F",
+    boxSizing: "border-box",
+    transition: "border-color 0.2s, box-shadow 0.2s",
+  };
+
+  const buttonStyle = (disabled: boolean): React.CSSProperties => ({
+    width: "100%",
+    padding: "16px",
+    fontSize: "16px",
+    fontWeight: 500,
+    color: "white",
+    background: disabled ? "#D2D2D7" : "#1D1D1F",
+    border: "none",
+    borderRadius: "14px",
+    cursor: disabled ? "not-allowed" : "pointer",
+    transition: "all 0.25s cubic-bezier(0.25, 0.1, 0.25, 1)",
   });
 
   return (
@@ -99,20 +126,20 @@ function LoginForm() {
         alignItems: "center",
         justifyContent: "center",
         padding: "16px",
-        background: "#f9fafb",
+        background: "#F5F5F7",
       }}
     >
       <div
         style={{
           width: "100%",
-          maxWidth: "420px",
+          maxWidth: "400px",
           background: "white",
-          padding: "36px 32px",
-          borderRadius: "16px",
-          boxShadow: "0 10px 40px rgba(0,0,0,0.08)",
+          padding: "44px 36px",
+          borderRadius: "22px",
+          boxShadow: "0 4px 40px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.02)",
           display: "flex",
           flexDirection: "column",
-          gap: "18px",
+          gap: "24px",
           textAlign: "center",
         }}
       >
@@ -120,14 +147,14 @@ function LoginForm() {
         <img
           src="/acb-logo.png"
           alt="Age Care Bathrooms"
-          style={{ width: "80px", height: "auto", margin: "0 auto 4px" }}
+          style={{ width: "72px", height: "auto", margin: "0 auto 0" }}
         />
-        <h1 style={{ fontSize: "22px", fontWeight: 700, color: "#111827", margin: 0 }}>
+        <h1 style={{ fontSize: "24px", fontWeight: 600, color: "#1D1D1F", margin: 0, letterSpacing: "-0.3px" }}>
           ACB Stats Portal
         </h1>
 
         {/* Tabs */}
-        <div style={{ display: "flex", borderBottom: "1px solid #e5e7eb" }}>
+        <div style={{ display: "flex", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
           <button type="button" onClick={() => switchTab("authenticator")} style={tabStyle(tab === "authenticator")}>
             Authenticator
           </button>
@@ -140,22 +167,22 @@ function LoginForm() {
         {error && (
           <div
             style={{
-              background: "#FEF2F2",
-              border: "1px solid #FECACA",
-              color: "#991B1B",
-              borderRadius: "10px",
-              padding: "12px",
+              background: "#FFF2F2",
+              color: "#DC2626",
+              borderRadius: "14px",
+              padding: "14px 16px",
               fontSize: "13px",
+              lineHeight: 1.5,
             }}
           >
             {error}
           </div>
         )}
 
-        {/* ── Authenticator tab ── */}
+        {/* Authenticator tab */}
         {tab === "authenticator" && (
-          <form onSubmit={verifyCode} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-            <p style={{ fontSize: "14px", color: "#6b7280", margin: 0, lineHeight: 1.5 }}>
+          <form onSubmit={verifyCode} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            <p style={{ fontSize: "14px", color: "#86868B", margin: 0, lineHeight: 1.6 }}>
               Enter the 6-digit code from your Google&nbsp;Authenticator app.
             </p>
             <input
@@ -170,52 +197,35 @@ function LoginForm() {
               required
               autoComplete="one-time-code"
               style={{
-                width: "100%",
-                padding: "14px 16px",
-                fontSize: "24px",
+                ...inputStyle,
+                fontSize: "28px",
                 fontWeight: 600,
                 letterSpacing: "0.3em",
                 textAlign: "center",
-                borderRadius: "10px",
-                border: "1px solid #d1d5db",
-                outline: "none",
-                background: "white",
-                color: "#111827",
-                boxSizing: "border-box",
+                fontVariantNumeric: "tabular-nums",
               }}
             />
             <button
               type="submit"
               disabled={codeStatus === "checking" || code.length !== 6}
-              style={{
-                width: "100%",
-                padding: "14px",
-                fontSize: "16px",
-                fontWeight: 600,
-                color: "white",
-                background: codeStatus === "checking" || code.length !== 6 ? "#9ca3af" : "#2563eb",
-                border: "none",
-                borderRadius: "10px",
-                cursor: codeStatus === "checking" || code.length !== 6 ? "not-allowed" : "pointer",
-              }}
+              style={buttonStyle(codeStatus === "checking" || code.length !== 6)}
             >
               {codeStatus === "checking" ? "Verifying\u2026" : "Sign in"}
             </button>
           </form>
         )}
 
-        {/* ── Email tab ── */}
+        {/* Email tab */}
         {tab === "email" && emailStatus === "sent" ? (
           <>
             <div
               style={{
-                background: "#ECFDF5",
-                border: "1px solid #A7F3D0",
-                color: "#065F46",
-                borderRadius: "12px",
-                padding: "16px",
+                background: "#F0FFF4",
+                color: "#059669",
+                borderRadius: "14px",
+                padding: "18px",
                 fontSize: "14px",
-                lineHeight: 1.5,
+                lineHeight: 1.6,
               }}
             >
               <strong>Check your inbox.</strong>
@@ -232,19 +242,19 @@ function LoginForm() {
               style={{
                 background: "transparent",
                 border: "none",
-                color: "#2563eb",
-                fontSize: "13px",
+                color: "#0071E3",
+                fontSize: "14px",
+                fontWeight: 500,
                 cursor: "pointer",
-                marginTop: "4px",
               }}
             >
               Use a different email
             </button>
           </>
         ) : tab === "email" ? (
-          <form onSubmit={requestLink} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-            <p style={{ fontSize: "14px", color: "#6b7280", margin: 0, lineHeight: 1.5 }}>
-              Enter your <strong>@agecare-bathrooms.co.uk</strong> email
+          <form onSubmit={requestLink} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            <p style={{ fontSize: "14px", color: "#86868B", margin: 0, lineHeight: 1.6 }}>
+              Enter your <strong style={{ color: "#1D1D1F" }}>@agecare-bathrooms.co.uk</strong> email
               address and we&rsquo;ll send you a one-time sign-in link.
             </p>
             <input
@@ -255,32 +265,12 @@ function LoginForm() {
               autoFocus
               required
               autoComplete="email"
-              style={{
-                width: "100%",
-                padding: "14px 16px",
-                fontSize: "16px",
-                borderRadius: "10px",
-                border: "1px solid #d1d5db",
-                outline: "none",
-                background: "white",
-                color: "#111827",
-                boxSizing: "border-box",
-              }}
+              style={inputStyle}
             />
             <button
               type="submit"
               disabled={emailStatus === "sending" || !email}
-              style={{
-                width: "100%",
-                padding: "14px",
-                fontSize: "16px",
-                fontWeight: 600,
-                color: "white",
-                background: emailStatus === "sending" || !email ? "#9ca3af" : "#2563eb",
-                border: "none",
-                borderRadius: "10px",
-                cursor: emailStatus === "sending" || !email ? "not-allowed" : "pointer",
-              }}
+              style={buttonStyle(emailStatus === "sending" || !email)}
             >
               {emailStatus === "sending" ? "Sending\u2026" : "Email me a sign-in link"}
             </button>
