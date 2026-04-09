@@ -48,10 +48,6 @@ function londonDateToUtcMs(dateStr: string, time: string): number {
   return Date.UTC(y, m - 1, d, hh - offsetHours, mm, ss);
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function searchContacts(
   token: string,
   filterGroups: Record<string, unknown>[],
@@ -109,85 +105,37 @@ export async function GET(request: NextRequest) {
   const prevToMs = londonDateToUtcMs(prevTo, "23:59:59");
 
   try {
-    // 1. Contacts count
-    const contacts = await searchContacts(token, [
-      {
-        filters: [
-          {
-            propertyName: "conversion_action",
-            operator: "HAS_PROPERTY",
-          },
-          {
-            propertyName: "createdate",
-            operator: "GTE",
-            value: prevFromMs.toString(),
-          },
-          {
-            propertyName: "createdate",
-            operator: "LTE",
-            value: prevToMs.toString(),
-          },
-          LIFECYCLE_EXCLUSION_FILTER,
-        ],
-      },
+    const dateFilters = [
+      { propertyName: "createdate", operator: "GTE", value: prevFromMs.toString() },
+      { propertyName: "createdate", operator: "LTE", value: prevToMs.toString() },
+      LIFECYCLE_EXCLUSION_FILTER,
+    ];
+
+    // Run all 4 counts in parallel — each is a single HubSpot search with
+    // limit:1 (just getting the `total`). Parallel is safe: HubSpot allows
+    // ~4 requests/sec on private apps and these are lightweight.
+    const [contacts, prospects, leads, homeVisits] = await Promise.all([
+      searchContacts(token, [
+        { filters: [{ propertyName: "conversion_action", operator: "HAS_PROPERTY" }, ...dateFilters] },
+      ]),
+      searchContacts(token, [
+        { filters: [{ propertyName: "conversion_action", operator: "IN", values: PROSPECT_ACTIONS }, ...dateFilters] },
+      ]),
+      searchContacts(token, [
+        { filters: [{ propertyName: "conversion_action", operator: "IN", values: LEAD_ACTIONS }, ...dateFilters] },
+      ]),
+      searchContacts(token, [
+        {
+          filters: [
+            { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "GTE", value: prevFromMs.toString() },
+            { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "LTE", value: prevToMs.toString() },
+            LIFECYCLE_EXCLUSION_FILTER,
+          ],
+        },
+      ]),
     ]);
 
-    await delay(500);
-
-    // 2. Prospects count — single filterGroup with IN operator. The previous
-    //    one-filterGroup-per-action approach exceeded HubSpot's max of 5
-    //    filterGroups once LIFECYCLE_EXCLUSION_FILTER was added.
-    const prospects = await searchContacts(token, [
-      {
-        filters: [
-          { propertyName: "conversion_action", operator: "IN", values: PROSPECT_ACTIONS },
-          { propertyName: "createdate", operator: "GTE", value: prevFromMs.toString() },
-          { propertyName: "createdate", operator: "LTE", value: prevToMs.toString() },
-          LIFECYCLE_EXCLUSION_FILTER,
-        ],
-      },
-    ]);
-
-    await delay(500);
-
-    // 3. Leads count — same IN-operator pattern
-    const leads = await searchContacts(token, [
-      {
-        filters: [
-          { propertyName: "conversion_action", operator: "IN", values: LEAD_ACTIONS },
-          { propertyName: "createdate", operator: "GTE", value: prevFromMs.toString() },
-          { propertyName: "createdate", operator: "LTE", value: prevToMs.toString() },
-          LIFECYCLE_EXCLUSION_FILTER,
-        ],
-      },
-    ]);
-
-    await delay(500);
-
-    // 4. Home visits count
-    const homeVisits = await searchContacts(token, [
-      {
-        filters: [
-          {
-            propertyName: "date_that_initial_visit_booked_is_set_to_yes",
-            operator: "GTE",
-            value: prevFromMs.toString(),
-          },
-          {
-            propertyName: "date_that_initial_visit_booked_is_set_to_yes",
-            operator: "LTE",
-            value: prevToMs.toString(),
-          },
-          LIFECYCLE_EXCLUSION_FILTER,
-        ],
-      },
-    ]);
-
-    await delay(500);
-
-    // 5. Won jobs (count + value) — same logic as /api/hubspot/won-deals:
-    //    contacts in Won-Waiting or Completed lifecycle stages whose
-    //    first_deal_created_date falls in the previous period.
+    // Won jobs — two sequential stage queries (small, fast)
     const WON_WAITING_STAGE = "151694551";
     const COMPLETED_STAGE = "151694559";
     let wonJobs = 0;
@@ -219,7 +167,6 @@ export async function GET(request: NextRequest) {
           if (!isNaN(amt)) wonValue += amt;
         }
       }
-      await delay(500);
     }
 
     return Response.json({

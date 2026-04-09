@@ -730,9 +730,19 @@ export default function Dashboard() {
       .catch(() => {});
     // Previous period comparison
     fetch(`/api/hubspot/previous-period?from=${from}&to=${to}`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => { if (data) setPreviousPeriod(data); })
-      .catch(() => {});
+      .then((r) => {
+        console.log("[previous-period] status:", r.status);
+        return r.ok ? r.json() : r.text().then((t) => { console.error("[previous-period] error body:", t); return null; });
+      })
+      .then((data) => {
+        if (data) {
+          console.log("[previous-period] loaded:", data);
+          setPreviousPeriod(data);
+        } else {
+          console.error("[previous-period] no data returned");
+        }
+      })
+      .catch((e) => console.error("[previous-period] fetch failed:", e));
     // Time to visit
     fetch(`/api/hubspot/time-to-visit?from=${from}&to=${to}`)
       .then((r) => r.ok ? r.json() : null)
