@@ -2995,156 +2995,101 @@ export default function Dashboard() {
                     )}
                   </div>
 
-                  {/* Touchpoint attribution — GA-style three-column layout */}
+                  {/* Summary cards row */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", marginBottom: "12px" }}>
+                    <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "16px 20px", display: "flex", alignItems: "center", gap: "12px" }}>
+                      <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#ECFDF5", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 11l3 3L22 4" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: "22px", fontWeight: 600, color: "#1D1D1F", lineHeight: 1 }}>{withVisitTotal}</span>
+                        <p style={{ fontSize: "11px", color: "#86868B", margin: "2px 0 0" }}>Reached Home Visit</p>
+                      </div>
+                    </div>
+                    <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "16px 20px", display: "flex", alignItems: "center", gap: "12px" }}>
+                      <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#F5F3FF", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#8B5CF6" strokeWidth="2"/><path d="M12 8v4l3 3" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round"/></svg>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: "22px", fontWeight: 600, color: "#1D1D1F", lineHeight: 1 }}>{withoutVisitTotal}</span>
+                        <p style={{ fontSize: "11px", color: "#86868B", margin: "2px 0 0" }}>Still in progress</p>
+                      </div>
+                    </div>
+                    <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "16px 20px", display: "flex", alignItems: "center", gap: "12px" }}>
+                      <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#EFF6FF", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 12h-4l-3 9L9 3l-3 9H2" stroke="#0071E3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: "22px", fontWeight: 600, color: "#1D1D1F", lineHeight: 1 }}>{filtered.length > 0 ? Math.round((withVisitTotal / filtered.length) * 100) : 0}%</span>
+                        <p style={{ fontSize: "11px", color: "#86868B", margin: "2px 0 0" }}>Conversion rate</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Touchpoint attribution — compact top 5 per stage */}
                   {attrData.length > 0 && (() => {
-                    const totalFirst = attrData.reduce((s, t) => s + t.first, 0);
-                    const totalMid = attrData.reduce((s, t) => s + t.mid, 0);
-                    const totalLast = attrData.reduce((s, t) => s + t.last, 0);
-                    const grandTotal = totalFirst + totalMid + totalLast;
-                    const firstPct = grandTotal ? Math.round((totalFirst / grandTotal) * 100) : 0;
-                    const midPct = grandTotal ? Math.round((totalMid / grandTotal) * 100) : 0;
-                    const lastPct = grandTotal ? 100 - firstPct - midPct : 0;
-
-                    // Sort each column independently by its count
-                    const firstSorted = [...attrData].filter((t) => t.first > 0).sort((a, b) => b.first - a.first);
-                    const midSorted = [...attrData].filter((t) => t.mid > 0).sort((a, b) => b.mid - a.mid);
-                    const lastSorted = [...attrData].filter((t) => t.last > 0).sort((a, b) => b.last - a.last);
-
                     const convRateColour = (rate: number): string => {
                       if (rate >= 30) return "#059669";
                       if (rate >= 15) return "#F59E0B";
                       return "#DC2626";
                     };
+                    const firstSorted = [...attrData].filter((t) => t.first > 0).sort((a, b) => b.first - a.first).slice(0, 5);
+                    const midSorted = [...attrData].filter((t) => t.mid > 0).sort((a, b) => b.mid - a.mid).slice(0, 5);
+                    const lastSorted = [...attrData].filter((t) => t.last > 0).sort((a, b) => b.last - a.last).slice(0, 5);
 
-                    const renderColumn = (
-                      items: typeof attrData,
-                      field: "first" | "mid" | "last",
-                      colour: string,
-                    ) => {
-                      const maxVal = items.length > 0 ? items[0][field] : 1;
-                      return (
-                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                          {items.map((t) => (
-                            <div key={t.name} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                              <span style={{ fontSize: "11px", color: "#3A3A3C", fontWeight: 500, width: "110px", flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.name}>
-                                {t.name}
-                              </span>
-                              <div style={{ flex: 1, background: "#F5F5F7", borderRadius: "3px", height: "14px", overflow: "hidden" }}>
-                                <div style={{ width: `${(t[field] / maxVal) * 100}%`, height: "100%", background: colour, borderRadius: "3px", transition: "width 0.3s", minWidth: t[field] > 0 ? "2px" : "0" }} />
-                              </div>
-                              <span style={{ fontSize: "11px", fontWeight: 600, color: "#1D1D1F", width: "24px", textAlign: "right", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
-                                {t[field]}
-                              </span>
-                              <span
-                                title={`${t.convRate}% of contacts with this touchpoint reached Home Visit or Won`}
-                                style={{
-                                  fontSize: "9px",
-                                  fontWeight: 600,
-                                  color: convRateColour(t.convRate),
-                                  background: `${convRateColour(t.convRate)}12`,
-                                  borderRadius: "4px",
-                                  padding: "1px 5px",
-                                  flexShrink: 0,
-                                  width: "34px",
-                                  textAlign: "center",
-                                }}>
-                                {t.convRate}%
-                              </span>
-                            </div>
-                          ))}
-                          {items.length === 0 && (
-                            <p style={{ fontSize: "11px", color: "#AEAEB2", margin: 0 }}>None</p>
-                          )}
-                        </div>
-                      );
-                    };
+                    const renderCompact = (items: typeof attrData, field: "first" | "mid" | "last", colour: string) => (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        {items.map((t) => (
+                          <div key={t.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                            <span style={{ fontSize: "11px", color: "#3A3A3C", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.name}>{t.name}</span>
+                            <span style={{ fontSize: "12px", fontWeight: 600, color: "#1D1D1F", fontVariantNumeric: "tabular-nums" }}>{t[field]}</span>
+                            <span title={`${t.convRate}% converted`} style={{ fontSize: "9px", fontWeight: 500, color: convRateColour(t.convRate), background: `${convRateColour(t.convRate)}12`, borderRadius: "4px", padding: "1px 5px", width: "30px", textAlign: "center" }}>{t.convRate}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    );
 
                     return (
-                      <div style={{ background: "white", borderRadius: "18px", border: "none", padding: "14px" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-                          <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: 0 }}>
-                            Touchpoint Attribution
-                          </p>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "10px", fontWeight: 500 }}>
-                            <span style={{ color: "#86868B" }}>% that reached Home Visit or Won:</span>
-                            <span style={{ color: "#059669", background: "#F0FDF4", borderRadius: "4px", padding: "1px 6px" }}>30%+</span>
-                            <span style={{ color: "#F59E0B", background: "#FFFBEB", borderRadius: "4px", padding: "1px 6px" }}>15-29%</span>
-                            <span style={{ color: "#DC2626", background: "#FEF2F2", borderRadius: "4px", padding: "1px 6px" }}>&lt;15%</span>
+                      <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "20px", marginBottom: "12px" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+                          <p style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", margin: 0 }}>Touchpoint Attribution</p>
+                          <span style={{ fontSize: "9px", color: "#AEAEB2" }}>% = converted to Home Visit or Won</span>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
+                          <div>
+                            <p style={{ fontSize: "10px", fontWeight: 500, color: "#8B5CF6", margin: "0 0 8px" }}>First touch (top 5)</p>
+                            {renderCompact(firstSorted, "first", "#8B5CF6")}
                           </div>
-                        </div>
-
-                        {/* Header arrows with percentages */}
-                        <div style={{ display: "flex", alignItems: "center", marginBottom: "16px" }}>
-                          {[
-                            { label: "Early touchpoints", pct: firstPct, colour: "#8B5CF6" },
-                            { label: "Mid touchpoints", pct: midPct, colour: "#94A3B8" },
-                            { label: "Late touchpoints", pct: lastPct, colour: "#0EA5E9" },
-                          ].map((col, ci) => (
-                            <div key={ci} style={{ flex: 1, display: "flex", alignItems: "center" }}>
-                              <div style={{
-                                flex: 1,
-                                background: "#FAFAFA",
-                                border: "1px dashed #CBD5E1",
-                                borderRadius: ci === 0 ? "8px 0 0 8px" : ci === 2 ? "0 8px 8px 0" : "0",
-                                padding: "8px 12px",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                gap: "8px",
-                              }}>
-                                <span style={{ fontSize: "12px", fontWeight: 600, color: "#3A3A3C" }}>{col.label}</span>
-                                <span style={{
-                                  fontSize: "11px",
-                                  fontWeight: 600,
-                                  color: "white",
-                                  background: col.colour,
-                                  borderRadius: "18px",
-                                  padding: "1px 8px",
-                                }}>
-                                  {col.pct}%
-                                </span>
-                              </div>
-                              {ci < 2 && (
-                                <span style={{ color: "#D2D2D7", fontSize: "16px", lineHeight: 1, margin: "0 -1px" }}>▸</span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Three-column bar charts */}
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
-                          <div>{renderColumn(firstSorted, "first", "#8B5CF6")}</div>
-                          <div>{renderColumn(midSorted, "mid", "#94A3B8")}</div>
-                          <div>{renderColumn(lastSorted, "last", "#0EA5E9")}</div>
+                          <div>
+                            <p style={{ fontSize: "10px", fontWeight: 500, color: "#86868B", margin: "0 0 8px" }}>Mid touch (top 5)</p>
+                            {renderCompact(midSorted, "mid", "#94A3B8")}
+                          </div>
+                          <div>
+                            <p style={{ fontSize: "10px", fontWeight: 500, color: "#0EA5E9", margin: "0 0 8px" }}>Last touch (top 5)</p>
+                            {renderCompact(lastSorted, "last", "#0EA5E9")}
+                          </div>
                         </div>
                       </div>
                     );
                   })()}
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                    {/* With Home Visit */}
-                    <div style={{ background: "white", borderRadius: "18px", border: "none", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "4px" }}>
-                        <p style={{ fontSize: "11px", fontWeight: 600, color: "#0EA5E9", margin: 0 }}>
-                          Reached Home Visit
-                        </p>
-                        <span style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F" }}>
-                          {withVisitTotal}
-                        </span>
+                  {/* Journey paths — two columns */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                    <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "20px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                        <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#10B981" }} />
+                        <span style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F" }}>Converted</span>
+                        <span style={{ fontSize: "12px", color: "#AEAEB2", marginLeft: "auto" }}>{withVisitTotal}</span>
                       </div>
-                      {withVisit.length > 0 ? renderJourneyList(withVisit, "#0EA5E9", journeyShowVisit, () => setJourneyShowVisit((n) => n + 10)) : (
+                      {withVisit.length > 0 ? renderJourneyList(withVisit, "#10B981", journeyShowVisit, () => setJourneyShowVisit((n) => n + 10)) : (
                         <p style={{ fontSize: "12px", color: "#AEAEB2", margin: 0 }}>None{isFiltered ? " matching filters" : " in this period"}</p>
                       )}
                     </div>
-                    {/* Without Home Visit */}
-                    <div style={{ background: "white", borderRadius: "18px", border: "none", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "4px" }}>
-                        <p style={{ fontSize: "11px", fontWeight: 600, color: "#8B5CF6", margin: 0 }}>
-                          Not Yet Reached Home Visit
-                        </p>
-                        <span style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F" }}>
-                          {withoutVisitTotal}
-                        </span>
+                    <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "20px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                        <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#8B5CF6" }} />
+                        <span style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F" }}>In progress</span>
+                        <span style={{ fontSize: "12px", color: "#AEAEB2", marginLeft: "auto" }}>{withoutVisitTotal}</span>
                       </div>
                       {withoutVisit.length > 0 ? renderJourneyList(withoutVisit, "#8B5CF6", journeyShowNoVisit, () => setJourneyShowNoVisit((n) => n + 10)) : (
                         <p style={{ fontSize: "12px", color: "#AEAEB2", margin: 0 }}>None{isFiltered ? " matching filters" : " in this period"}</p>
