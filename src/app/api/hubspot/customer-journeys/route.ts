@@ -93,13 +93,33 @@ async function searchContacts(
   let after: string | undefined;
   let pages = 0;
 
+  // Deduplicate contacts across filter groups (a contact may match multiple)
+  const seen = new Set<string>();
+
   do {
     const body: Record<string, unknown> = {
       filterGroups: [
+        // Created in period
         {
           filters: [
             { propertyName: "createdate", operator: "GTE", value: fromMs.toString() },
             { propertyName: "createdate", operator: "LTE", value: toMs.toString() },
+            LIFECYCLE_EXCLUSION_FILTER,
+          ],
+        },
+        // Home visit booked in period (even if created earlier)
+        {
+          filters: [
+            { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "GTE", value: fromMs.toString() },
+            { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "LTE", value: toMs.toString() },
+            LIFECYCLE_EXCLUSION_FILTER,
+          ],
+        },
+        // Deal won in period (even if created earlier)
+        {
+          filters: [
+            { propertyName: "won_date", operator: "GTE", value: fromMs.toString() },
+            { propertyName: "won_date", operator: "LTE", value: toMs.toString() },
             LIFECYCLE_EXCLUSION_FILTER,
           ],
         },
@@ -123,6 +143,8 @@ async function searchContacts(
     );
 
     for (const c of data.results ?? []) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
       const props = c.properties ?? {};
       const emailTs = props.hs_email_first_send_date
         ? new Date(props.hs_email_first_send_date).getTime()
