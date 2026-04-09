@@ -647,7 +647,7 @@ export default function Dashboard() {
     journeys: { path: string; steps: string[]; count: number }[];
     totalContacts: number;
     filters: { leadSources: string[]; conversionActions: string[]; forms: string[] };
-    contactJourneys: { path: string; steps: string[]; leadSource: string; conversionAction: string; forms: string[] }[];
+    contactJourneys: { path: string; steps: string[]; leadSource: string; conversionAction: string; forms: string[]; createdInPeriod: boolean }[];
   } | null>(null);
   const [journeyFilterSource, setJourneyFilterSource] = useState<string | null>(null);
   const [journeyFilterAction, setJourneyFilterAction] = useState<string | null>(null);
@@ -2951,9 +2951,15 @@ export default function Dashboard() {
                     <h2 style={{ fontSize: "13px", fontWeight: 600, color: "#86868B", margin: 0 }}>
                       Customer Journeys
                     </h2>
-                    <span style={{ fontSize: "10px", color: "#AEAEB2", fontWeight: 600 }}>
-                      {filtered.length} contact{filtered.length !== 1 ? "s" : ""}{isFiltered ? ` (of ${customerJourneys.totalContacts})` : ""}
-                    </span>
+                    {(() => {
+                      const newCount = filtered.filter((cj) => cj.createdInPeriod).length;
+                      const returning = filtered.length - newCount;
+                      return (
+                        <span style={{ fontSize: "10px", color: "#AEAEB2" }}>
+                          {filtered.length} total ({newCount} new{returning > 0 ? ` + ${returning} returning` : ""})
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {/* Filters — compact dropdowns */}

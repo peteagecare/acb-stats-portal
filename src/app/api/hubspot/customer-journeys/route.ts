@@ -114,6 +114,7 @@ async function hubspotFetch(url: string, token: string, options?: RequestInit) {
 
 interface ContactInfo {
   id: string;
+  createdInPeriod: boolean;
   leadSource: string | null;
   conversionAction: string | null;
   visitBooked: boolean;
@@ -164,6 +165,7 @@ async function searchContacts(
         },
       ],
       properties: [
+        "createdate",
         "original_lead_source",
         "conversion_action",
         "date_that_initial_visit_booked_is_set_to_yes",
@@ -193,8 +195,10 @@ async function searchContacts(
       const replyTs = props.hs_email_first_reply_date
         ? new Date(props.hs_email_first_reply_date).getTime()
         : null;
+      const createMs = props.createdate ? new Date(props.createdate).getTime() : 0;
       contacts.push({
         id: c.id,
+        createdInPeriod: createMs >= fromMs && createMs <= toMs,
         leadSource: props.original_lead_source || null,
         conversionAction: props.conversion_action || null,
         visitBooked: !!props.date_that_initial_visit_booked_is_set_to_yes,
@@ -305,6 +309,7 @@ export async function GET(request: NextRequest) {
       leadSource: string;
       conversionAction: string;
       forms: string[];
+      createdInPeriod: boolean;
     }
     const contactJourneys: ContactJourney[] = [];
 
@@ -387,6 +392,7 @@ export async function GET(request: NextRequest) {
         leadSource: source,
         conversionAction: c.conversionAction ? friendlyName(c.conversionAction) : "",
         forms: [...formNames],
+        createdInPeriod: c.createdInPeriod,
       });
     }
 
@@ -430,6 +436,7 @@ export async function GET(request: NextRequest) {
         leadSource: cj.leadSource,
         conversionAction: cj.conversionAction,
         forms: cj.forms,
+        createdInPeriod: cj.createdInPeriod,
       })),
     });
   } catch (e) {
