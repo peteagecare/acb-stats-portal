@@ -2482,7 +2482,8 @@ export default function Dashboard() {
                 if (step === "Home Visit") return "#0EA5E9";
                 if (step.includes("Cancelled")) return "#EF4444";
                 if (step.includes("Phone") || step.includes("Call")) return "#F59E0B";
-                if (step === "First Email") return "#3B82F6";
+                if (step === "We Emailed") return "#3B82F6";
+                if (step === "They Emailed") return "#06B6D4";
                 return "#8B5CF6";
               };
 

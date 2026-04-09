@@ -100,7 +100,8 @@ interface ContactInfo {
   visitBooked: boolean;
   visitCancelled: boolean;
   wonDate: string | null;
-  firstEmailTs: number | null;
+  firstEmailSentTs: number | null;
+  firstEmailReplyTs: number | null;
 }
 
 async function searchContacts(
@@ -150,6 +151,7 @@ async function searchContacts(
         "initial_visit_booked_",
         "won_date",
         "hs_email_first_send_date",
+        "hs_email_first_reply_date",
       ],
       limit: 100,
       sorts: [{ propertyName: "createdate", direction: "ASCENDING" }],
@@ -166,8 +168,11 @@ async function searchContacts(
       if (seen.has(c.id)) continue;
       seen.add(c.id);
       const props = c.properties ?? {};
-      const emailTs = props.hs_email_first_send_date
+      const sentTs = props.hs_email_first_send_date
         ? new Date(props.hs_email_first_send_date).getTime()
+        : null;
+      const replyTs = props.hs_email_first_reply_date
+        ? new Date(props.hs_email_first_reply_date).getTime()
         : null;
       contacts.push({
         id: c.id,
@@ -176,7 +181,8 @@ async function searchContacts(
         visitBooked: !!props.date_that_initial_visit_booked_is_set_to_yes,
         visitCancelled: props.initial_visit_booked_ === "Cancelled",
         wonDate: props.won_date || null,
-        firstEmailTs: Number.isFinite(emailTs) ? emailTs : null,
+        firstEmailSentTs: Number.isFinite(sentTs) ? sentTs : null,
+        firstEmailReplyTs: Number.isFinite(replyTs) ? replyTs : null,
       });
     }
 
@@ -305,9 +311,12 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // First email engagement
-      if (c.firstEmailTs) {
-        events.push({ label: "First Email", timestamp: c.firstEmailTs });
+      // First email engagements (outbound vs inbound)
+      if (c.firstEmailSentTs) {
+        events.push({ label: "We Emailed", timestamp: c.firstEmailSentTs });
+      }
+      if (c.firstEmailReplyTs) {
+        events.push({ label: "They Emailed", timestamp: c.firstEmailReplyTs });
       }
 
       // Sort all events by timestamp
