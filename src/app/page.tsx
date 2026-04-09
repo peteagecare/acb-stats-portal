@@ -2475,6 +2475,35 @@ export default function Dashboard() {
                 .map(([path, count]) => ({ path, steps: path.split(" → "), count }))
                 .sort((a, b) => b.count - a.count);
 
+              // Touchpoint attribution: first / mid / last touch
+              const MILESTONE_STEPS = new Set(["Home Visit", "Home Visit (Cancelled)", "Won"]);
+              const isInteraction = (s: string) =>
+                !MILESTONE_STEPS.has(s) && !s.startsWith("Waiting") && !filtered.some((cj) => cj.leadSource === s);
+              const attrFirst = new Map<string, number>();
+              const attrMid = new Map<string, number>();
+              const attrLast = new Map<string, number>();
+              for (const cj of filtered) {
+                // Extract only interaction steps (skip lead source at [0], milestones, waiting)
+                const interactions = cj.steps.filter(isInteraction);
+                if (interactions.length === 0) continue;
+                const first = interactions[0];
+                const last = interactions[interactions.length - 1];
+                attrFirst.set(first, (attrFirst.get(first) ?? 0) + 1);
+                attrLast.set(last, (attrLast.get(last) ?? 0) + 1);
+                for (let idx = 1; idx < interactions.length - 1; idx++) {
+                  const mid = interactions[idx];
+                  attrMid.set(mid, (attrMid.get(mid) ?? 0) + 1);
+                }
+              }
+              const allTouchpoints = new Set([...attrFirst.keys(), ...attrMid.keys(), ...attrLast.keys()]);
+              const attrData = [...allTouchpoints].map((name) => {
+                const f = attrFirst.get(name) ?? 0;
+                const m = attrMid.get(name) ?? 0;
+                const l = attrLast.get(name) ?? 0;
+                const total = f + m + l;
+                return { name, first: f, mid: m, last: l, total };
+              }).sort((a, b) => b.total - a.total);
+
               const hasVisit = (j: { steps: string[] }) => j.steps.some((s) => s === "Home Visit" || s === "Home Visit (Cancelled)" || s === "Won");
               const withVisit = filteredJourneys.filter(hasVisit);
               const withoutVisit = filteredJourneys.filter((j) => !hasVisit(j));
@@ -2604,6 +2633,53 @@ export default function Dashboard() {
                       </button>
                     ))}
                   </div>
+
+                  {/* Touchpoint attribution chart */}
+                  {attrData.length > 0 && (
+                    <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px", marginBottom: "0" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+                        <p style={{ fontSize: "11px", fontWeight: 700, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                          Touchpoint Attribution
+                        </p>
+                        <div style={{ display: "flex", gap: "12px" }}>
+                          <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "10px", color: "#64748B" }}>
+                            <span style={{ width: "8px", height: "8px", borderRadius: "2px", background: "#8B5CF6" }} /> First Touch
+                          </span>
+                          <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "10px", color: "#64748B" }}>
+                            <span style={{ width: "8px", height: "8px", borderRadius: "2px", background: "#CBD5E1" }} /> Mid Touch
+                          </span>
+                          <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "10px", color: "#64748B" }}>
+                            <span style={{ width: "8px", height: "8px", borderRadius: "2px", background: "#0EA5E9" }} /> Last Touch
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        {attrData.map((t) => {
+                          const fPct = Math.round((t.first / t.total) * 100);
+                          const mPct = Math.round((t.mid / t.total) * 100);
+                          const lPct = 100 - fPct - mPct;
+                          return (
+                            <div key={t.name}>
+                              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "3px" }}>
+                                <span style={{ fontSize: "12px", fontWeight: 600, color: "#334155" }}>{t.name}</span>
+                                <span style={{ fontSize: "11px", color: "#94A3B8", fontVariantNumeric: "tabular-nums" }}>{t.total}</span>
+                              </div>
+                              <div style={{ display: "flex", height: "6px", borderRadius: "3px", overflow: "hidden" }}>
+                                {fPct > 0 && <div style={{ width: `${fPct}%`, background: "#8B5CF6", transition: "width 0.3s" }} title={`First: ${fPct}%`} />}
+                                {mPct > 0 && <div style={{ width: `${mPct}%`, background: "#CBD5E1", transition: "width 0.3s" }} title={`Mid: ${mPct}%`} />}
+                                {lPct > 0 && <div style={{ width: `${lPct}%`, background: "#0EA5E9", transition: "width 0.3s" }} title={`Last: ${lPct}%`} />}
+                              </div>
+                              <div style={{ display: "flex", gap: "12px", marginTop: "2px" }}>
+                                <span style={{ fontSize: "10px", color: "#8B5CF6", fontWeight: 600 }}>{fPct}% first</span>
+                                {mPct > 0 && <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>{mPct}% mid</span>}
+                                <span style={{ fontSize: "10px", color: "#0EA5E9", fontWeight: 600 }}>{lPct}% last</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                     {/* With Home Visit */}
