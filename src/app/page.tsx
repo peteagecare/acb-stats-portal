@@ -646,7 +646,12 @@ export default function Dashboard() {
   const [customerJourneys, setCustomerJourneys] = useState<{
     journeys: { path: string; steps: string[]; count: number }[];
     totalContacts: number;
+    filters: { leadSources: string[]; conversionActions: string[]; forms: string[] };
+    contactJourneys: { path: string; steps: string[]; leadSource: string; conversionAction: string; forms: string[] }[];
   } | null>(null);
+  const [journeyFilterSource, setJourneyFilterSource] = useState<string | null>(null);
+  const [journeyFilterAction, setJourneyFilterAction] = useState<string | null>(null);
+  const [journeyFilterForm, setJourneyFilterForm] = useState<string | null>(null);
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const [aiDismissed, setAiDismissed] = useState<Set<number>>(new Set());
@@ -891,6 +896,9 @@ export default function Dashboard() {
       }
       if (journeysRes.ok) {
         setCustomerJourneys(await journeysRes.json());
+        setJourneyFilterSource(null);
+        setJourneyFilterAction(null);
+        setJourneyFilterForm(null);
       } else {
         console.error("[customer-journeys] failed:", journeysRes.status, await journeysRes.text());
         setCustomerJourneys(null);
@@ -2430,10 +2438,29 @@ export default function Dashboard() {
             )}
 
             {/* === CUSTOMER JOURNEYS === */}
-            {!isSourceFiltered && customerJourneys && customerJourneys.journeys.length > 0 && (() => {
+            {!isSourceFiltered && customerJourneys && customerJourneys.contactJourneys.length > 0 && (() => {
+              // Client-side filtering from the raw per-contact data
+              const filtered = customerJourneys.contactJourneys.filter((cj) => {
+                if (journeyFilterSource && cj.leadSource !== journeyFilterSource) return false;
+                if (journeyFilterAction && cj.conversionAction !== journeyFilterAction) return false;
+                if (journeyFilterForm && !cj.forms.includes(journeyFilterForm)) return false;
+                return true;
+              });
+              const isFiltered = !!(journeyFilterSource || journeyFilterAction || journeyFilterForm);
+
+              // Re-aggregate filtered contacts into journey paths
+              const pathCounts = new Map<string, number>();
+              for (const cj of filtered) {
+                const key = cj.steps.join(" → ");
+                pathCounts.set(key, (pathCounts.get(key) ?? 0) + 1);
+              }
+              const filteredJourneys = Array.from(pathCounts.entries())
+                .map(([path, count]) => ({ path, steps: path.split(" → "), count }))
+                .sort((a, b) => b.count - a.count);
+
               const hasVisit = (j: { steps: string[] }) => j.steps.some((s) => s === "Home Visit" || s === "Home Visit (Cancelled)" || s === "Won");
-              const withVisit = customerJourneys.journeys.filter(hasVisit);
-              const withoutVisit = customerJourneys.journeys.filter((j) => !hasVisit(j));
+              const withVisit = filteredJourneys.filter(hasVisit);
+              const withoutVisit = filteredJourneys.filter((j) => !hasVisit(j));
               const withVisitTotal = withVisit.reduce((s, j) => s + j.count, 0);
               const withoutVisitTotal = withoutVisit.reduce((s, j) => s + j.count, 0);
 
@@ -2446,7 +2473,19 @@ export default function Dashboard() {
                 return "#8B5CF6";
               };
 
-              const renderJourneyList = (list: typeof customerJourneys.journeys, barColour: string) => {
+              const pillStyle = (active: boolean): React.CSSProperties => ({
+                fontSize: "10px",
+                fontWeight: 600,
+                padding: "3px 10px",
+                borderRadius: "20px",
+                border: active ? "1px solid #2563eb" : "1px solid #E2E8F0",
+                background: active ? "#EFF6FF" : "white",
+                color: active ? "#2563eb" : "#64748B",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              });
+
+              const renderJourneyList = (list: typeof filteredJourneys, barColour: string) => {
                 const maxCount = list.length > 0 ? list[0].count : 1;
                 return list.map((j, i) => {
                   const pct = (j.count / maxCount) * 100;
@@ -2490,9 +2529,37 @@ export default function Dashboard() {
                       Customer Journeys
                     </h2>
                     <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>
-                      {customerJourneys.totalContacts} contact{customerJourneys.totalContacts !== 1 ? "s" : ""}
+                      {filtered.length} contact{filtered.length !== 1 ? "s" : ""}{isFiltered ? ` (of ${customerJourneys.totalContacts})` : ""}
                     </span>
                   </div>
+
+                  {/* Filter pills */}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
+                    {isFiltered && (
+                      <button type="button" onClick={() => { setJourneyFilterSource(null); setJourneyFilterAction(null); setJourneyFilterForm(null); }}
+                        style={{ ...pillStyle(false), color: "#DC2626", borderColor: "#FECACA", background: "#FEF2F2" }}>
+                        Clear filters
+                      </button>
+                    )}
+                    {customerJourneys.filters.leadSources.map((s) => (
+                      <button key={`s-${s}`} type="button" onClick={() => setJourneyFilterSource(journeyFilterSource === s ? null : s)} style={pillStyle(journeyFilterSource === s)}>
+                        {s}
+                      </button>
+                    ))}
+                    <span style={{ width: "1px", background: "#E2E8F0", margin: "0 2px" }} />
+                    {customerJourneys.filters.conversionActions.map((a) => (
+                      <button key={`a-${a}`} type="button" onClick={() => setJourneyFilterAction(journeyFilterAction === a ? null : a)} style={pillStyle(journeyFilterAction === a)}>
+                        {a}
+                      </button>
+                    ))}
+                    <span style={{ width: "1px", background: "#E2E8F0", margin: "0 2px" }} />
+                    {customerJourneys.filters.forms.map((f) => (
+                      <button key={`f-${f}`} type="button" onClick={() => setJourneyFilterForm(journeyFilterForm === f ? null : f)} style={pillStyle(journeyFilterForm === f)}>
+                        {f}
+                      </button>
+                    ))}
+                  </div>
+
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                     {/* With Home Visit */}
                     <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -2505,7 +2572,7 @@ export default function Dashboard() {
                         </span>
                       </div>
                       {withVisit.length > 0 ? renderJourneyList(withVisit, "#0EA5E9") : (
-                        <p style={{ fontSize: "12px", color: "#94A3B8", margin: 0 }}>None in this period</p>
+                        <p style={{ fontSize: "12px", color: "#94A3B8", margin: 0 }}>None{isFiltered ? " matching filters" : " in this period"}</p>
                       )}
                     </div>
                     {/* Without Home Visit */}
@@ -2519,7 +2586,7 @@ export default function Dashboard() {
                         </span>
                       </div>
                       {withoutVisit.length > 0 ? renderJourneyList(withoutVisit, "#8B5CF6") : (
-                        <p style={{ fontSize: "12px", color: "#94A3B8", margin: 0 }}>None in this period</p>
+                        <p style={{ fontSize: "12px", color: "#94A3B8", margin: 0 }}>None{isFiltered ? " matching filters" : " in this period"}</p>
                       )}
                     </div>
                   </div>

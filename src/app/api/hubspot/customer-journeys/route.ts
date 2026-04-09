@@ -95,6 +95,7 @@ async function hubspotFetch(url: string, token: string, options?: RequestInit) {
 
 interface ContactInfo {
   id: string;
+  leadSource: string | null;
   conversionAction: string | null;
   visitBooked: boolean;
   visitCancelled: boolean;
@@ -143,6 +144,7 @@ async function searchContacts(
         },
       ],
       properties: [
+        "original_lead_source",
         "conversion_action",
         "date_that_initial_visit_booked_is_set_to_yes",
         "initial_visit_booked_",
@@ -169,6 +171,7 @@ async function searchContacts(
         : null;
       contacts.push({
         id: c.id,
+        leadSource: props.original_lead_source || null,
         conversionAction: props.conversion_action || null,
         visitBooked: !!props.date_that_initial_visit_booked_is_set_to_yes,
         visitCancelled: props.initial_visit_booked_ === "Cancelled",
@@ -259,16 +262,37 @@ export async function GET(request: NextRequest) {
     const ids = contacts.map((c) => c.id);
     const formSubs = await fetchFormSubmissions(token, ids);
 
-    // Build a journey per contact
-    const pathCounts = new Map<string, number>();
+    // Fetch lead source labels for friendly display
+    let sourceLabels: Record<string, string> = {};
+    try {
+      const res = await hubspotFetch(
+        `${HUBSPOT_API}/crm/v3/properties/contacts/original_lead_source`,
+        token,
+      );
+      for (const opt of res.options ?? []) {
+        if (opt?.value) sourceLabels[opt.value] = opt.label ?? opt.value;
+      }
+    } catch { /* non-critical */ }
+
+    // Track per-contact journey info for aggregation + filtering
+    interface ContactJourney {
+      steps: string[];
+      leadSource: string;
+      conversionAction: string;
+      forms: string[];
+    }
+    const contactJourneys: ContactJourney[] = [];
 
     for (const c of contacts) {
       const events: TimelineEvent[] = [];
+      const formNames = new Set<string>();
 
       // Form submissions (chronological, all of them)
       const subs = formSubs.get(c.id) ?? [];
       for (const s of subs) {
-        events.push({ label: friendlyName(s.title), timestamp: s.timestamp });
+        const label = friendlyName(s.title);
+        events.push({ label, timestamp: s.timestamp });
+        formNames.add(label);
       }
 
       // conversion_action — add if it represents a non-form interaction
@@ -277,7 +301,6 @@ export async function GET(request: NextRequest) {
         const label = friendlyName(c.conversionAction);
         const alreadyInForms = events.some((e) => e.label === label);
         if (!alreadyInForms) {
-          // Place it at the start (it's the initial interaction that brought them in)
           events.unshift({ label, timestamp: 0 });
         }
       }
@@ -290,8 +313,7 @@ export async function GET(request: NextRequest) {
       // Sort all events by timestamp
       events.sort((a, b) => a.timestamp - b.timestamp);
 
-      // Build the step labels — skip consecutive duplicates (same form
-      // submitted twice in a row after normalisation collapses to one step)
+      // Build step labels — skip consecutive duplicates
       const steps: string[] = [];
       for (const e of events) {
         if (steps.length === 0 || steps[steps.length - 1] !== e.label) {
@@ -299,7 +321,7 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Append milestones (not time-sorted — always at the end)
+      // Append milestones
       if (c.visitBooked && !c.visitCancelled) {
         steps.push("Home Visit");
       } else if (c.visitBooked && c.visitCancelled) {
@@ -309,10 +331,25 @@ export async function GET(request: NextRequest) {
         steps.push("Won");
       }
 
-      if (steps.length === 0) continue;
+      // Prepend lead source
+      const source = c.leadSource
+        ? (sourceLabels[c.leadSource] ?? c.leadSource)
+        : "Unknown Source";
+      steps.unshift(source);
 
-      const pathKey = steps.join(" → ");
-      pathCounts.set(pathKey, (pathCounts.get(pathKey) ?? 0) + 1);
+      contactJourneys.push({
+        steps,
+        leadSource: source,
+        conversionAction: c.conversionAction ? friendlyName(c.conversionAction) : "",
+        forms: [...formNames],
+      });
+    }
+
+    // Aggregate into unique paths
+    const pathCounts = new Map<string, number>();
+    for (const cj of contactJourneys) {
+      const key = cj.steps.join(" → ");
+      pathCounts.set(key, (pathCounts.get(key) ?? 0) + 1);
     }
 
     const journeys = Array.from(pathCounts.entries())
@@ -323,9 +360,32 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => b.count - a.count);
 
+    // Build filter options from the data
+    const leadSourceSet = new Set<string>();
+    const conversionActionSet = new Set<string>();
+    const formSet = new Set<string>();
+    for (const cj of contactJourneys) {
+      leadSourceSet.add(cj.leadSource);
+      if (cj.conversionAction) conversionActionSet.add(cj.conversionAction);
+      for (const f of cj.forms) formSet.add(f);
+    }
+
     return Response.json({
       journeys,
       totalContacts: contacts.length,
+      filters: {
+        leadSources: [...leadSourceSet].sort(),
+        conversionActions: [...conversionActionSet].sort(),
+        forms: [...formSet].sort(),
+      },
+      // Raw per-contact data so the frontend can re-filter without another API call
+      contactJourneys: contactJourneys.map((cj) => ({
+        path: cj.steps.join(" → "),
+        steps: cj.steps,
+        leadSource: cj.leadSource,
+        conversionAction: cj.conversionAction,
+        forms: cj.forms,
+      })),
     });
   } catch (e) {
     console.error("[customer-journeys] error:", e);
