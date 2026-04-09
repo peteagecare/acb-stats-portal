@@ -575,6 +575,7 @@ export default function Dashboard() {
   const [organicLeads, setOrganicLeads] = useState<number>(0);
   const [wonJobs, setWonJobs] = useState<number | null>(null);
   const [wonValue, setWonValue] = useState<number | null>(null);
+  const [wonBySource, setWonBySource] = useState<{ label: string; count: number; value: number }[]>([]);
   const [sourceBreakdown, setSourceBreakdown] = useState<Record<string, { prospects: number; leads: number }>>({});
   const [reviews, setReviews] = useState<{ name: string; url: string; colour: string; total: number; rating: number; increase: number | null }[]>([]);
   const [reviewsTotal, setReviewsTotal] = useState(0);
@@ -787,6 +788,7 @@ export default function Dashboard() {
         const wonData = await wonRes.json();
         setWonJobs(wonData.total);
         setWonValue(wonData.totalValue);
+        setWonBySource(wonData.bySource ?? []);
       }
       if (organicRes.ok) setOrganicLeads((await organicRes.json()).total);
       setLoadProgress(55);
@@ -1630,23 +1632,16 @@ export default function Dashboard() {
                     <span style={{ fontSize: "13px", fontWeight: 700, color: "#047857" }}>£{wonValue.toLocaleString()}</span>
                   )}
                 </div>
-                {funnelBySource && !isSourceFiltered && (() => {
-                  const bySource = funnelBySource.sources
-                    .filter((s) => s.wonJobs > 0)
-                    .map((s) => ({ label: s.label, count: s.wonJobs }))
-                    .sort((a, b) => b.count - a.count);
-                  if (bySource.length === 0) return null;
-                  return (
-                    <>
-                      <div style={{ fontSize: "8px", fontWeight: 700, color: "#059669", textTransform: "uppercase", letterSpacing: "0.5px", margin: "10px 0 4px" }}>
-                        Original Lead Source
-                      </div>
-                      {bySource.map((s) => (
-                        <MiniRow key={`wsrc-${s.label}`} label={s.label} count={s.count} />
-                      ))}
-                    </>
-                  );
-                })()}
+                {!isSourceFiltered && wonBySource.length > 0 && (
+                  <>
+                    <div style={{ fontSize: "8px", fontWeight: 700, color: "#059669", textTransform: "uppercase", letterSpacing: "0.5px", margin: "10px 0 4px" }}>
+                      Original Lead Source
+                    </div>
+                    {wonBySource.map((s) => (
+                      <MiniRow key={`wsrc-${s.label}`} label={`${s.label}${s.value > 0 ? ` (£${s.value.toLocaleString()})` : ""}`} count={s.count} />
+                    ))}
+                  </>
+                )}
               </FunnelCard>
             </div>
 

@@ -57,6 +57,7 @@ export async function GET(request: NextRequest) {
   const stages = [WON_WAITING_STAGE, COMPLETED_STAGE];
   let total = 0;
   let totalValue = 0;
+  const bySource = new Map<string, { count: number; value: number }>();
 
   for (const stage of stages) {
     const body = {
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
           { propertyName: "first_deal_created_date", operator: "LTE", value: toMs.toString() },
         ],
       }],
-      properties: ["lifecyclestage", "recent_deal_amount", "first_deal_created_date"],
+      properties: ["lifecyclestage", "recent_deal_amount", "first_deal_created_date", "original_lead_source"],
       limit: 100,
     };
 
@@ -78,12 +79,21 @@ export async function GET(request: NextRequest) {
 
     total += data.total ?? 0;
 
-    // Sum deal values
     for (const contact of data.results ?? []) {
       const amt = parseFloat(contact.properties?.recent_deal_amount ?? "0");
       if (!isNaN(amt)) totalValue += amt;
+
+      const source = contact.properties?.original_lead_source ?? "(No source)";
+      const entry = bySource.get(source) ?? { count: 0, value: 0 };
+      entry.count += 1;
+      if (!isNaN(amt)) entry.value += amt;
+      bySource.set(source, entry);
     }
   }
 
-  return Response.json({ total, totalValue: Math.round(totalValue) });
+  const sourceList = Array.from(bySource.entries())
+    .map(([label, data]) => ({ label, count: data.count, value: Math.round(data.value) }))
+    .sort((a, b) => b.count - a.count);
+
+  return Response.json({ total, totalValue: Math.round(totalValue), bySource: sourceList });
 }
