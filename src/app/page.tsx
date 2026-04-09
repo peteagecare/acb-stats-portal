@@ -2495,13 +2495,31 @@ export default function Dashboard() {
                   attrMid.set(mid, (attrMid.get(mid) ?? 0) + 1);
                 }
               }
+              // Conversion rate per touchpoint: of contacts who had this touchpoint, how many reached Home Visit or Won?
+              const tpTotal = new Map<string, number>();
+              const tpConverted = new Map<string, number>();
+              for (const cj of filtered) {
+                const interactions = cj.steps.filter(isInteraction);
+                const converted = cj.steps.some((s) => s === "Home Visit" || s === "Won");
+                const seen = new Set<string>();
+                for (const step of interactions) {
+                  if (seen.has(step)) continue;
+                  seen.add(step);
+                  tpTotal.set(step, (tpTotal.get(step) ?? 0) + 1);
+                  if (converted) tpConverted.set(step, (tpConverted.get(step) ?? 0) + 1);
+                }
+              }
+
               const allTouchpoints = new Set([...attrFirst.keys(), ...attrMid.keys(), ...attrLast.keys()]);
               const attrData = [...allTouchpoints].map((name) => {
                 const f = attrFirst.get(name) ?? 0;
                 const m = attrMid.get(name) ?? 0;
                 const l = attrLast.get(name) ?? 0;
                 const total = f + m + l;
-                return { name, first: f, mid: m, last: l, total };
+                const contacts = tpTotal.get(name) ?? 0;
+                const converted = tpConverted.get(name) ?? 0;
+                const convRate = contacts > 0 ? Math.round((converted / contacts) * 100) : 0;
+                return { name, first: f, mid: m, last: l, total, convRate };
               }).sort((a, b) => b.total - a.total);
 
               const hasVisit = (j: { steps: string[] }) => j.steps.some((s) => s === "Home Visit" || s === "Home Visit (Cancelled)" || s === "Won");
@@ -2649,6 +2667,12 @@ export default function Dashboard() {
                     const midSorted = [...attrData].filter((t) => t.mid > 0).sort((a, b) => b.mid - a.mid);
                     const lastSorted = [...attrData].filter((t) => t.last > 0).sort((a, b) => b.last - a.last);
 
+                    const convRateColour = (rate: number): string => {
+                      if (rate >= 30) return "#059669";
+                      if (rate >= 15) return "#F59E0B";
+                      return "#DC2626";
+                    };
+
                     const renderColumn = (
                       items: typeof attrData,
                       field: "first" | "mid" | "last",
@@ -2658,15 +2682,30 @@ export default function Dashboard() {
                       return (
                         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                           {items.map((t) => (
-                            <div key={t.name} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                              <span style={{ fontSize: "11px", color: "#334155", fontWeight: 500, width: "120px", flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.name}>
+                            <div key={t.name} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                              <span style={{ fontSize: "11px", color: "#334155", fontWeight: 500, width: "110px", flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.name}>
                                 {t.name}
                               </span>
                               <div style={{ flex: 1, background: "#F1F5F9", borderRadius: "3px", height: "14px", overflow: "hidden" }}>
                                 <div style={{ width: `${(t[field] / maxVal) * 100}%`, height: "100%", background: colour, borderRadius: "3px", transition: "width 0.3s", minWidth: t[field] > 0 ? "2px" : "0" }} />
                               </div>
-                              <span style={{ fontSize: "11px", fontWeight: 700, color: "#0F172A", width: "30px", textAlign: "right", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
+                              <span style={{ fontSize: "11px", fontWeight: 700, color: "#0F172A", width: "24px", textAlign: "right", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
                                 {t[field]}
+                              </span>
+                              <span
+                                title={`${t.convRate}% of contacts with this touchpoint reached Home Visit or Won`}
+                                style={{
+                                  fontSize: "9px",
+                                  fontWeight: 700,
+                                  color: convRateColour(t.convRate),
+                                  background: `${convRateColour(t.convRate)}12`,
+                                  borderRadius: "4px",
+                                  padding: "1px 5px",
+                                  flexShrink: 0,
+                                  width: "34px",
+                                  textAlign: "center",
+                                }}>
+                                {t.convRate}%
                               </span>
                             </div>
                           ))}
@@ -2679,9 +2718,17 @@ export default function Dashboard() {
 
                     return (
                       <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px" }}>
-                        <p style={{ fontSize: "11px", fontWeight: 700, color: "#64748B", margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                          Touchpoint Attribution
-                        </p>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+                          <p style={{ fontSize: "11px", fontWeight: 700, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                            Touchpoint Attribution
+                          </p>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "9px", fontWeight: 600 }}>
+                            <span style={{ color: "#64748B" }}>Conv. rate:</span>
+                            <span style={{ color: "#059669" }}>30%+</span>
+                            <span style={{ color: "#F59E0B" }}>15-29%</span>
+                            <span style={{ color: "#DC2626" }}>&lt;15%</span>
+                          </div>
+                        </div>
 
                         {/* Header arrows with percentages */}
                         <div style={{ display: "flex", alignItems: "center", marginBottom: "16px" }}>
