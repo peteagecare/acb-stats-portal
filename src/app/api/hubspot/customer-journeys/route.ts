@@ -39,10 +39,27 @@ const FORM_LABELS: Record<string, string> = {
   "direct email": "Direct Email",
   "brochure - home visit": "Brochure - Home Visit",
   "pricing guide home visit": "Pricing Guide Home Visit",
+  // Facebook / Meta instant form variants — all the same lead form
+  "meta - home_visit_instantform": "Home Design Form (Facebook Ad)",
+  "hubspot zapier linked form": "Home Design Form (Facebook Ad)",
 };
 
+/** Pattern-based fallback for forms with dates/IDs in the name */
+const FORM_PATTERNS: [RegExp, string][] = [
+  [/^home_visit_instantform/i, "Home Design Form (Facebook Ad)"],
+  [/^meta\s*-\s*home_visit/i, "Home Design Form (Facebook Ad)"],
+  [/^brochure_instantform/i, "Brochure Download (Facebook Ad)"],
+  [/^meta\s*-\s*brochure/i, "Brochure Download (Facebook Ad)"],
+];
+
 function friendlyName(raw: string): string {
-  return FORM_LABELS[raw.toLowerCase().trim()] ?? raw;
+  const key = raw.toLowerCase().trim();
+  const exact = FORM_LABELS[key];
+  if (exact) return exact;
+  for (const [re, label] of FORM_PATTERNS) {
+    if (re.test(key)) return label;
+  }
+  return raw;
 }
 
 function londonDateToUtcMs(dateStr: string, time: string): number {
