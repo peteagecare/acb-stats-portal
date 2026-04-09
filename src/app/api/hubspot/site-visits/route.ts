@@ -109,61 +109,31 @@ export async function GET(request: NextRequest) {
 
   try {
     // ──────────────────────────────────────────────────────────────────
-    // 1. Three parallel counts for the in-period card:
-    //    a) Non-cancelled visits whose initial_home_visit_date is in the period
-    //    b) Cancelled visits whose initial_home_visit_date is in the period
-    //       (visit was scheduled FOR this period but got cancelled)
-    //    c) Visits whose date_that_initial_visit_is_cancelled is in the period
-    //       (cancellation event happened DURING this period, regardless of
-    //        when the visit itself was scheduled)
+    // 1. In-period: visits BOOKED in the period, split into active vs
+    //    cancelled. Uses date_that_initial_visit_booked_is_set_to_yes
+    //    so the cohort matches the Home Visits KPI in the funnel. If
+    //    someone booked on Friday and cancelled on Monday, the
+    //    cancellation is attributed to Friday (the booking date).
     // ──────────────────────────────────────────────────────────────────
-    const inPeriodBaseFilters = [
-      { propertyName: "initial_home_visit_date", operator: "GTE", value: dayStartUtcMs(from).toString() },
-      { propertyName: "initial_home_visit_date", operator: "LTE", value: dayEndUtcMs(to).toString() },
+    const bookedInPeriodFilters = [
+      { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "GTE", value: dayStartUtcMs(from).toString() },
+      { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "LTE", value: dayEndUtcMs(to).toString() },
       LIFECYCLE_EXCLUSION_FILTER,
     ];
-    const [inPeriodRes, inPeriodCancelledRes, cancelledDuringPeriodRes] = await Promise.all([
+    const [inPeriodRes, cancelledRes] = await Promise.all([
       hubspotSearch(token, {
-        filterGroups: [
-          {
-            filters: [
-              ...inPeriodBaseFilters,
-              { propertyName: "initial_visit_booked_", operator: "NEQ", value: "Cancelled" },
-            ],
-          },
-        ],
-        properties: ["initial_home_visit_date"],
+        filterGroups: [{ filters: [...bookedInPeriodFilters, { propertyName: "initial_visit_booked_", operator: "NEQ", value: "Cancelled" }] }],
+        properties: ["date_that_initial_visit_booked_is_set_to_yes"],
         limit: 1,
       }),
       hubspotSearch(token, {
-        filterGroups: [
-          {
-            filters: [
-              ...inPeriodBaseFilters,
-              { propertyName: "initial_visit_booked_", operator: "EQ", value: "Cancelled" },
-            ],
-          },
-        ],
-        properties: ["initial_home_visit_date"],
-        limit: 1,
-      }),
-      hubspotSearch(token, {
-        filterGroups: [
-          {
-            filters: [
-              { propertyName: "date_that_initial_visit_is_cancelled", operator: "GTE", value: dayStartUtcMs(from).toString() },
-              { propertyName: "date_that_initial_visit_is_cancelled", operator: "LTE", value: dayEndUtcMs(to).toString() },
-              LIFECYCLE_EXCLUSION_FILTER,
-            ],
-          },
-        ],
-        properties: ["date_that_initial_visit_is_cancelled"],
+        filterGroups: [{ filters: [...bookedInPeriodFilters, { propertyName: "initial_visit_booked_", operator: "EQ", value: "Cancelled" }] }],
+        properties: ["date_that_initial_visit_booked_is_set_to_yes"],
         limit: 1,
       }),
     ]);
     const inPeriod = inPeriodRes.total ?? 0;
-    const inPeriodCancelled = inPeriodCancelledRes.total ?? 0;
-    const cancelledDuringPeriod = cancelledDuringPeriodRes.total ?? 0;
+    const cancelled = cancelledRes.total ?? 0;
 
     // ──────────────────────────────────────────────────────────────────
     // 2. Forward calendar — visits scheduled this week / next 3 weeks
@@ -183,7 +153,7 @@ export async function GET(request: NextRequest) {
     // bucket into one of the four weeks based on initial_home_visit_date and
     // tally counts (non-cancelled) + cancelled + per-salesman counts.
     const counts = [0, 0, 0, 0];
-    const cancelled = [0, 0, 0, 0];
+    const weekCancelled = [0, 0, 0, 0];
     // bySalesman[weekIdx] = { [salesman]: count } — only counts non-cancelled visits
     const bySalesman: Record<string, number>[] = [{}, {}, {}, {}];
     let after: string | undefined;
@@ -231,7 +201,7 @@ export async function GET(request: NextRequest) {
           const bEnd = buckets[i].end.getTime() + 86_399_999;
           if (ms >= bStart && ms <= bEnd) {
             if (isCancelled) {
-              cancelled[i] += 1;
+              weekCancelled[i] += 1;
             } else {
               counts[i] += 1;
               bySalesman[i][salesman] = (bySalesman[i][salesman] ?? 0) + 1;
@@ -248,14 +218,13 @@ export async function GET(request: NextRequest) {
 
     return Response.json({
       inPeriod,
-      inPeriodCancelled,
-      cancelledDuringPeriod,
+      cancelled,
       upcoming: buckets.map((b, i) => ({
         label: b.label,
         weekStart: londonDateString(b.start),
         weekEnd: londonDateString(b.end),
         count: counts[i],
-        cancelled: cancelled[i],
+        cancelled: weekCancelled[i],
         bySalesman: bySalesman[i],
       })),
     });

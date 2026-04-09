@@ -591,8 +591,7 @@ export default function Dashboard() {
   const [dowSegment, setDowSegment] = useState<string>("__all__");
   const [siteVisits, setSiteVisits] = useState<{
     inPeriod: number;
-    inPeriodCancelled: number;
-    cancelledDuringPeriod: number;
+    cancelled: number;
     upcoming: {
       label: string;
       weekStart: string;
@@ -2069,36 +2068,22 @@ export default function Dashboard() {
                   {/* In-period count */}
                   <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "16px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
                     <p style={{ fontSize: "11px", fontWeight: 600, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                      In Selected Period
+                      Booked In Period
                     </p>
                     <p style={{ fontSize: "11px", color: "#94A3B8", margin: "2px 0 8px" }}>
-                      Visits with Initial Home Visit Date in range, excluding cancelled
+                      Visits booked in this date range, excluding cancelled
                     </p>
                     <p style={{ fontSize: "44px", fontWeight: 800, color: "#0F172A", margin: 0, lineHeight: 1 }}>
                       {siteVisits.inPeriod.toLocaleString()}
                     </p>
-                    {(siteVisits.cancelledDuringPeriod > 0 || siteVisits.inPeriodCancelled > 0) && (
-                      <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #F1F5F9", display: "flex", flexDirection: "column", gap: "8px" }}>
-                        {siteVisits.cancelledDuringPeriod > 0 && (
-                          <div>
-                            <p style={{ fontSize: "20px", fontWeight: 800, color: "#DC2626", margin: 0, lineHeight: 1 }}>
-                              {siteVisits.cancelledDuringPeriod.toLocaleString()}
-                            </p>
-                            <p style={{ fontSize: "11px", color: "#64748B", margin: "2px 0 0", lineHeight: 1.3 }}>
-                              visits cancelled within this period
-                            </p>
-                          </div>
-                        )}
-                        {siteVisits.inPeriodCancelled > 0 && (
-                          <div>
-                            <p style={{ fontSize: "20px", fontWeight: 800, color: "#DC2626", margin: 0, lineHeight: 1 }}>
-                              {siteVisits.inPeriodCancelled.toLocaleString()}
-                            </p>
-                            <p style={{ fontSize: "11px", color: "#64748B", margin: "2px 0 0", lineHeight: 1.3 }}>
-                              visits scheduled in this period that were set to cancelled
-                            </p>
-                          </div>
-                        )}
+                    {siteVisits.cancelled > 0 && (
+                      <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #F1F5F9" }}>
+                        <p style={{ fontSize: "20px", fontWeight: 800, color: "#DC2626", margin: 0, lineHeight: 1 }}>
+                          {siteVisits.cancelled.toLocaleString()}
+                        </p>
+                        <p style={{ fontSize: "11px", color: "#64748B", margin: "2px 0 0", lineHeight: 1.3 }}>
+                          cancelled
+                        </p>
                       </div>
                     )}
                   </div>
