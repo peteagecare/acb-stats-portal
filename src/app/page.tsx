@@ -654,6 +654,7 @@ export default function Dashboard() {
   const [journeyFilterForm, setJourneyFilterForm] = useState<string | null>(null);
   const [journeyShowVisit, setJourneyShowVisit] = useState(10);
   const [journeyShowNoVisit, setJourneyShowNoVisit] = useState(10);
+  const [attrShowCount, setAttrShowCount] = useState(5);
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const [aiDismissed, setAiDismissed] = useState<Set<number>>(new Set());
@@ -922,6 +923,7 @@ export default function Dashboard() {
         setJourneyFilterForm(null);
         setJourneyShowVisit(10);
         setJourneyShowNoVisit(10);
+        setAttrShowCount(5);
       } else {
         console.error("[customer-journeys] failed:", journeysRes.status, await journeysRes.text());
         setCustomerJourneys(null);
@@ -3026,28 +3028,38 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  {/* Touchpoint attribution — compact top 5 per stage */}
+                  {/* Touchpoint attribution — with bars + load more */}
                   {attrData.length > 0 && (() => {
                     const convRateColour = (rate: number): string => {
                       if (rate >= 30) return "#059669";
                       if (rate >= 15) return "#F59E0B";
                       return "#DC2626";
                     };
-                    const firstSorted = [...attrData].filter((t) => t.first > 0).sort((a, b) => b.first - a.first).slice(0, 5);
-                    const midSorted = [...attrData].filter((t) => t.mid > 0).sort((a, b) => b.mid - a.mid).slice(0, 5);
-                    const lastSorted = [...attrData].filter((t) => t.last > 0).sort((a, b) => b.last - a.last).slice(0, 5);
+                    const allFirst = [...attrData].filter((t) => t.first > 0).sort((a, b) => b.first - a.first);
+                    const allMid = [...attrData].filter((t) => t.mid > 0).sort((a, b) => b.mid - a.mid);
+                    const allLast = [...attrData].filter((t) => t.last > 0).sort((a, b) => b.last - a.last);
+                    const firstSorted = allFirst.slice(0, attrShowCount);
+                    const midSorted = allMid.slice(0, attrShowCount);
+                    const lastSorted = allLast.slice(0, attrShowCount);
+                    const hasMore = allFirst.length > attrShowCount || allMid.length > attrShowCount || allLast.length > attrShowCount;
 
-                    const renderCompact = (items: typeof attrData, field: "first" | "mid" | "last", colour: string) => (
-                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                        {items.map((t) => (
-                          <div key={t.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
-                            <span style={{ fontSize: "11px", color: "#3A3A3C", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.name}>{t.name}</span>
-                            <span style={{ fontSize: "12px", fontWeight: 600, color: "#1D1D1F", fontVariantNumeric: "tabular-nums" }}>{t[field]}</span>
-                            <span title={`${t.convRate}% converted`} style={{ fontSize: "9px", fontWeight: 500, color: convRateColour(t.convRate), background: `${convRateColour(t.convRate)}12`, borderRadius: "4px", padding: "1px 5px", width: "30px", textAlign: "center" }}>{t.convRate}%</span>
-                          </div>
-                        ))}
-                      </div>
-                    );
+                    const renderCompact = (items: typeof attrData, field: "first" | "mid" | "last", colour: string) => {
+                      const maxVal = items.length > 0 ? items[0][field] : 1;
+                      return (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                          {items.map((t) => (
+                            <div key={t.name} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                              <span style={{ fontSize: "11px", color: "#3A3A3C", width: "100px", flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.name}>{t.name}</span>
+                              <div style={{ flex: 1, background: "#F5F5F7", borderRadius: "999px", height: "6px", overflow: "hidden" }}>
+                                <div style={{ width: `${(t[field] / maxVal) * 100}%`, height: "100%", background: colour, borderRadius: "999px", transition: "width 0.3s", minWidth: t[field] > 0 ? "2px" : "0" }} />
+                              </div>
+                              <span style={{ fontSize: "11px", fontWeight: 600, color: "#1D1D1F", width: "22px", textAlign: "right", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{t[field]}</span>
+                              <span title={`${t.convRate}% converted`} style={{ fontSize: "9px", fontWeight: 500, color: convRateColour(t.convRate), background: `${convRateColour(t.convRate)}12`, borderRadius: "4px", padding: "1px 5px", width: "28px", textAlign: "center", flexShrink: 0 }}>{t.convRate}%</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    };
 
                     return (
                       <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "20px", marginBottom: "12px" }}>
@@ -3057,18 +3069,26 @@ export default function Dashboard() {
                         </div>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px" }}>
                           <div>
-                            <p style={{ fontSize: "10px", fontWeight: 500, color: "#8B5CF6", margin: "0 0 8px" }}>First touch (top 5)</p>
+                            <p style={{ fontSize: "10px", fontWeight: 500, color: "#8B5CF6", margin: "0 0 8px" }}>First touch</p>
                             {renderCompact(firstSorted, "first", "#8B5CF6")}
                           </div>
                           <div>
-                            <p style={{ fontSize: "10px", fontWeight: 500, color: "#86868B", margin: "0 0 8px" }}>Mid touch (top 5)</p>
+                            <p style={{ fontSize: "10px", fontWeight: 500, color: "#86868B", margin: "0 0 8px" }}>Mid touch</p>
                             {renderCompact(midSorted, "mid", "#94A3B8")}
                           </div>
                           <div>
-                            <p style={{ fontSize: "10px", fontWeight: 500, color: "#0EA5E9", margin: "0 0 8px" }}>Last touch (top 5)</p>
+                            <p style={{ fontSize: "10px", fontWeight: 500, color: "#0EA5E9", margin: "0 0 8px" }}>Last touch</p>
                             {renderCompact(lastSorted, "last", "#0EA5E9")}
                           </div>
                         </div>
+                        {hasMore && (
+                          <div style={{ textAlign: "center", marginTop: "12px" }}>
+                            <button type="button" onClick={() => setAttrShowCount((n) => n + 5)}
+                              style={{ fontSize: "11px", fontWeight: 500, color: "#0071E3", background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: "8px", padding: "6px 14px", cursor: "pointer" }}>
+                              Show more
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
