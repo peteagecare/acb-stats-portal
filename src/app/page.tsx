@@ -2459,8 +2459,8 @@ export default function Dashboard() {
                     return { bg: "#FEF2F2", border: "#FECACA", text: "#DC2626" };
                   };
                   return (
-                    <div style={{ marginTop: "12px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "10px" }}>
+                    <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "20px", marginTop: "12px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "16px" }}>
                         <p style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", margin: 0 }}>
                           Salesman Workload
                         </p>
@@ -2468,54 +2468,45 @@ export default function Dashboard() {
                           Weekly targets
                         </span>
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "10px" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "80px repeat(4, 1fr)", gap: "8px 10px", alignItems: "center" }}>
+                        {/* Header row */}
+                        <div />
+                        {siteVisits.upcoming.map((wk) => (
+                          <div key={wk.label} style={{ fontSize: "11px", fontWeight: 500, color: "#86868B", textAlign: "center" }}>
+                            {wk.label}
+                          </div>
+                        ))}
+                        {/* Rows */}
                         {SALESMEN.map((name) => {
                           const goal = SALESMAN_GOALS[name] ?? 10;
-                          // Total across all 4 weeks
-                          const thisWeek = siteVisits.upcoming[0]?.bySalesman?.[name] ?? 0;
-                          const nextWeek = siteVisits.upcoming[1]?.bySalesman?.[name] ?? 0;
-                          const total4w = siteVisits.upcoming.reduce((s, wk) => s + (wk.bySalesman?.[name] ?? 0), 0);
-                          const ringSize = 64;
-                          const sw = 4;
-                          const r = (ringSize - sw) / 2;
-                          const circ = 2 * Math.PI * r;
-                          const pctFill = Math.min((thisWeek / goal) * 100, 100);
-                          const dashOff = circ - (pctFill / 100) * circ;
-                          const hit = thisWeek >= goal;
-                          const ringCol = hit ? "#10B981" : thisWeek >= goal * 0.5 ? "#F59E0B" : "#DC2626";
                           return (
-                            <div
-                              key={name}
-                              style={{
-                                background: "white",
-                                borderRadius: "20px",
-                                boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
-                                padding: "16px 12px",
-                                display: "flex",
-                                flexDirection: "column",
-                                alignItems: "center",
-                                gap: "8px",
-                              }}
-                            >
-                              {/* Mini progress ring — this week */}
-                              <div style={{ position: "relative", width: `${ringSize}px`, height: `${ringSize}px` }}>
-                                <svg width={ringSize} height={ringSize} style={{ transform: "rotate(-90deg)" }}>
-                                  <circle cx={ringSize / 2} cy={ringSize / 2} r={r} fill="none" stroke="#F5F5F7" strokeWidth={sw} />
-                                  <circle cx={ringSize / 2} cy={ringSize / 2} r={r} fill="none" stroke={ringCol} strokeWidth={sw} strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dashOff} style={{ transition: "stroke-dashoffset 0.5s cubic-bezier(0.25,0.1,0.25,1)" }} />
-                                </svg>
-                                <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                                  <span style={{ fontSize: "18px", fontWeight: 600, color: "#1D1D1F", lineHeight: 1 }}>{thisWeek}</span>
-                                  <span style={{ fontSize: "8px", color: "#AEAEB2" }}>/ {goal}</span>
-                                </div>
-                              </div>
-
-                              <p style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", margin: 0 }}>{name}</p>
-                              <div style={{ display: "flex", gap: "8px", fontSize: "10px", color: "#86868B" }}>
-                                <span>Next: <strong style={{ color: "#1D1D1F" }}>{nextWeek}</strong></span>
-                                <span style={{ color: "#D2D2D7" }}>|</span>
-                                <span>4wk: <strong style={{ color: "#1D1D1F" }}>{total4w}</strong></span>
-                              </div>
-                            </div>
+                            <React.Fragment key={name}>
+                              <div style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F" }}>{name}</div>
+                              {siteVisits.upcoming.map((wk) => {
+                                const n = wk.bySalesman?.[name] ?? 0;
+                                const pctFill = Math.min((n / goal) * 100, 100);
+                                const hit = n >= goal;
+                                const ringCol = hit ? "#10B981" : n >= goal * 0.5 ? "#F59E0B" : n > 0 ? "#0071E3" : "#E5E5EA";
+                                const rs = 44;
+                                const sw = 3;
+                                const r = (rs - sw) / 2;
+                                const circ = 2 * Math.PI * r;
+                                const dashOff = circ - (pctFill / 100) * circ;
+                                return (
+                                  <div key={`${name}-${wk.label}`} style={{ display: "flex", justifyContent: "center" }}>
+                                    <div style={{ position: "relative", width: `${rs}px`, height: `${rs}px` }}>
+                                      <svg width={rs} height={rs} style={{ transform: "rotate(-90deg)" }}>
+                                        <circle cx={rs / 2} cy={rs / 2} r={r} fill="none" stroke="#F5F5F7" strokeWidth={sw} />
+                                        <circle cx={rs / 2} cy={rs / 2} r={r} fill="none" stroke={ringCol} strokeWidth={sw} strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dashOff} style={{ transition: "stroke-dashoffset 0.5s cubic-bezier(0.25,0.1,0.25,1)" }} />
+                                      </svg>
+                                      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                        <span style={{ fontSize: "13px", fontWeight: 600, color: n > 0 ? "#1D1D1F" : "#D2D2D7", lineHeight: 1 }}>{n}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </React.Fragment>
                           );
                         })}
                       </div>
