@@ -2592,88 +2592,127 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* === INITIAL OUTREACH FEEDBACK — split by source + by action === */}
-            {!isSourceFiltered && outreachFeedback && outreachFeedback.feedback.length > 0 && (
-              <div>
-                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "10px" }}>
-                  <h2 style={{ fontSize: "13px", fontWeight: 600, color: "#86868B", margin: 0 }}>
-                    Initial Outreach Feedback
-                  </h2>
-                  <span style={{ fontSize: "10px", color: "#AEAEB2", fontWeight: 600 }}>
-                    {outreachFeedback.total} call{outreachFeedback.total !== 1 ? "s" : ""} with feedback in this period
-                  </span>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                  {(["bySource", "byAction"] as const).map((dim) => {
-                    const titles = {
-                      bySource: "By Original Lead Source",
-                      byAction: "By Conversion Action",
-                    };
-                    // Pick a colour band based on the feedback label so the bad
-                    // ones (Time Wasters / Not Answering / Wrong Contact / etc.)
-                    // jump out visually.
-                    const feedbackColour = (label: string): { bar: string; text: string } => {
-                      const l = label.toLowerCase();
-                      if (l.includes("home visit booked")) return { bar: "#10B981", text: "#059669" };
-                      if (l.includes("grant")) return { bar: "#10B981", text: "#059669" };
-                      if (l.includes("discussing with family")) return { bar: "#0071E3", text: "#2563EB" };
-                      if (l.includes("timing") || l.includes("not yet ready")) return { bar: "#0071E3", text: "#2563EB" };
-                      if (l.includes("brochure only")) return { bar: "#F59E0B", text: "#B45309" };
-                      if (l.includes("too expensive")) return { bar: "#F59E0B", text: "#B45309" };
-                      if (l.includes("competitor")) return { bar: "#F59E0B", text: "#B45309" };
-                      if (l.includes("part fitting") || l.includes("supply only") || l.includes("flooring")) return { bar: "#94A3B8", text: "#64748B" };
-                      // The painful ones
-                      if (l.includes("not answering")) return { bar: "#DC2626", text: "#B91C1C" };
-                      if (l.includes("wrong contact")) return { bar: "#DC2626", text: "#B91C1C" };
-                      if (l.includes("time wasters")) return { bar: "#DC2626", text: "#B91C1C" };
-                      if (l.includes("doesn't know") || l.includes("didn't know")) return { bar: "#DC2626", text: "#B91C1C" };
-                      return { bar: "#94A3B8", text: "#64748B" };
-                    };
-                    const maxCount = Math.max(...outreachFeedback.feedback.map((f) => f.count), 1);
-                    return (
-                      <div key={dim} style={{ background: "white", borderRadius: "18px", border: "none", padding: "14px" }}>
-                        <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: "0 0 12px" }}>
-                          {titles[dim]}
-                        </p>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                          {outreachFeedback.feedback.map((f) => {
-                            const c = feedbackColour(f.label);
-                            const pct = (f.count / maxCount) * 100;
-                            const top3 = f[dim].slice(0, 3);
-                            return (
-                              <div key={f.value}>
-                                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "3px" }}>
-                                  <span style={{ fontSize: "12px", fontWeight: 600, color: c.text }}>
-                                    {f.label}
-                                  </span>
-                                  <span style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", fontVariantNumeric: "tabular-nums" }}>
-                                    {f.count}
-                                  </span>
-                                </div>
-                                <div style={{ background: "#F5F5F7", borderRadius: "3px", height: "4px", overflow: "hidden" }}>
-                                  <div style={{ width: `${pct}%`, height: "100%", background: c.bar, borderRadius: "3px", transition: "width 0.3s ease" }} />
-                                </div>
-                                {top3.length > 0 && (
-                                  <p style={{ fontSize: "10px", color: "#86868B", margin: "4px 0 0", lineHeight: 1.3 }}>
-                                    {top3.map((s, i) => (
-                                      <span key={s.value}>
-                                        {i > 0 && <span style={{ color: "#D2D2D7" }}> · </span>}
-                                        <span>{s.label}</span>{" "}
-                                        <strong style={{ color: "#3A3A3C" }}>{s.count}</strong>
-                                      </span>
-                                    ))}
-                                  </p>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
+            {/* === INITIAL OUTREACH FEEDBACK — donut + detail === */}
+            {!isSourceFiltered && outreachFeedback && outreachFeedback.feedback.length > 0 && (() => {
+              const feedbackColour = (label: string): string => {
+                const l = label.toLowerCase();
+                if (l.includes("home visit booked")) return "#10B981";
+                if (l.includes("grant")) return "#10B981";
+                if (l.includes("discussing with family")) return "#0071E3";
+                if (l.includes("timing") || l.includes("not yet ready")) return "#0071E3";
+                if (l.includes("brochure only")) return "#F59E0B";
+                if (l.includes("too expensive")) return "#F59E0B";
+                if (l.includes("competitor")) return "#F59E0B";
+                if (l.includes("part fitting") || l.includes("supply only") || l.includes("flooring")) return "#94A3B8";
+                if (l.includes("not answering")) return "#DC2626";
+                if (l.includes("wrong contact")) return "#DC2626";
+                if (l.includes("time wasters")) return "#DC2626";
+                if (l.includes("doesn't know") || l.includes("didn't know")) return "#DC2626";
+                return "#94A3B8";
+              };
+              const chartData = outreachFeedback.feedback.map((f) => ({
+                name: f.label,
+                value: f.count,
+                fill: feedbackColour(f.label),
+                bySource: f.bySource,
+                byAction: f.byAction,
+              }));
+              // Group into positive / neutral / negative
+              const positive = chartData.filter((d) => ["#10B981"].includes(d.fill));
+              const neutral = chartData.filter((d) => ["#0071E3", "#F59E0B"].includes(d.fill));
+              const negative = chartData.filter((d) => ["#DC2626", "#94A3B8"].includes(d.fill));
+              const positiveTotal = positive.reduce((s, d) => s + d.value, 0);
+              const negativeTotal = negative.reduce((s, d) => s + d.value, 0);
+              const neutralTotal = neutral.reduce((s, d) => s + d.value, 0);
+
+              return (
+                <div>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "10px" }}>
+                    <h2 style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", margin: 0 }}>
+                      Outreach Feedback
+                    </h2>
+                    <span style={{ fontSize: "10px", color: "#AEAEB2" }}>
+                      {outreachFeedback.total} calls
+                    </span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: "12px" }}>
+                    {/* Donut chart */}
+                    <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "16px" }}>
+                      <div style={{ width: "200px", height: "200px" }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={chartData}
+                              dataKey="value"
+                              nameKey="name"
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={60}
+                              outerRadius={90}
+                              strokeWidth={2}
+                              stroke="#fff"
+                            >
+                              {chartData.map((d, i) => (
+                                <Cell key={i} fill={d.fill} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.08)", fontSize: "12px" }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
                       </div>
-                    );
-                  })}
+                      {/* Summary badges */}
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center" }}>
+                        <span style={{ fontSize: "11px", fontWeight: 500, color: "#059669", background: "#F0FDF4", borderRadius: "8px", padding: "4px 10px" }}>
+                          {positiveTotal} positive
+                        </span>
+                        <span style={{ fontSize: "11px", fontWeight: 500, color: "#0071E3", background: "#EFF6FF", borderRadius: "8px", padding: "4px 10px" }}>
+                          {neutralTotal} maybe later
+                        </span>
+                        <span style={{ fontSize: "11px", fontWeight: 500, color: "#DC2626", background: "#FEF2F2", borderRadius: "8px", padding: "4px 10px" }}>
+                          {negativeTotal} lost
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Detail list */}
+                    <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "20px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                      {chartData.map((f) => {
+                        const pct = outreachFeedback.total > 0 ? Math.round((f.value / outreachFeedback.total) * 100) : 0;
+                        const top3 = [...f.bySource.slice(0, 2), ...f.byAction.slice(0, 2)]
+                          .sort((a, b) => b.count - a.count)
+                          .slice(0, 3);
+                        return (
+                          <div key={f.name} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: f.fill, flexShrink: 0 }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+                                <span style={{ fontSize: "12px", fontWeight: 600, color: "#1D1D1F" }}>{f.name}</span>
+                                <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
+                                  <span style={{ fontSize: "10px", color: "#AEAEB2" }}>{pct}%</span>
+                                  <span style={{ fontSize: "14px", fontWeight: 600, color: "#1D1D1F", fontVariantNumeric: "tabular-nums" }}>{f.value}</span>
+                                </div>
+                              </div>
+                              {top3.length > 0 && (
+                                <p style={{ fontSize: "10px", color: "#86868B", margin: "2px 0 0" }}>
+                                  {top3.map((s, i) => (
+                                    <span key={i}>
+                                      {i > 0 && <span style={{ color: "#D2D2D7" }}> · </span>}
+                                      {s.label} <strong style={{ color: "#3A3A3C" }}>{s.count}</strong>
+                                    </span>
+                                  ))}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* === CUSTOMER JOURNEYS === */}
             {!isSourceFiltered && customerJourneys && customerJourneys.contactJourneys.length > 0 && (() => {
