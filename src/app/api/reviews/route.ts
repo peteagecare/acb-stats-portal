@@ -38,8 +38,11 @@ async function scrapeTrustpilot(): Promise<{ count: number; rating: number } | n
     });
     if (!res.ok) return null;
     const html = await res.text();
-    const countMatch = html.match(/(\d+)\s+reviews/);
+    // Target the total review count (has reviewCount CSS class), not partial/filtered counts
+    const totalMatch = html.match(/reviewCount[^"]*"[^>]*>(\d+)\s+reviews/);
+    const fallbackMatch = html.match(/(\d+)\s+reviews/);
     const ratingMatch = html.match(/"ratingValue":"([\d.]+)"/);
+    const countMatch = totalMatch ?? fallbackMatch;
     if (!countMatch) return null;
     return {
       count: parseInt(countMatch[1], 10),

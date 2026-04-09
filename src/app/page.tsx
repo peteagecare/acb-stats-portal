@@ -643,6 +643,10 @@ export default function Dashboard() {
       leadActions: { value: string; count: number }[];
     }[];
   } | null>(null);
+  const [customerJourneys, setCustomerJourneys] = useState<{
+    journeys: { path: string; steps: string[]; count: number }[];
+    totalContacts: number;
+  } | null>(null);
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const [aiDismissed, setAiDismissed] = useState<Set<number>>(new Set());
@@ -814,7 +818,7 @@ export default function Dashboard() {
 
       // Batch 5: Timeline + unattributed + day-of-week conversion
       setSelectedMetric("contacts");
-      const [timelineRes, unattribRes, dowRes, siteVisitsRes, installsRes, hvBreakdownRes, funnelSourceRes, outreachRes, timingRes, p2lRes] = await Promise.all([
+      const [timelineRes, unattribRes, dowRes, siteVisitsRes, installsRes, hvBreakdownRes, funnelSourceRes, outreachRes, timingRes, p2lRes, journeysRes] = await Promise.all([
         fetch(`/api/hubspot/contacts-daily?from=${from}&to=${to}&metric=contacts`),
         fetch(`/api/hubspot/unattributed?from=${from}&to=${to}`),
         fetch(`/api/hubspot/dow-conversion?from=${from}&to=${to}`),
@@ -825,6 +829,7 @@ export default function Dashboard() {
         fetch(`/api/hubspot/outreach-feedback?from=${from}&to=${to}`),
         fetch(`/api/hubspot/funnel-timing?from=${from}&to=${to}`),
         fetch(`/api/hubspot/prospect-to-lead?from=${from}&to=${to}`),
+        fetch(`/api/hubspot/customer-journeys?from=${from}&to=${to}`),
       ]);
       if (unattribRes.ok) {
         setUnattributed(await unattribRes.json());
@@ -883,6 +888,12 @@ export default function Dashboard() {
         const timelineJson = await timelineRes.json();
         setTimelineData(timelineJson.data);
         setTimelineGranularity(timelineJson.granularity);
+      }
+      if (journeysRes.ok) {
+        setCustomerJourneys(await journeysRes.json());
+      } else {
+        console.error("[customer-journeys] failed:", journeysRes.status, await journeysRes.text());
+        setCustomerJourneys(null);
       }
       setLoadProgress(100);
       setDataReady(true);
@@ -2410,6 +2421,63 @@ export default function Dashboard() {
                               </div>
                             );
                           })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* === CUSTOMER JOURNEYS === */}
+            {!isSourceFiltered && customerJourneys && customerJourneys.journeys.length > 0 && (
+              <div>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "10px" }}>
+                  <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Customer Journeys
+                  </h2>
+                  <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>
+                    {customerJourneys.totalContacts} contact{customerJourneys.totalContacts !== 1 ? "s" : ""} · {customerJourneys.journeys.length} unique path{customerJourneys.journeys.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {customerJourneys.journeys.map((j, i) => {
+                    const maxCount = customerJourneys.journeys[0].count;
+                    const pct = (j.count / maxCount) * 100;
+                    const stepColour = (step: string): string => {
+                      if (step === "Won") return "#10B981";
+                      if (step === "Home Visit") return "#0EA5E9";
+                      if (step.includes("Cancelled")) return "#EF4444";
+                      if (step.includes("Phone") || step.includes("Call")) return "#F59E0B";
+                      return "#8B5CF6";
+                    };
+                    return (
+                      <div key={i}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+                          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px", flex: 1, minWidth: 0 }}>
+                            {j.steps.map((step, si) => (
+                              <span key={si} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                {si > 0 && <span style={{ color: "#CBD5E1", fontSize: "11px", fontWeight: 700 }}>→</span>}
+                                <span style={{
+                                  fontSize: "11px",
+                                  fontWeight: 600,
+                                  color: stepColour(step),
+                                  background: `${stepColour(step)}12`,
+                                  borderRadius: "5px",
+                                  padding: "2px 8px",
+                                  whiteSpace: "nowrap",
+                                }}>
+                                  {step}
+                                </span>
+                              </span>
+                            ))}
+                          </div>
+                          <span style={{ fontSize: "14px", fontWeight: 800, color: "#0F172A", marginLeft: "12px", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                            {j.count}
+                          </span>
+                        </div>
+                        <div style={{ background: "#F1F5F9", borderRadius: "3px", height: "3px", overflow: "hidden" }}>
+                          <div style={{ width: `${pct}%`, height: "100%", background: "#8B5CF6", borderRadius: "3px", transition: "width 0.3s ease" }} />
                         </div>
                       </div>
                     );
