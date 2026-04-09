@@ -1218,46 +1218,69 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Sticky source filter bar — visible when a source pill is active */}
-      {isSourceFiltered && sourceSlice && (
+      {/* Sticky source filter bar — always visible so user can filter from anywhere */}
+      {funnelBySource && funnelBySource.sources.length > 0 && (
         <div
           style={{
             position: "sticky",
             top: 0,
             zIndex: 100,
-            background: "#1E293B",
-            borderBottom: "2px solid #2563eb",
+            background: isSourceFiltered ? "#1E293B" : "#F8FAFC",
+            borderBottom: isSourceFiltered ? "2px solid #2563eb" : "1px solid #E2E8F0",
             padding: "8px 16px",
             display: "flex",
             alignItems: "center",
-            justifyContent: "center",
-            gap: "12px",
+            gap: "8px",
+            flexWrap: "wrap",
           }}
         >
-          <span style={{ fontSize: "12px", color: "#94A3B8" }}>Filtered by</span>
-          <span style={{ fontSize: "13px", fontWeight: 700, color: "white", background: "#2563eb", borderRadius: "999px", padding: "4px 14px" }}>
-            {sourceSlice.label}
-          </span>
-          <span style={{ fontSize: "11px", color: "#64748B" }}>
-            {sourceSlice.contacts} contacts · Cohort view
+          <span style={{ fontSize: "10px", fontWeight: 700, color: isSourceFiltered ? "#94A3B8" : "#64748B", textTransform: "uppercase", letterSpacing: "0.5px", marginRight: "4px" }}>
+            Source
           </span>
           <button
             type="button"
             onClick={() => setSelectedSource(null)}
             style={{
-              fontSize: "12px",
-              fontWeight: 600,
-              color: "#94A3B8",
-              background: "transparent",
-              border: "1px solid #475569",
-              borderRadius: "6px",
-              padding: "4px 12px",
+              padding: "4px 10px",
+              fontSize: "11px",
+              fontWeight: 700,
+              border: !isSourceFiltered ? "1px solid #0F172A" : "1px solid #475569",
+              background: !isSourceFiltered ? "#0F172A" : "transparent",
+              color: !isSourceFiltered ? "white" : "#94A3B8",
+              borderRadius: "999px",
               cursor: "pointer",
-              marginLeft: "8px",
             }}
           >
-            Clear filter
+            All
           </button>
+          {funnelBySource.sources.filter((s) => s.contacts > 0).map((s) => {
+            const active = selectedSource === s.value;
+            return (
+              <button
+                type="button"
+                key={s.value}
+                onClick={() => setSelectedSource(active ? null : s.value)}
+                style={{
+                  padding: "4px 10px",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  border: active ? "1px solid #2563eb" : `1px solid ${isSourceFiltered ? "#475569" : "#E2E8F0"}`,
+                  background: active ? "#2563eb" : "transparent",
+                  color: active ? "white" : isSourceFiltered ? "#94A3B8" : "#475569",
+                  borderRadius: "999px",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {s.label} <span style={{ opacity: 0.7 }}>{s.contacts}</span>
+              </button>
+            );
+          })}
+          {isSourceFiltered && sourceSlice && (
+            <span style={{ fontSize: "10px", color: "#64748B", marginLeft: "auto" }}>
+              Cohort view · {sourceSlice.contacts} contacts
+            </span>
+          )}
         </div>
       )}
       <main className="dashboard-main" style={{ maxWidth: "1600px", margin: "0 auto", padding: "16px" }}>
