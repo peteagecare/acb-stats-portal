@@ -330,7 +330,8 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Append milestones
+      // Append milestones or waiting status
+      const reachedMilestone = c.visitBooked || !!c.wonDate;
       if (c.visitBooked && !c.visitCancelled) {
         steps.push("Home Visit");
       } else if (c.visitBooked && c.visitCancelled) {
@@ -338,6 +339,22 @@ export async function GET(request: NextRequest) {
       }
       if (c.wonDate) {
         steps.push("Won");
+      }
+
+      // If no milestone reached, add a "Waiting" step with time bucket
+      if (!reachedMilestone && events.length > 0) {
+        const lastTs = events[events.length - 1].timestamp;
+        if (lastTs > 0) {
+          const daysAgo = Math.floor((Date.now() - lastTs) / (1000 * 60 * 60 * 24));
+          let bucket: string;
+          if (daysAgo < 1) bucket = "Waiting (today)";
+          else if (daysAgo <= 3) bucket = `Waiting (${daysAgo}d)`;
+          else if (daysAgo <= 7) bucket = "Waiting (4-7 days)";
+          else if (daysAgo <= 14) bucket = "Waiting (1-2 weeks)";
+          else if (daysAgo <= 30) bucket = "Waiting (2-4 weeks)";
+          else bucket = "Waiting (1+ month)";
+          steps.push(bucket);
+        }
       }
 
       // Prepend lead source

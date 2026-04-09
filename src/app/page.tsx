@@ -2484,6 +2484,7 @@ export default function Dashboard() {
                 if (step.includes("Phone") || step.includes("Call")) return "#F59E0B";
                 if (step === "We Emailed") return "#3B82F6";
                 if (step === "They Emailed") return "#06B6D4";
+                if (step.startsWith("Waiting")) return "#F97316";
                 return "#8B5CF6";
               };
 
