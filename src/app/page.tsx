@@ -1403,7 +1403,7 @@ export default function Dashboard() {
         <div
           style={{
             position: "sticky",
-            top: 0,
+            top: "56px",
             zIndex: 100,
             background: "rgba(255,255,255,0.8)",
             backdropFilter: "saturate(180%) blur(20px)",
@@ -1733,6 +1733,7 @@ export default function Dashboard() {
                 total={dispProspects}
                 colour="#F59E0B"
                 bg="#FFFBEB"
+                icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M13.8 12H3" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                 rate={dispContacts > 0 ? `${((dispProspects / dispContacts) * 100).toFixed(1)}% of contacts` : undefined}
                 comparison={!isSourceFiltered && previousPeriod ? { current: prospectsTotal, previous: previousPeriod.prospects } : undefined}
               >
@@ -1774,6 +1775,7 @@ export default function Dashboard() {
                 total={dispLeads}
                 colour="#0071E3"
                 bg="#EFF6FF"
+                icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="#0071E3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                 rate={dispContacts > 0 ? `${((dispLeads / dispContacts) * 100).toFixed(1)}% of contacts` : undefined}
                 comparison={!isSourceFiltered && previousPeriod ? { current: leadsTotal, previous: previousPeriod.leads } : undefined}
               >
@@ -1821,6 +1823,7 @@ export default function Dashboard() {
                 total={dispHomeVisits}
                 colour="#10B981"
                 bg="#ECFDF5"
+                icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 22V12h6v10" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                 rate={dispLeads > 0 ? `Lead → Visit ${((dispHomeVisits / dispLeads) * 100).toFixed(1)}%` : undefined}
                 comparison={!isSourceFiltered && previousPeriod ? { current: homeVisits ?? 0, previous: previousPeriod.homeVisits } : undefined}
               >
@@ -1860,6 +1863,7 @@ export default function Dashboard() {
                 total={dispWonJobs}
                 colour="#059669"
                 bg="#ECFDF5"
+                icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                 rate={dispHomeVisits > 0 ? `${((dispWonJobs / dispHomeVisits) * 100).toFixed(1)}% of visits` : undefined}
                 comparison={!isSourceFiltered && previousPeriod ? { current: wonJobs ?? 0, previous: previousPeriod.wonJobs } : undefined}
               >
@@ -2752,31 +2756,45 @@ export default function Dashboard() {
                     </span>
                   </div>
 
-                  {/* Filter pills */}
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
+                  {/* Filters — compact dropdowns */}
+                  <div style={{ display: "flex", gap: "8px", marginBottom: "10px", flexWrap: "wrap", alignItems: "center" }}>
+                    {[
+                      { label: "Source", value: journeyFilterSource, setter: setJourneyFilterSource, options: customerJourneys.filters.leadSources },
+                      { label: "Action", value: journeyFilterAction, setter: setJourneyFilterAction, options: customerJourneys.filters.conversionActions },
+                      { label: "Form", value: journeyFilterForm, setter: setJourneyFilterForm, options: customerJourneys.filters.forms },
+                    ].map((f) => (
+                      <select
+                        key={f.label}
+                        value={f.value ?? ""}
+                        onChange={(e) => { f.setter(e.target.value || null); setJourneyShowVisit(10); setJourneyShowNoVisit(10); }}
+                        style={{
+                          fontSize: "12px",
+                          fontWeight: 500,
+                          color: f.value ? "#0071E3" : "#86868B",
+                          background: f.value ? "#EFF6FF" : "#F5F5F7",
+                          border: f.value ? "1px solid #0071E3" : "1px solid rgba(0,0,0,0.06)",
+                          borderRadius: "10px",
+                          padding: "6px 12px",
+                          cursor: "pointer",
+                          outline: "none",
+                          appearance: "none",
+                          WebkitAppearance: "none",
+                          backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2386868B' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
+                          backgroundRepeat: "no-repeat",
+                          backgroundPosition: "right 10px center",
+                          paddingRight: "28px",
+                        }}
+                      >
+                        <option value="">All {f.label}s</option>
+                        {f.options.map((o) => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    ))}
                     {isFiltered && (
                       <button type="button" onClick={() => { setJourneyFilterSource(null); setJourneyFilterAction(null); setJourneyFilterForm(null); setJourneyShowVisit(10); setJourneyShowNoVisit(10); }}
-                        style={{ ...pillStyle(false), color: "#DC2626", borderColor: "#FECACA", background: "#FEF2F2" }}>
-                        Clear filters
+                        style={{ fontSize: "11px", fontWeight: 500, color: "#DC2626", background: "none", border: "none", cursor: "pointer", padding: "6px 4px" }}>
+                        Clear
                       </button>
                     )}
-                    {customerJourneys.filters.leadSources.map((s) => (
-                      <button key={`s-${s}`} type="button" onClick={() => { setJourneyFilterSource(journeyFilterSource === s ? null : s); setJourneyShowVisit(10); setJourneyShowNoVisit(10); }} style={pillStyle(journeyFilterSource === s)}>
-                        {s}
-                      </button>
-                    ))}
-                    <span style={{ width: "1px", background: "#E2E8F0", margin: "0 2px" }} />
-                    {customerJourneys.filters.conversionActions.map((a) => (
-                      <button key={`a-${a}`} type="button" onClick={() => { setJourneyFilterAction(journeyFilterAction === a ? null : a); setJourneyShowVisit(10); setJourneyShowNoVisit(10); }} style={pillStyle(journeyFilterAction === a)}>
-                        {a}
-                      </button>
-                    ))}
-                    <span style={{ width: "1px", background: "#E2E8F0", margin: "0 2px" }} />
-                    {customerJourneys.filters.forms.map((f) => (
-                      <button key={`f-${f}`} type="button" onClick={() => { setJourneyFilterForm(journeyFilterForm === f ? null : f); setJourneyShowVisit(10); setJourneyShowNoVisit(10); }} style={pillStyle(journeyFilterForm === f)}>
-                        {f}
-                      </button>
-                    ))}
                   </div>
 
                   {/* Touchpoint attribution — GA-style three-column layout */}
@@ -2849,11 +2867,11 @@ export default function Dashboard() {
                           <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: 0 }}>
                             Touchpoint Attribution
                           </p>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "9px", fontWeight: 600 }}>
-                            <span style={{ color: "#86868B" }}>Conv. rate:</span>
-                            <span style={{ color: "#059669" }}>30%+</span>
-                            <span style={{ color: "#F59E0B" }}>15-29%</span>
-                            <span style={{ color: "#DC2626" }}>&lt;15%</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "10px", fontWeight: 500 }}>
+                            <span style={{ color: "#86868B" }}>% that reached Home Visit or Won:</span>
+                            <span style={{ color: "#059669", background: "#F0FDF4", borderRadius: "4px", padding: "1px 6px" }}>30%+</span>
+                            <span style={{ color: "#F59E0B", background: "#FFFBEB", borderRadius: "4px", padding: "1px 6px" }}>15-29%</span>
+                            <span style={{ color: "#DC2626", background: "#FEF2F2", borderRadius: "4px", padding: "1px 6px" }}>&lt;15%</span>
                           </div>
                         </div>
 
@@ -3714,6 +3732,7 @@ function FunnelCard({
   total,
   colour,
   bg,
+  icon,
   rate,
   comparison,
   children,
@@ -3723,6 +3742,7 @@ function FunnelCard({
   total: number;
   colour: string;
   bg: string;
+  icon: React.ReactNode;
   rate?: string;
   comparison?: { current: number; previous: number };
   children: React.ReactNode;
@@ -3732,44 +3752,64 @@ function FunnelCard({
       style={{
         background: "white",
         borderRadius: "20px",
-        border: "none", boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
+        boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
         overflow: "hidden",
+        padding: "18px 20px",
+        display: "flex",
+        flexDirection: "column",
+        gap: "12px",
       }}
     >
-      <div
-        style={{
+      {/* Header: icon + title */}
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <div style={{
+          width: "36px",
+          height: "36px",
+          borderRadius: "10px",
           background: bg,
-          padding: "10px 14px",
           display: "flex",
-          justifyContent: "space-between",
           alignItems: "center",
-          borderBottom: `2px solid ${colour}20`,
-        }}
-      >
-        <div>
-          <p style={{ fontSize: "12px", fontWeight: 600, color: "#1D1D1F", margin: 0 }}>{title}</p>
-          <p style={{ fontSize: "10px", color: "#86868B", margin: "1px 0 0" }}>{subtitle}</p>
+          justifyContent: "center",
+          flexShrink: 0,
+        }}>
+          {icon}
         </div>
-        <div style={{ textAlign: "right" }}>
-          <span style={{ fontSize: "20px", fontWeight: 600, color: colour, lineHeight: 1 }}>
-            {total.toLocaleString()}
-          </span>
-          {comparison && (() => {
-            const delta = comparison.current - comparison.previous;
-            const better = delta >= 0;
-            return (
-              <p style={{ fontSize: "10px", fontWeight: 600, color: better ? "#059669" : "#DC2626", margin: "2px 0 0" }}>
-                {better ? "▲" : "▼"} {Math.abs(delta).toLocaleString()}{" "}
-                <span style={{ color: "#AEAEB2", fontWeight: 500 }}>vs prev</span>
-              </p>
-            );
-          })()}
-          {rate && (
-            <p style={{ fontSize: "10px", fontWeight: 600, color: "#86868B", margin: "2px 0 0" }}>{rate}</p>
-          )}
+        <div>
+          <p style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", margin: 0 }}>{title}</p>
+          <p style={{ fontSize: "10px", color: "#AEAEB2", margin: "1px 0 0" }}>{subtitle}</p>
         </div>
       </div>
-      <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: "4px" }}>
+
+      {/* Big number + comparison */}
+      <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
+        <span style={{ fontSize: "28px", fontWeight: 600, color: "#1D1D1F", lineHeight: 1, letterSpacing: "-0.5px" }}>
+          {total.toLocaleString()}
+        </span>
+        {comparison && (() => {
+          const delta = comparison.current - comparison.previous;
+          const better = delta >= 0;
+          return (
+            <span style={{
+              fontSize: "11px",
+              fontWeight: 500,
+              color: better ? "#059669" : "#DC2626",
+              background: better ? "#F0FDF4" : "#FEF2F2",
+              borderRadius: "6px",
+              padding: "2px 6px",
+            }}>
+              {better ? "↑" : "↓"} {Math.abs(delta).toLocaleString()}
+            </span>
+          );
+        })()}
+      </div>
+
+      {/* Rate / subtitle stat */}
+      {rate && (
+        <p style={{ fontSize: "11px", color: "#86868B", margin: 0 }}>{rate}</p>
+      )}
+
+      {/* Expandable detail */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "3px", borderTop: "1px solid rgba(0,0,0,0.04)", paddingTop: "10px" }}>
         {children}
       </div>
     </div>
