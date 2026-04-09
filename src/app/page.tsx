@@ -2535,59 +2535,54 @@ export default function Dashboard() {
                     {installs.months.map((mo, i) => {
                       const colours = ["#7C3AED", "#9333EA", "#A855F7"];
                       const colour = colours[i] ?? "#7C3AED";
-                      const goal = goals.installsGoalPerMonth;
-                      const hit = goal != null && mo.count >= goal;
+                      const goal = goals.installsGoalPerMonth ?? 0;
+                      const pctFill = goal > 0 ? Math.min((mo.count / goal) * 100, 100) : 0;
+                      const hit = goal > 0 && mo.count >= goal;
                       const ringColour = hit ? "#10B981" : colour;
+                      const ringSize = 100;
+                      const sw = 6;
+                      const r = (ringSize - sw) / 2;
+                      const circ = 2 * Math.PI * r;
+                      const dashOff = circ - (pctFill / 100) * circ;
                       return (
                         <div
                           key={mo.key}
                           style={{
-                            background: `${colour}08`,
-                            border: `1px solid ${colour}30`,
-                            borderRadius: "18px",
-                            padding: "16px 12px",
+                            background: "white",
+                            boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
+                            borderRadius: "20px",
+                            padding: "20px 12px",
                             display: "flex",
                             flexDirection: "column",
                             alignItems: "center",
                             textAlign: "center",
+                            gap: "4px",
                           }}
                         >
-                          {goal != null && goal > 0 && (
-                            <div
-                              style={{
-                                width: "52px",
-                                height: "52px",
-                                borderRadius: "50%",
-                                border: `2px solid ${ringColour}`,
-                                background: hit ? `${ringColour}15` : "white",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                marginBottom: "10px",
-                              }}
-                              title={`Goal: ${goal} installs`}
-                            >
-                              <span style={{ fontSize: "18px", fontWeight: 600, color: ringColour, lineHeight: 1 }}>
-                                {goal}
-                              </span>
+                          {/* Progress ring */}
+                          <div style={{ position: "relative", width: `${ringSize}px`, height: `${ringSize}px`, marginBottom: "4px" }}>
+                            <svg width={ringSize} height={ringSize} style={{ transform: "rotate(-90deg)" }}>
+                              <circle cx={ringSize / 2} cy={ringSize / 2} r={r} fill="none" stroke="#F5F5F7" strokeWidth={sw} />
+                              <circle cx={ringSize / 2} cy={ringSize / 2} r={r} fill="none" stroke={ringColour} strokeWidth={sw} strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dashOff} style={{ transition: "stroke-dashoffset 0.6s cubic-bezier(0.25,0.1,0.25,1)" }} />
+                            </svg>
+                            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                              <span style={{ fontSize: "28px", fontWeight: 600, color: "#1D1D1F", lineHeight: 1 }}>{mo.count}</span>
+                              {goal > 0 && <span style={{ fontSize: "9px", color: "#AEAEB2", marginTop: "2px" }}>/ {goal}</span>}
                             </div>
-                          )}
-                          <p style={{ fontSize: "11px", fontWeight: 600, color: colour, margin: 0 }}>
-                            {mo.label}
-                          </p>
-                          <p style={{ fontSize: "10px", color: "#AEAEB2", margin: "2px 0 8px" }}>
+                          </div>
+
+                          <p style={{ fontSize: "12px", fontWeight: 600, color: "#1D1D1F", margin: 0 }}>
                             {mo.monthName} {mo.year}
                           </p>
-                          <p style={{ fontSize: "40px", fontWeight: 600, color: "#1D1D1F", margin: 0, lineHeight: 1 }}>
-                            {mo.count.toLocaleString()}
-                          </p>
-                          <p style={{ fontSize: "11px", color: "#86868B", margin: "4px 0 0" }}>
-                            {mo.count === 1 ? "install" : "installs"}
-                          </p>
-                          {goal != null && goal > 0 && (
-                            <p style={{ fontSize: "10px", color: hit ? "#059669" : "#DC2626", margin: "6px 0 0", fontWeight: 600 }}>
-                              {hit ? `+${mo.count - goal} over goal` : `${goal - mo.count} below goal`}
-                            </p>
+                          {hit && (
+                            <span style={{ fontSize: "9px", fontWeight: 500, color: "#059669", background: "#F0FDF4", borderRadius: "6px", padding: "2px 8px" }}>
+                              Goal met (+{mo.count - goal})
+                            </span>
+                          )}
+                          {goal > 0 && !hit && (
+                            <span style={{ fontSize: "9px", fontWeight: 500, color: colour, background: `${colour}10`, borderRadius: "6px", padding: "2px 8px" }}>
+                              {goal - mo.count} more needed
+                            </span>
                           )}
                         </div>
                       );
