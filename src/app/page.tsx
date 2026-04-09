@@ -2428,6 +2428,11 @@ export default function Dashboard() {
                                 {goal - wk.count} more needed
                               </span>
                             )}
+                            {wk.cancelled > 0 && (
+                              <span style={{ fontSize: "9px", fontWeight: 500, color: "#DC2626", background: "#FEF2F2", borderRadius: "6px", padding: "2px 8px", marginTop: "2px" }}>
+                                {wk.cancelled} cancelled
+                              </span>
+                            )}
                           </div>
                         );
                       })}

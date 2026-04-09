@@ -109,15 +109,23 @@ export async function GET(request: NextRequest) {
 
   try {
     // ──────────────────────────────────────────────────────────────────
-    // 1. In-period: visits BOOKED in the period, split into active vs
-    //    cancelled. Uses date_that_initial_visit_booked_is_set_to_yes
-    //    so the cohort matches the Home Visits KPI in the funnel. If
-    //    someone booked on Friday and cancelled on Monday, the
-    //    cancellation is attributed to Friday (the booking date).
+    // 1. In-period counts:
+    //    - "booked": visits BOOKED in the period (active, not cancelled)
+    //      Uses date_that_initial_visit_booked_is_set_to_yes to match
+    //      the Home Visits KPI in the funnel.
+    //    - "cancelled": visits SCHEDULED in the period that were cancelled.
+    //      Uses initial_home_visit_date so you see how many visits were
+    //      lost from the calendar in this period, regardless of when
+    //      they were originally booked.
     // ──────────────────────────────────────────────────────────────────
     const bookedInPeriodFilters = [
       { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "GTE", value: dayStartUtcMs(from).toString() },
       { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "LTE", value: dayEndUtcMs(to).toString() },
+      LIFECYCLE_EXCLUSION_FILTER,
+    ];
+    const scheduledInPeriodFilters = [
+      { propertyName: "initial_home_visit_date", operator: "GTE", value: dayStartUtcMs(from).toString() },
+      { propertyName: "initial_home_visit_date", operator: "LTE", value: dayEndUtcMs(to).toString() },
       LIFECYCLE_EXCLUSION_FILTER,
     ];
     const [inPeriodRes, cancelledRes] = await Promise.all([
@@ -127,8 +135,8 @@ export async function GET(request: NextRequest) {
         limit: 1,
       }),
       hubspotSearch(token, {
-        filterGroups: [{ filters: [...bookedInPeriodFilters, { propertyName: "initial_visit_booked_", operator: "EQ", value: "Cancelled" }] }],
-        properties: ["date_that_initial_visit_booked_is_set_to_yes"],
+        filterGroups: [{ filters: [...scheduledInPeriodFilters, { propertyName: "initial_visit_booked_", operator: "EQ", value: "Cancelled" }] }],
+        properties: ["initial_home_visit_date"],
         limit: 1,
       }),
     ]);
@@ -149,11 +157,11 @@ export async function GET(request: NextRequest) {
     const calendarFrom = buckets[0].start;
     const calendarTo = buckets[buckets.length - 1].end;
 
-    // Single paginated search across the 4-week window. Only non-cancelled
-    // visits are counted — cancellations are attributed to the booking date
-    // (handled by the in-period section above), not the visit date.
+    // Single paginated search across the 4-week window. Fetches ALL visits
+    // (active + cancelled) and buckets them separately.
     const counts = [0, 0, 0, 0];
-    // bySalesman[weekIdx] = { [salesman]: count }
+    const weekCancelled = [0, 0, 0, 0];
+    // bySalesman[weekIdx] = { [salesman]: count } — only active visits
     const bySalesman: Record<string, number>[] = [{}, {}, {}, {}];
     let after: string | undefined;
     let pages = 0;
@@ -174,12 +182,11 @@ export async function GET(request: NextRequest) {
                 operator: "LTE",
                 value: (calendarTo.getTime() + 86_399_999).toString(),
               },
-              { propertyName: "initial_visit_booked_", operator: "NEQ", value: "Cancelled" },
               LIFECYCLE_EXCLUSION_FILTER,
             ],
           },
         ],
-        properties: ["initial_home_visit_date", "salesman"],
+        properties: ["initial_home_visit_date", "initial_visit_booked_", "salesman"],
         limit: 100,
         sorts: [{ propertyName: "initial_home_visit_date", direction: "ASCENDING" }],
       };
@@ -192,13 +199,18 @@ export async function GET(request: NextRequest) {
         const [y, mo, d] = raw.split("-").map(Number);
         if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) continue;
         const ms = Date.UTC(y, mo - 1, d);
+        const isCancelled = c.properties?.initial_visit_booked_ === "Cancelled";
         const salesman = c.properties?.salesman ?? "Unassigned";
         for (let i = 0; i < buckets.length; i++) {
           const bStart = buckets[i].start.getTime();
           const bEnd = buckets[i].end.getTime() + 86_399_999;
           if (ms >= bStart && ms <= bEnd) {
-            counts[i] += 1;
-            bySalesman[i][salesman] = (bySalesman[i][salesman] ?? 0) + 1;
+            if (isCancelled) {
+              weekCancelled[i] += 1;
+            } else {
+              counts[i] += 1;
+              bySalesman[i][salesman] = (bySalesman[i][salesman] ?? 0) + 1;
+            }
             break;
           }
         }
@@ -217,7 +229,7 @@ export async function GET(request: NextRequest) {
         weekStart: londonDateString(b.start),
         weekEnd: londonDateString(b.end),
         count: counts[i],
-        cancelled: 0,
+        cancelled: weekCancelled[i],
         bySalesman: bySalesman[i],
       })),
     });
