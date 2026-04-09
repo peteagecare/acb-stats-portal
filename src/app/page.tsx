@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { PieChart, Pie, ResponsiveContainer, Tooltip, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, AreaChart, Area } from "recharts";
 
 interface LeadSource {
@@ -681,6 +681,19 @@ export default function Dashboard() {
   const [dataReady, setDataReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const inlineFilterRef = useRef<HTMLDivElement>(null);
+  const [stickyFilterVisible, setStickyFilterVisible] = useState(false);
+
+  useEffect(() => {
+    const el = inlineFilterRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setStickyFilterVisible(!entry.isIntersecting),
+      { threshold: 0 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [dataReady]);
   const [goals, setGoals] = useState<Goals>(DEFAULT_GOALS);
   const [previousPeriod, setPreviousPeriod] = useState<{
     contacts: number;
@@ -1236,8 +1249,8 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Sticky source filter bar — always visible so user can filter from anywhere */}
-      {funnelBySource && funnelBySource.sources.length > 0 && (
+      {/* Sticky source filter bar — only shows after scrolling past the inline one */}
+      {stickyFilterVisible && funnelBySource && funnelBySource.sources.length > 0 && (
         <div
           style={{
             position: "sticky",
@@ -1377,7 +1390,7 @@ export default function Dashboard() {
             {/* === THE CUSTOMER FUNNEL === */}
             {/* Source filter pills */}
             {funnelBySource && funnelBySource.sources.length > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              <div ref={inlineFilterRef} style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                 <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.5px", marginRight: "4px" }}>
                   Filter by source
                 </span>
