@@ -149,12 +149,11 @@ export async function GET(request: NextRequest) {
     const calendarFrom = buckets[0].start;
     const calendarTo = buckets[buckets.length - 1].end;
 
-    // Single paginated search across the 4-week window. For each contact we
-    // bucket into one of the four weeks based on initial_home_visit_date and
-    // tally counts (non-cancelled) + cancelled + per-salesman counts.
+    // Single paginated search across the 4-week window. Only non-cancelled
+    // visits are counted — cancellations are attributed to the booking date
+    // (handled by the in-period section above), not the visit date.
     const counts = [0, 0, 0, 0];
-    const weekCancelled = [0, 0, 0, 0];
-    // bySalesman[weekIdx] = { [salesman]: count } — only counts non-cancelled visits
+    // bySalesman[weekIdx] = { [salesman]: count }
     const bySalesman: Record<string, number>[] = [{}, {}, {}, {}];
     let after: string | undefined;
     let pages = 0;
@@ -173,14 +172,14 @@ export async function GET(request: NextRequest) {
               {
                 propertyName: "initial_home_visit_date",
                 operator: "LTE",
-                // HubSpot date type: end of day for the last bucket day
                 value: (calendarTo.getTime() + 86_399_999).toString(),
               },
+              { propertyName: "initial_visit_booked_", operator: "NEQ", value: "Cancelled" },
               LIFECYCLE_EXCLUSION_FILTER,
             ],
           },
         ],
-        properties: ["initial_home_visit_date", "initial_visit_booked_", "salesman"],
+        properties: ["initial_home_visit_date", "salesman"],
         limit: 100,
         sorts: [{ propertyName: "initial_home_visit_date", direction: "ASCENDING" }],
       };
@@ -190,22 +189,16 @@ export async function GET(request: NextRequest) {
       for (const c of data.results ?? []) {
         const raw = c.properties?.initial_home_visit_date;
         if (!raw) continue;
-        // HubSpot returns date-type properties as YYYY-MM-DD strings, not ms
         const [y, mo, d] = raw.split("-").map(Number);
         if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) continue;
         const ms = Date.UTC(y, mo - 1, d);
-        const isCancelled = c.properties?.initial_visit_booked_ === "Cancelled";
         const salesman = c.properties?.salesman ?? "Unassigned";
         for (let i = 0; i < buckets.length; i++) {
           const bStart = buckets[i].start.getTime();
           const bEnd = buckets[i].end.getTime() + 86_399_999;
           if (ms >= bStart && ms <= bEnd) {
-            if (isCancelled) {
-              weekCancelled[i] += 1;
-            } else {
-              counts[i] += 1;
-              bySalesman[i][salesman] = (bySalesman[i][salesman] ?? 0) + 1;
-            }
+            counts[i] += 1;
+            bySalesman[i][salesman] = (bySalesman[i][salesman] ?? 0) + 1;
             break;
           }
         }
@@ -224,7 +217,7 @@ export async function GET(request: NextRequest) {
         weekStart: londonDateString(b.start),
         weekEnd: londonDateString(b.end),
         count: counts[i],
-        cancelled: weekCancelled[i],
+        cancelled: 0,
         bySalesman: bySalesman[i],
       })),
     });

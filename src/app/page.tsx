@@ -2288,27 +2288,36 @@ export default function Dashboard() {
                   Site Visits
                 </h2>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 3fr", gap: "10px" }}>
-                  {/* In-period count — card with icon */}
-                  <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "18px 20px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#ECFDF5", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="2" stroke="#10B981" strokeWidth="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke="#10B981" strokeWidth="2" strokeLinecap="round"/></svg>
+                  {/* In-period: booked + cancelled side by side */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                    <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "18px 20px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#ECFDF5", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 11l3 3L22 4" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </div>
+                        <div>
+                          <p style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", margin: 0 }}>Booked</p>
+                          <p style={{ fontSize: "10px", color: "#AEAEB2", margin: "1px 0 0" }}>Active visits in period</p>
+                        </div>
                       </div>
-                      <div>
-                        <p style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", margin: 0 }}>Booked In Period</p>
-                        <p style={{ fontSize: "10px", color: "#AEAEB2", margin: "1px 0 0" }}>Excluding cancelled</p>
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
                       <span style={{ fontSize: "28px", fontWeight: 600, color: "#1D1D1F", lineHeight: 1, letterSpacing: "-0.5px" }}>
                         {siteVisits.inPeriod.toLocaleString()}
                       </span>
                     </div>
-                    {siteVisits.cancelled > 0 && (
-                      <span style={{ fontSize: "11px", fontWeight: 500, color: "#DC2626", background: "#FEF2F2", borderRadius: "6px", padding: "2px 8px", alignSelf: "flex-start" }}>
-                        {siteVisits.cancelled} cancelled
+                    <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "18px 20px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#FEF2F2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#DC2626" strokeWidth="2"/><path d="M15 9l-6 6M9 9l6 6" stroke="#DC2626" strokeWidth="2" strokeLinecap="round"/></svg>
+                        </div>
+                        <div>
+                          <p style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", margin: 0 }}>Cancelled</p>
+                          <p style={{ fontSize: "10px", color: "#AEAEB2", margin: "1px 0 0" }}>By booking date</p>
+                        </div>
+                      </div>
+                      <span style={{ fontSize: "28px", fontWeight: 600, color: siteVisits.cancelled > 0 ? "#DC2626" : "#AEAEB2", lineHeight: 1, letterSpacing: "-0.5px" }}>
+                        {siteVisits.cancelled.toLocaleString()}
                       </span>
-                    )}
+                    </div>
                   </div>
 
                   {/* 4-week forward calendar — independent of selected date range */}
@@ -2389,11 +2398,6 @@ export default function Dashboard() {
                             {!hit && wk.count > 0 && (
                               <span style={{ fontSize: "9px", fontWeight: 500, color: colour, background: `${colour}10`, borderRadius: "6px", padding: "2px 8px", marginTop: "2px" }}>
                                 {goal - wk.count} more needed
-                              </span>
-                            )}
-                            {wk.cancelled > 0 && (
-                              <span style={{ fontSize: "9px", fontWeight: 500, color: "#DC2626", marginTop: "2px" }}>
-                                {wk.cancelled} cancelled
                               </span>
                             )}
                           </div>
