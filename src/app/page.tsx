@@ -652,6 +652,8 @@ export default function Dashboard() {
   const [journeyFilterSource, setJourneyFilterSource] = useState<string | null>(null);
   const [journeyFilterAction, setJourneyFilterAction] = useState<string | null>(null);
   const [journeyFilterForm, setJourneyFilterForm] = useState<string | null>(null);
+  const [journeyShowVisit, setJourneyShowVisit] = useState(10);
+  const [journeyShowNoVisit, setJourneyShowNoVisit] = useState(10);
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const [aiDismissed, setAiDismissed] = useState<Set<number>>(new Set());
@@ -912,6 +914,8 @@ export default function Dashboard() {
         setJourneyFilterSource(null);
         setJourneyFilterAction(null);
         setJourneyFilterForm(null);
+        setJourneyShowVisit(10);
+        setJourneyShowNoVisit(10);
       } else {
         console.error("[customer-journeys] failed:", journeysRes.status, await journeysRes.text());
         setCustomerJourneys(null);
@@ -2500,41 +2504,67 @@ export default function Dashboard() {
                 whiteSpace: "nowrap",
               });
 
-              const renderJourneyList = (list: typeof filteredJourneys, barColour: string) => {
+              const renderJourneyList = (list: typeof filteredJourneys, barColour: string, limit: number, onShowMore: () => void) => {
                 const maxCount = list.length > 0 ? list[0].count : 1;
-                return list.map((j, i) => {
-                  const pct = (j.count / maxCount) * 100;
-                  return (
-                    <div key={i}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
-                        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px", flex: 1, minWidth: 0 }}>
-                          {j.steps.map((step, si) => (
-                            <span key={si} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                              {si > 0 && <span style={{ color: "#CBD5E1", fontSize: "11px", fontWeight: 700 }}>→</span>}
-                              <span style={{
-                                fontSize: "11px",
-                                fontWeight: 600,
-                                color: stepColour(step),
-                                background: `${stepColour(step)}12`,
-                                borderRadius: "5px",
-                                padding: "2px 8px",
-                                whiteSpace: "nowrap",
-                              }}>
-                                {step}
-                              </span>
+                const visible = list.slice(0, limit);
+                const remaining = list.length - limit;
+                return (
+                  <>
+                    {visible.map((j, i) => {
+                      const pct = (j.count / maxCount) * 100;
+                      return (
+                        <div key={i}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+                            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px", flex: 1, minWidth: 0 }}>
+                              {j.steps.map((step, si) => (
+                                <span key={si} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                  {si > 0 && <span style={{ color: "#CBD5E1", fontSize: "11px", fontWeight: 700 }}>→</span>}
+                                  <span style={{
+                                    fontSize: "11px",
+                                    fontWeight: 600,
+                                    color: stepColour(step),
+                                    background: `${stepColour(step)}12`,
+                                    borderRadius: "5px",
+                                    padding: "2px 8px",
+                                    whiteSpace: "nowrap",
+                                  }}>
+                                    {step}
+                                  </span>
+                                </span>
+                              ))}
+                            </div>
+                            <span style={{ fontSize: "14px", fontWeight: 800, color: "#0F172A", marginLeft: "12px", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                              {j.count}
                             </span>
-                          ))}
+                          </div>
+                          <div style={{ background: "#F1F5F9", borderRadius: "3px", height: "3px", overflow: "hidden" }}>
+                            <div style={{ width: `${pct}%`, height: "100%", background: barColour, borderRadius: "3px", transition: "width 0.3s ease" }} />
+                          </div>
                         </div>
-                        <span style={{ fontSize: "14px", fontWeight: 800, color: "#0F172A", marginLeft: "12px", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                          {j.count}
-                        </span>
-                      </div>
-                      <div style={{ background: "#F1F5F9", borderRadius: "3px", height: "3px", overflow: "hidden" }}>
-                        <div style={{ width: `${pct}%`, height: "100%", background: barColour, borderRadius: "3px", transition: "width 0.3s ease" }} />
-                      </div>
-                    </div>
-                  );
-                });
+                      );
+                    })}
+                    {remaining > 0 && (
+                      <button
+                        type="button"
+                        onClick={onShowMore}
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: 600,
+                          color: "#2563eb",
+                          background: "#EFF6FF",
+                          border: "1px solid #BFDBFE",
+                          borderRadius: "8px",
+                          padding: "6px 14px",
+                          cursor: "pointer",
+                          alignSelf: "center",
+                          marginTop: "4px",
+                        }}
+                      >
+                        Show {remaining} more
+                      </button>
+                    )}
+                  </>
+                );
               };
 
               return (
@@ -2551,25 +2581,25 @@ export default function Dashboard() {
                   {/* Filter pills */}
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
                     {isFiltered && (
-                      <button type="button" onClick={() => { setJourneyFilterSource(null); setJourneyFilterAction(null); setJourneyFilterForm(null); }}
+                      <button type="button" onClick={() => { setJourneyFilterSource(null); setJourneyFilterAction(null); setJourneyFilterForm(null); setJourneyShowVisit(10); setJourneyShowNoVisit(10); }}
                         style={{ ...pillStyle(false), color: "#DC2626", borderColor: "#FECACA", background: "#FEF2F2" }}>
                         Clear filters
                       </button>
                     )}
                     {customerJourneys.filters.leadSources.map((s) => (
-                      <button key={`s-${s}`} type="button" onClick={() => setJourneyFilterSource(journeyFilterSource === s ? null : s)} style={pillStyle(journeyFilterSource === s)}>
+                      <button key={`s-${s}`} type="button" onClick={() => { setJourneyFilterSource(journeyFilterSource === s ? null : s); setJourneyShowVisit(10); setJourneyShowNoVisit(10); }} style={pillStyle(journeyFilterSource === s)}>
                         {s}
                       </button>
                     ))}
                     <span style={{ width: "1px", background: "#E2E8F0", margin: "0 2px" }} />
                     {customerJourneys.filters.conversionActions.map((a) => (
-                      <button key={`a-${a}`} type="button" onClick={() => setJourneyFilterAction(journeyFilterAction === a ? null : a)} style={pillStyle(journeyFilterAction === a)}>
+                      <button key={`a-${a}`} type="button" onClick={() => { setJourneyFilterAction(journeyFilterAction === a ? null : a); setJourneyShowVisit(10); setJourneyShowNoVisit(10); }} style={pillStyle(journeyFilterAction === a)}>
                         {a}
                       </button>
                     ))}
                     <span style={{ width: "1px", background: "#E2E8F0", margin: "0 2px" }} />
                     {customerJourneys.filters.forms.map((f) => (
-                      <button key={`f-${f}`} type="button" onClick={() => setJourneyFilterForm(journeyFilterForm === f ? null : f)} style={pillStyle(journeyFilterForm === f)}>
+                      <button key={`f-${f}`} type="button" onClick={() => { setJourneyFilterForm(journeyFilterForm === f ? null : f); setJourneyShowVisit(10); setJourneyShowNoVisit(10); }} style={pillStyle(journeyFilterForm === f)}>
                         {f}
                       </button>
                     ))}
@@ -2586,7 +2616,7 @@ export default function Dashboard() {
                           {withVisitTotal}
                         </span>
                       </div>
-                      {withVisit.length > 0 ? renderJourneyList(withVisit, "#0EA5E9") : (
+                      {withVisit.length > 0 ? renderJourneyList(withVisit, "#0EA5E9", journeyShowVisit, () => setJourneyShowVisit((n) => n + 10)) : (
                         <p style={{ fontSize: "12px", color: "#94A3B8", margin: 0 }}>None{isFiltered ? " matching filters" : " in this period"}</p>
                       )}
                     </div>
@@ -2600,7 +2630,7 @@ export default function Dashboard() {
                           {withoutVisitTotal}
                         </span>
                       </div>
-                      {withoutVisit.length > 0 ? renderJourneyList(withoutVisit, "#8B5CF6") : (
+                      {withoutVisit.length > 0 ? renderJourneyList(withoutVisit, "#8B5CF6", journeyShowNoVisit, () => setJourneyShowNoVisit((n) => n + 10)) : (
                         <p style={{ fontSize: "12px", color: "#94A3B8", margin: 0 }}>None{isFiltered ? " matching filters" : " in this period"}</p>
                       )}
                     </div>
