@@ -2430,61 +2430,102 @@ export default function Dashboard() {
             )}
 
             {/* === CUSTOMER JOURNEYS === */}
-            {!isSourceFiltered && customerJourneys && customerJourneys.journeys.length > 0 && (
-              <div>
-                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "10px" }}>
-                  <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                    Customer Journeys
-                  </h2>
-                  <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>
-                    {customerJourneys.totalContacts} contact{customerJourneys.totalContacts !== 1 ? "s" : ""} · {customerJourneys.journeys.length} unique path{customerJourneys.journeys.length !== 1 ? "s" : ""}
-                  </span>
-                </div>
-                <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                  {customerJourneys.journeys.map((j, i) => {
-                    const maxCount = customerJourneys.journeys[0].count;
-                    const pct = (j.count / maxCount) * 100;
-                    const stepColour = (step: string): string => {
-                      if (step === "Won") return "#10B981";
-                      if (step === "Home Visit") return "#0EA5E9";
-                      if (step.includes("Cancelled")) return "#EF4444";
-                      if (step.includes("Phone") || step.includes("Call")) return "#F59E0B";
-                      return "#8B5CF6";
-                    };
-                    return (
-                      <div key={i}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
-                          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px", flex: 1, minWidth: 0 }}>
-                            {j.steps.map((step, si) => (
-                              <span key={si} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                                {si > 0 && <span style={{ color: "#CBD5E1", fontSize: "11px", fontWeight: 700 }}>→</span>}
-                                <span style={{
-                                  fontSize: "11px",
-                                  fontWeight: 600,
-                                  color: stepColour(step),
-                                  background: `${stepColour(step)}12`,
-                                  borderRadius: "5px",
-                                  padding: "2px 8px",
-                                  whiteSpace: "nowrap",
-                                }}>
-                                  {step}
-                                </span>
+            {!isSourceFiltered && customerJourneys && customerJourneys.journeys.length > 0 && (() => {
+              const hasVisit = (j: { steps: string[] }) => j.steps.some((s) => s === "Home Visit" || s === "Home Visit (Cancelled)" || s === "Won");
+              const withVisit = customerJourneys.journeys.filter(hasVisit);
+              const withoutVisit = customerJourneys.journeys.filter((j) => !hasVisit(j));
+              const withVisitTotal = withVisit.reduce((s, j) => s + j.count, 0);
+              const withoutVisitTotal = withoutVisit.reduce((s, j) => s + j.count, 0);
+
+              const stepColour = (step: string): string => {
+                if (step === "Won") return "#10B981";
+                if (step === "Home Visit") return "#0EA5E9";
+                if (step.includes("Cancelled")) return "#EF4444";
+                if (step.includes("Phone") || step.includes("Call")) return "#F59E0B";
+                if (step === "First Email") return "#3B82F6";
+                return "#8B5CF6";
+              };
+
+              const renderJourneyList = (list: typeof customerJourneys.journeys, barColour: string) => {
+                const maxCount = list.length > 0 ? list[0].count : 1;
+                return list.map((j, i) => {
+                  const pct = (j.count / maxCount) * 100;
+                  return (
+                    <div key={i}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px", flex: 1, minWidth: 0 }}>
+                          {j.steps.map((step, si) => (
+                            <span key={si} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                              {si > 0 && <span style={{ color: "#CBD5E1", fontSize: "11px", fontWeight: 700 }}>→</span>}
+                              <span style={{
+                                fontSize: "11px",
+                                fontWeight: 600,
+                                color: stepColour(step),
+                                background: `${stepColour(step)}12`,
+                                borderRadius: "5px",
+                                padding: "2px 8px",
+                                whiteSpace: "nowrap",
+                              }}>
+                                {step}
                               </span>
-                            ))}
-                          </div>
-                          <span style={{ fontSize: "14px", fontWeight: 800, color: "#0F172A", marginLeft: "12px", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                            {j.count}
-                          </span>
+                            </span>
+                          ))}
                         </div>
-                        <div style={{ background: "#F1F5F9", borderRadius: "3px", height: "3px", overflow: "hidden" }}>
-                          <div style={{ width: `${pct}%`, height: "100%", background: "#8B5CF6", borderRadius: "3px", transition: "width 0.3s ease" }} />
-                        </div>
+                        <span style={{ fontSize: "14px", fontWeight: 800, color: "#0F172A", marginLeft: "12px", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                          {j.count}
+                        </span>
                       </div>
-                    );
-                  })}
+                      <div style={{ background: "#F1F5F9", borderRadius: "3px", height: "3px", overflow: "hidden" }}>
+                        <div style={{ width: `${pct}%`, height: "100%", background: barColour, borderRadius: "3px", transition: "width 0.3s ease" }} />
+                      </div>
+                    </div>
+                  );
+                });
+              };
+
+              return (
+                <div>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "10px" }}>
+                    <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                      Customer Journeys
+                    </h2>
+                    <span style={{ fontSize: "10px", color: "#94A3B8", fontWeight: 600 }}>
+                      {customerJourneys.totalContacts} contact{customerJourneys.totalContacts !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                    {/* With Home Visit */}
+                    <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "4px" }}>
+                        <p style={{ fontSize: "11px", fontWeight: 700, color: "#0EA5E9", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                          Reached Home Visit
+                        </p>
+                        <span style={{ fontSize: "13px", fontWeight: 800, color: "#0F172A" }}>
+                          {withVisitTotal}
+                        </span>
+                      </div>
+                      {withVisit.length > 0 ? renderJourneyList(withVisit, "#0EA5E9") : (
+                        <p style={{ fontSize: "12px", color: "#94A3B8", margin: 0 }}>None in this period</p>
+                      )}
+                    </div>
+                    {/* Without Home Visit */}
+                    <div style={{ background: "white", borderRadius: "10px", border: "1px solid #E8ECF0", padding: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "4px" }}>
+                        <p style={{ fontSize: "11px", fontWeight: 700, color: "#8B5CF6", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                          Not Yet Reached Home Visit
+                        </p>
+                        <span style={{ fontSize: "13px", fontWeight: 800, color: "#0F172A" }}>
+                          {withoutVisitTotal}
+                        </span>
+                      </div>
+                      {withoutVisit.length > 0 ? renderJourneyList(withoutVisit, "#8B5CF6") : (
+                        <p style={{ fontSize: "12px", color: "#94A3B8", margin: 0 }}>None in this period</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* === REVIEWS + SOCIAL across the bottom === */}
             {(() => {
