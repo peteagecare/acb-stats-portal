@@ -1503,6 +1503,23 @@ export default function Dashboard() {
                 ).map((action) => (
                   <MiniRow key={action.value} label={PROSPECT_ACTIONS[action.value] ?? action.value} count={action.count} />
                 ))}
+                {funnelBySource && !isSourceFiltered && (() => {
+                  const bySource = funnelBySource.sources
+                    .filter((s) => s.prospects > 0)
+                    .map((s) => ({ label: s.label, count: s.prospects }))
+                    .sort((a, b) => b.count - a.count);
+                  if (bySource.length === 0) return null;
+                  return (
+                    <>
+                      <div style={{ fontSize: "8px", fontWeight: 700, color: "#F59E0B", textTransform: "uppercase", letterSpacing: "0.5px", margin: "10px 0 4px" }}>
+                        Original Lead Source
+                      </div>
+                      {bySource.map((s) => (
+                        <MiniRow key={`psrc-${s.label}`} label={s.label} count={s.count} />
+                      ))}
+                    </>
+                  );
+                })()}
               </FunnelCard>
               <ConversionArrow
                 rate={(() => {
@@ -1535,6 +1552,23 @@ export default function Dashboard() {
                     <MiniRow label="Direct bookings (no lead form)" count={dispDirectBookings} highlight />
                   </>
                 )}
+                {funnelBySource && !isSourceFiltered && (() => {
+                  const bySource = funnelBySource.sources
+                    .filter((s) => (s.formLeads + s.directBookings) > 0)
+                    .map((s) => ({ label: s.label, count: s.formLeads + s.directBookings }))
+                    .sort((a, b) => b.count - a.count);
+                  if (bySource.length === 0) return null;
+                  return (
+                    <>
+                      <div style={{ fontSize: "8px", fontWeight: 700, color: "#3B82F6", textTransform: "uppercase", letterSpacing: "0.5px", margin: "10px 0 4px" }}>
+                        Original Lead Source
+                      </div>
+                      {bySource.map((s) => (
+                        <MiniRow key={`lsrc-${s.label}`} label={s.label} count={s.count} />
+                      ))}
+                    </>
+                  );
+                })()}
               </FunnelCard>
               <ConversionArrow
                 rate={dispLeads > 0 ? ((dispHomeVisits / dispLeads) * 100).toFixed(1) : "0"}
@@ -1596,6 +1630,23 @@ export default function Dashboard() {
                     <span style={{ fontSize: "13px", fontWeight: 700, color: "#047857" }}>£{wonValue.toLocaleString()}</span>
                   )}
                 </div>
+                {funnelBySource && !isSourceFiltered && (() => {
+                  const bySource = funnelBySource.sources
+                    .filter((s) => s.wonJobs > 0)
+                    .map((s) => ({ label: s.label, count: s.wonJobs }))
+                    .sort((a, b) => b.count - a.count);
+                  if (bySource.length === 0) return null;
+                  return (
+                    <>
+                      <div style={{ fontSize: "8px", fontWeight: 700, color: "#059669", textTransform: "uppercase", letterSpacing: "0.5px", margin: "10px 0 4px" }}>
+                        Original Lead Source
+                      </div>
+                      {bySource.map((s) => (
+                        <MiniRow key={`wsrc-${s.label}`} label={s.label} count={s.count} />
+                      ))}
+                    </>
+                  );
+                })()}
               </FunnelCard>
             </div>
 
