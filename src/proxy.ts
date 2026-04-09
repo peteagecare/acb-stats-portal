@@ -6,6 +6,7 @@ const PUBLIC_PATHS = new Set<string>([
   "/login",
   "/api/login/request",
   "/api/login/verify",
+  "/api/login/totp",
   "/api/logout",
   "/favicon.ico",
   "/acb-logo.png",
