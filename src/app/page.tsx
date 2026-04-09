@@ -2288,26 +2288,26 @@ export default function Dashboard() {
                   Site Visits
                 </h2>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 3fr", gap: "10px" }}>
-                  {/* In-period count */}
-                  <div style={{ background: "white", borderRadius: "18px", border: "none", padding: "16px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-                    <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: 0 }}>
-                      Booked In Period
-                    </p>
-                    <p style={{ fontSize: "11px", color: "#AEAEB2", margin: "2px 0 8px" }}>
-                      Visits booked in this date range, excluding cancelled
-                    </p>
-                    <p style={{ fontSize: "44px", fontWeight: 600, color: "#1D1D1F", margin: 0, lineHeight: 1 }}>
-                      {siteVisits.inPeriod.toLocaleString()}
-                    </p>
-                    {siteVisits.cancelled > 0 && (
-                      <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #F1F5F9" }}>
-                        <p style={{ fontSize: "20px", fontWeight: 600, color: "#DC2626", margin: 0, lineHeight: 1 }}>
-                          {siteVisits.cancelled.toLocaleString()}
-                        </p>
-                        <p style={{ fontSize: "11px", color: "#86868B", margin: "2px 0 0", lineHeight: 1.3 }}>
-                          cancelled
-                        </p>
+                  {/* In-period count — card with icon */}
+                  <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "18px 20px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#ECFDF5", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="2" stroke="#10B981" strokeWidth="2"/><path d="M16 2v4M8 2v4M3 10h18" stroke="#10B981" strokeWidth="2" strokeLinecap="round"/></svg>
                       </div>
+                      <div>
+                        <p style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", margin: 0 }}>Booked In Period</p>
+                        <p style={{ fontSize: "10px", color: "#AEAEB2", margin: "1px 0 0" }}>Excluding cancelled</p>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
+                      <span style={{ fontSize: "28px", fontWeight: 600, color: "#1D1D1F", lineHeight: 1, letterSpacing: "-0.5px" }}>
+                        {siteVisits.inPeriod.toLocaleString()}
+                      </span>
+                    </div>
+                    {siteVisits.cancelled > 0 && (
+                      <span style={{ fontSize: "11px", fontWeight: 500, color: "#DC2626", background: "#FEF2F2", borderRadius: "6px", padding: "2px 8px", alignSelf: "flex-start" }}>
+                        {siteVisits.cancelled} cancelled
+                      </span>
                     )}
                   </div>
 
@@ -2321,10 +2321,19 @@ export default function Dashboard() {
                         Independent of date range
                       </span>
                     </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px" }}>
                       {siteVisits.upcoming.map((wk, i) => {
                         const colours = ["#0071E3", "#6366F1", "#8B5CF6", "#A855F7"];
                         const colour = colours[i] ?? "#0071E3";
+                        const goal = goals.siteVisitsGoalPerWeek ?? 10;
+                        const pctFill = Math.min((wk.count / goal) * 100, 100);
+                        const hit = wk.count >= goal;
+                        const ringColour = hit ? "#10B981" : colour;
+                        const ringSize = 100;
+                        const strokeWidth = 6;
+                        const radius = (ringSize - strokeWidth) / 2;
+                        const circumference = 2 * Math.PI * radius;
+                        const dashOffset = circumference - (pctFill / 100) * circumference;
                         const fmtDay = (s: string) => {
                           const [, m, d] = s.split("-");
                           return `${parseInt(d, 10)}/${parseInt(m, 10)}`;
@@ -2333,57 +2342,59 @@ export default function Dashboard() {
                           <div
                             key={wk.label}
                             style={{
-                              background: `${colour}08`,
-                              border: `1px solid ${colour}30`,
-                              borderRadius: "18px",
-                              padding: "12px 10px",
+                              background: "white",
+                              boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
+                              borderRadius: "20px",
+                              padding: "20px 12px",
                               display: "flex",
                               flexDirection: "column",
                               alignItems: "center",
                               textAlign: "center",
+                              gap: "4px",
                             }}
                           >
-                            {goals.siteVisitsGoalPerWeek != null && goals.siteVisitsGoalPerWeek > 0 && (() => {
-                              const goal = goals.siteVisitsGoalPerWeek!;
-                              const hit = wk.count >= goal;
-                              const ringColour = hit ? "#10B981" : colour;
-                              return (
-                                <div
-                                  style={{
-                                    width: "44px",
-                                    height: "44px",
-                                    borderRadius: "50%",
-                                    border: `2px solid ${ringColour}`,
-                                    background: hit ? `${ringColour}15` : "white",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    marginBottom: "8px",
-                                  }}
-                                  title={`Goal: ${goal} visits`}
-                                >
-                                  <span style={{ fontSize: "16px", fontWeight: 600, color: ringColour, lineHeight: 1 }}>
-                                    {goal}
-                                  </span>
-                                </div>
-                              );
-                            })()}
-                            <p style={{ fontSize: "10px", fontWeight: 600, color: colour, margin: 0 }}>
+                            {/* Progress ring */}
+                            <div style={{ position: "relative", width: `${ringSize}px`, height: `${ringSize}px`, marginBottom: "4px" }}>
+                              <svg width={ringSize} height={ringSize} style={{ transform: "rotate(-90deg)" }}>
+                                <circle cx={ringSize / 2} cy={ringSize / 2} r={radius} fill="none" stroke="#F5F5F7" strokeWidth={strokeWidth} />
+                                <circle
+                                  cx={ringSize / 2} cy={ringSize / 2} r={radius} fill="none"
+                                  stroke={ringColour}
+                                  strokeWidth={strokeWidth}
+                                  strokeLinecap="round"
+                                  strokeDasharray={circumference}
+                                  strokeDashoffset={dashOffset}
+                                  style={{ transition: "stroke-dashoffset 0.6s cubic-bezier(0.25, 0.1, 0.25, 1)" }}
+                                />
+                              </svg>
+                              <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                                <span style={{ fontSize: "28px", fontWeight: 600, color: "#1D1D1F", lineHeight: 1 }}>
+                                  {wk.count}
+                                </span>
+                                <span style={{ fontSize: "9px", color: "#AEAEB2", marginTop: "2px" }}>/ {goal}</span>
+                              </div>
+                            </div>
+
+                            <p style={{ fontSize: "12px", fontWeight: 600, color: "#1D1D1F", margin: 0 }}>
                               {wk.label}
                             </p>
-                            <p style={{ fontSize: "10px", color: "#AEAEB2", margin: "2px 0 6px" }}>
+                            <p style={{ fontSize: "10px", color: "#AEAEB2", margin: 0 }}>
                               {fmtDay(wk.weekStart)} – {fmtDay(wk.weekEnd)}
                             </p>
-                            <p style={{ fontSize: "32px", fontWeight: 600, color: "#1D1D1F", margin: 0, lineHeight: 1 }}>
-                              {wk.count.toLocaleString()}
-                            </p>
-                            <p style={{ fontSize: "10px", color: "#86868B", margin: "4px 0 0" }}>
-                              {wk.count === 1 ? "visit" : "visits"}
-                            </p>
+                            {hit && (
+                              <span style={{ fontSize: "9px", fontWeight: 500, color: "#059669", background: "#F0FDF4", borderRadius: "6px", padding: "2px 8px", marginTop: "2px" }}>
+                                Goal met
+                              </span>
+                            )}
+                            {!hit && wk.count > 0 && (
+                              <span style={{ fontSize: "9px", fontWeight: 500, color: colour, background: `${colour}10`, borderRadius: "6px", padding: "2px 8px", marginTop: "2px" }}>
+                                {goal - wk.count} more needed
+                              </span>
+                            )}
                             {wk.cancelled > 0 && (
-                              <p style={{ fontSize: "10px", color: "#DC2626", margin: "4px 0 0", fontWeight: 600 }}>
+                              <span style={{ fontSize: "9px", fontWeight: 500, color: "#DC2626", marginTop: "2px" }}>
                                 {wk.cancelled} cancelled
-                              </p>
+                              </span>
                             )}
                           </div>
                         );
