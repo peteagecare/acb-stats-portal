@@ -1218,6 +1218,48 @@ export default function Dashboard() {
         </div>
       </header>
 
+      {/* Sticky source filter bar — visible when a source pill is active */}
+      {isSourceFiltered && sourceSlice && (
+        <div
+          style={{
+            position: "sticky",
+            top: 0,
+            zIndex: 100,
+            background: "#1E293B",
+            borderBottom: "2px solid #2563eb",
+            padding: "8px 16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "12px",
+          }}
+        >
+          <span style={{ fontSize: "12px", color: "#94A3B8" }}>Filtered by</span>
+          <span style={{ fontSize: "13px", fontWeight: 700, color: "white", background: "#2563eb", borderRadius: "999px", padding: "4px 14px" }}>
+            {sourceSlice.label}
+          </span>
+          <span style={{ fontSize: "11px", color: "#64748B" }}>
+            {sourceSlice.contacts} contacts · Cohort view
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedSource(null)}
+            style={{
+              fontSize: "12px",
+              fontWeight: 600,
+              color: "#94A3B8",
+              background: "transparent",
+              border: "1px solid #475569",
+              borderRadius: "6px",
+              padding: "4px 12px",
+              cursor: "pointer",
+              marginLeft: "8px",
+            }}
+          >
+            Clear filter
+          </button>
+        </div>
+      )}
       <main className="dashboard-main" style={{ maxWidth: "1600px", margin: "0 auto", padding: "16px" }}>
         {/* Error */}
         {error && (
@@ -1597,7 +1639,7 @@ export default function Dashboard() {
                 rate={dispLeads > 0 ? `Lead → Visit ${((dispHomeVisits / dispLeads) * 100).toFixed(1)}%` : undefined}
                 comparison={!isSourceFiltered && previousPeriod ? { current: homeVisits ?? 0, previous: previousPeriod.homeVisits } : undefined}
               >
-                {homeVisitBreakdown && homeVisitBreakdown.total > 0 ? (
+                {!isSourceFiltered && homeVisitBreakdown && homeVisitBreakdown.total > 0 ? (
                   <>
                     {homeVisitBreakdown.byAction.length > 0 && (
                       <>
@@ -1622,7 +1664,7 @@ export default function Dashboard() {
                   </>
                 ) : (
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "10px 0" }}>
-                    <span style={{ fontSize: "32px", fontWeight: 800, color: "#059669", lineHeight: 1 }}>{(homeVisits ?? 0).toLocaleString()}</span>
+                    <span style={{ fontSize: "32px", fontWeight: 800, color: "#059669", lineHeight: 1 }}>{dispHomeVisits.toLocaleString()}</span>
                   </div>
                 )}
               </FunnelCard>
@@ -1995,7 +2037,7 @@ export default function Dashboard() {
             </div>
 
             {/* === SITE VISITS — in-period count + 4-week forward calendar === */}
-            {siteVisits && (
+            {!isSourceFiltered && siteVisits && (
               <div>
                 <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                   Site Visits
@@ -2205,7 +2247,7 @@ export default function Dashboard() {
             )}
 
             {/* === INSTALLS — 3 month forward calendar (deals: installation_date) === */}
-            {installs && installs.months.length > 0 && (
+            {!isSourceFiltered && installs && installs.months.length > 0 && (
               <div>
                 <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                   Installs
@@ -2286,7 +2328,7 @@ export default function Dashboard() {
             )}
 
             {/* === INITIAL OUTREACH FEEDBACK — split by source + by action === */}
-            {outreachFeedback && outreachFeedback.feedback.length > 0 && (
+            {!isSourceFiltered && outreachFeedback && outreachFeedback.feedback.length > 0 && (
               <div>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "10px" }}>
                   <h2 style={{ fontSize: "13px", fontWeight: 700, color: "#64748B", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>
