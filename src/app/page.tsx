@@ -1486,6 +1486,57 @@ export default function Dashboard() {
         {/* Full-screen loader — Apple-style minimal */}
         {!dataReady && (() => {
           const barWidth = 200;
+          const earlyPhrases = [
+            "Waking up the hamsters...",
+            "Warming up the spreadsheets...",
+            "Dusting off the database...",
+            "Poking HubSpot with a stick...",
+            "Bribing the servers...",
+            "Untangling the internet cables...",
+            "Asking Google nicely...",
+            "Consulting the oracle...",
+            "Firing up the flux capacitor...",
+            "Tuning the marketing radar...",
+          ];
+          const midPhrases = [
+            "Counting every last contact...",
+            "Herding the data cats...",
+            "Interrogating the leads...",
+            "Deciphering the spreadsheet runes...",
+            "Teaching numbers to behave...",
+            "Rounding up the usual suspects...",
+            "Cross-referencing with the biscuit tin...",
+            "Whispering to the funnel...",
+            "Translating from HubSpot to English...",
+            "Doing maths so you don't have to...",
+          ];
+          const latePhrases = [
+            "Polishing the charts...",
+            "Making the numbers look pretty...",
+            "Adding the finishing sparkles...",
+            "Ironing the graphs...",
+            "Nearly there, hold tight...",
+            "Arranging pixels artistically...",
+            "Just double-checking everything...",
+            "Applying the final coat of paint...",
+            "Tightening the last bolts...",
+            "One last cup of tea...",
+          ];
+          const almostPhrases = [
+            "Drumroll please...",
+            "Aaaany second now...",
+            "Putting the cherry on top...",
+            "Clearing the runway...",
+            "3... 2... 1...",
+            "The suspense is killing us too...",
+            "Worth the wait, promise...",
+            "Just tying a bow on it...",
+          ];
+          const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
+          const phrase = loadProgress < 15 ? pick(earlyPhrases)
+            : loadProgress < 55 ? pick(midPhrases)
+            : loadProgress < 85 ? pick(latePhrases)
+            : pick(almostPhrases);
           return (
             <div
               style={{
@@ -1504,7 +1555,7 @@ export default function Dashboard() {
 
               <div style={{ textAlign: "center" }}>
                 <p style={{ fontSize: "17px", fontWeight: 500, color: "#1D1D1F", margin: "0 0 20px", letterSpacing: "-0.2px" }}>
-                  {loadProgress < 15 ? "Connecting..." : loadProgress < 55 ? "Loading contacts..." : loadProgress < 85 ? "Analysing sources..." : "Almost there..."}
+                  {phrase}
                 </p>
                 {/* Thin progress bar */}
                 <div style={{ width: `${barWidth}px`, height: "3px", borderRadius: "999px", background: "#E5E5EA", overflow: "hidden" }}>
