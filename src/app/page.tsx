@@ -537,6 +537,258 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
   );
 }
 
+/* ── Contact List Modal ── */
+
+const HUBSPOT_HUB_ID = "145276300";
+
+interface ContactRow {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  source: string;
+  action: string;
+  stage: string;
+  created: string;
+  lastActivity: string;
+  daysSinceActivity: number | null;
+}
+
+function ContactListModal({ stage, colour, from, to, onClose }: {
+  stage: string;
+  colour: string;
+  from: string;
+  to: string;
+  onClose: () => void;
+}) {
+  const [contacts, setContacts] = useState<ContactRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sortField, setSortField] = useState<"name" | "stage" | "created" | "daysSinceActivity">("created");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    fetch(`/api/hubspot/contact-list?from=${from}&to=${to}&stage=${encodeURIComponent(stage)}`)
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to fetch contacts");
+        return r.json();
+      })
+      .then((data) => setContacts(data.contacts ?? []))
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [from, to, stage]);
+
+  const handleSort = (field: typeof sortField) => {
+    if (sortField === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDir(field === "name" ? "asc" : "desc");
+    }
+  };
+
+  const sorted = [...contacts].sort((a, b) => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    if (sortField === "name") return dir * a.name.localeCompare(b.name);
+    if (sortField === "stage") {
+      const order = ["Contact", "Prospect", "Lead", "Home Visit", "Won Job"];
+      return dir * (order.indexOf(a.stage) - order.indexOf(b.stage));
+    }
+    if (sortField === "daysSinceActivity") {
+      const da = a.daysSinceActivity ?? 9999;
+      const db = b.daysSinceActivity ?? 9999;
+      return dir * (da - db);
+    }
+    return dir * (new Date(a.created).getTime() - new Date(b.created).getTime());
+  });
+
+  const stageColour = (s: string) => {
+    switch (s) {
+      case "Contact": return "#6366F1";
+      case "Prospect": return "#F59E0B";
+      case "Lead": return "#0071E3";
+      case "Home Visit": return "#10B981";
+      case "Won Job": return "#059669";
+      default: return "#86868B";
+    }
+  };
+
+  const attentionBadge = (row: ContactRow) => {
+    if (row.stage === "Won Job") return null;
+    if (row.daysSinceActivity === null) {
+      return { label: "No activity", bg: "#FEE2E2", colour: "#DC2626" };
+    }
+    if (row.daysSinceActivity > 14) {
+      return { label: `${row.daysSinceActivity}d ago`, bg: "#FEE2E2", colour: "#DC2626" };
+    }
+    if (row.daysSinceActivity > 7) {
+      return { label: `${row.daysSinceActivity}d ago`, bg: "#FEF3C7", colour: "#92400E" };
+    }
+    return null;
+  };
+
+  const sortArrow = (field: typeof sortField) =>
+    sortField === field ? (sortDir === "asc" ? " ▲" : " ▼") : "";
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000,
+        background: "rgba(0, 0, 0, 0.5)", backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "20px",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "white", borderRadius: "20px",
+          width: "100%", maxWidth: "960px", maxHeight: "85vh",
+          display: "flex", flexDirection: "column",
+          boxShadow: "0 25px 50px rgba(0,0,0,0.25)",
+          overflow: "hidden",
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          padding: "18px 24px", borderBottom: "1px solid #F5F5F7",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: "17px", fontWeight: 600, color: "#1D1D1F" }}>
+              {stage}
+            </h2>
+            <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#86868B" }}>
+              {from} to {to} &middot; {contacts.length} contact{contacts.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: "#F5F5F7", border: "none", fontSize: "16px",
+              color: "#86868B", cursor: "pointer", padding: "6px 10px",
+              borderRadius: "10px", lineHeight: 1,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ overflow: "auto", flex: 1 }}>
+          {loading && (
+            <div style={{ padding: "40px", textAlign: "center", color: "#86868B" }}>
+              Loading contacts...
+            </div>
+          )}
+          {error && (
+            <div style={{ padding: "40px", textAlign: "center", color: "#DC2626" }}>
+              {error}
+            </div>
+          )}
+          {!loading && !error && contacts.length === 0 && (
+            <div style={{ padding: "40px", textAlign: "center", color: "#86868B" }}>
+              No contacts found for this period.
+            </div>
+          )}
+          {!loading && !error && contacts.length > 0 && (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+              <thead>
+                <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #F5F5F7" }}>
+                  <th onClick={() => handleSort("name")} style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "#86868B", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px", cursor: "pointer", userSelect: "none" }}>
+                    Name{sortArrow("name")}
+                  </th>
+                  <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "#86868B", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Email
+                  </th>
+                  <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "#86868B", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Phone
+                  </th>
+                  <th onClick={() => handleSort("stage")} style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "#86868B", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px", cursor: "pointer", userSelect: "none" }}>
+                    Stage{sortArrow("stage")}
+                  </th>
+                  <th onClick={() => handleSort("daysSinceActivity")} style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "#86868B", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px", cursor: "pointer", userSelect: "none" }}>
+                    Follow Up{sortArrow("daysSinceActivity")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((c) => {
+                  const badge = attentionBadge(c);
+                  const hsUrl = `https://app.hubspot.com/contacts/${HUBSPOT_HUB_ID}/contact/${c.id}`;
+                  return (
+                    <tr
+                      key={c.id}
+                      onClick={() => window.open(hsUrl, "_blank")}
+                      style={{
+                        borderBottom: "1px solid #F5F5F7",
+                        cursor: "pointer",
+                        transition: "background 0.15s",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "#FAFAFA")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <td style={{ padding: "12px 16px", fontWeight: 500, color: "#1D1D1F" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          {c.name}
+                          <span style={{ fontSize: "11px", color: "#AEAEB2" }}>↗</span>
+                        </div>
+                        <div style={{ fontSize: "11px", color: "#AEAEB2", fontWeight: 400, marginTop: "1px" }}>
+                          {c.action}
+                        </div>
+                      </td>
+                      <td style={{ padding: "12px 16px", color: "#1D1D1F" }}>
+                        {c.email}
+                      </td>
+                      <td style={{ padding: "12px 16px", color: "#1D1D1F" }}>
+                        {c.phone || <span style={{ color: "#D1D1D6" }}>—</span>}
+                      </td>
+                      <td style={{ padding: "12px 16px" }}>
+                        <span style={{
+                          display: "inline-block",
+                          padding: "3px 10px",
+                          borderRadius: "8px",
+                          fontSize: "11px",
+                          fontWeight: 500,
+                          background: stageColour(c.stage) + "14",
+                          color: stageColour(c.stage),
+                        }}>
+                          {c.stage}
+                        </span>
+                      </td>
+                      <td style={{ padding: "12px 16px" }}>
+                        {badge ? (
+                          <span style={{
+                            display: "inline-block",
+                            padding: "3px 10px",
+                            borderRadius: "8px",
+                            fontSize: "11px",
+                            fontWeight: 500,
+                            background: badge.bg,
+                            color: badge.colour,
+                          }}>
+                            {badge.label}
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: "11px", color: "#AEAEB2" }}>OK</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Helpers ── */
 
 function pad(n: number) {
@@ -690,6 +942,7 @@ export default function Dashboard() {
   const [dataReady, setDataReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [contactListStage, setContactListStage] = useState<{ stage: string; colour: string } | null>(null);
   const inlineFilterRef = useRef<HTMLDivElement>(null);
   const [stickyFilterVisible, setStickyFilterVisible] = useState(false);
 
@@ -1692,11 +1945,11 @@ export default function Dashboard() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "10px" }}>
               <KpiCard label="Website Visitors" value={isSourceFiltered ? null : activeUsers} colour="#8B5CF6" liveNow={isSourceFiltered ? null : liveNow} subtitle={isSourceFiltered ? "n/a when filtered" : undefined} />
-              <KpiCard label="Contacts" value={dispContacts} colour="#6366F1" comparison={!isSourceFiltered && previousPeriod ? { current: sourcesTotal, previous: previousPeriod.contacts } : undefined} />
-              <KpiCard label="Prospects" value={dispProspects} colour="#F59E0B" comparison={!isSourceFiltered && previousPeriod ? { current: prospectsTotal, previous: previousPeriod.prospects } : undefined} goal={!isSourceFiltered && proratedGoal(goals.prospectsGoalPerMonth) ? { current: prospectsTotal, target: proratedGoal(goals.prospectsGoalPerMonth)! } : undefined} />
-              <KpiCard label="Leads" value={dispLeads} colour="#0071E3" comparison={!isSourceFiltered && previousPeriod ? { current: leadsTotal, previous: previousPeriod.leads } : undefined} detail={dispDirectBookings > 0 ? `${dispFormLeads} Form Leads + ${dispDirectBookings} Direct Bookings` : undefined} goal={!isSourceFiltered && proratedGoal(goals.leadGoalPerMonth) ? { current: leadsTotal, target: proratedGoal(goals.leadGoalPerMonth)! } : undefined} />
-              <KpiCard label="Home Visits" value={dispHomeVisits} colour="#10B981" subtitle={siteVisits && siteVisits.cancelled > 0 ? `${siteVisits.cancelled} cancelled` : undefined} comparison={!isSourceFiltered && previousPeriod ? { current: homeVisits ?? 0, previous: previousPeriod.homeVisits } : undefined} goal={!isSourceFiltered && proratedGoal(goals.visitsGoalPerMonth) ? { current: homeVisits ?? 0, target: proratedGoal(goals.visitsGoalPerMonth)! } : undefined} />
-              <KpiCard label="Won Jobs" value={dispWonJobs} colour="#059669" subtitle={!isSourceFiltered && wonValue ? `£${wonValue.toLocaleString()} value` : undefined} comparison={!isSourceFiltered && previousPeriod ? { current: wonJobs ?? 0, previous: previousPeriod.wonJobs } : undefined} />
+              <KpiCard label="Contacts" value={dispContacts} colour="#6366F1" comparison={!isSourceFiltered && previousPeriod ? { current: sourcesTotal, previous: previousPeriod.contacts } : undefined} onClick={() => setContactListStage({ stage: "Contacts", colour: "#6366F1" })} />
+              <KpiCard label="Prospects" value={dispProspects} colour="#F59E0B" comparison={!isSourceFiltered && previousPeriod ? { current: prospectsTotal, previous: previousPeriod.prospects } : undefined} goal={!isSourceFiltered && proratedGoal(goals.prospectsGoalPerMonth) ? { current: prospectsTotal, target: proratedGoal(goals.prospectsGoalPerMonth)! } : undefined} onClick={() => setContactListStage({ stage: "Prospects", colour: "#F59E0B" })} />
+              <KpiCard label="Leads" value={dispLeads} colour="#0071E3" comparison={!isSourceFiltered && previousPeriod ? { current: leadsTotal, previous: previousPeriod.leads } : undefined} detail={dispDirectBookings > 0 ? `${dispFormLeads} Form Leads + ${dispDirectBookings} Direct Bookings` : undefined} goal={!isSourceFiltered && proratedGoal(goals.leadGoalPerMonth) ? { current: leadsTotal, target: proratedGoal(goals.leadGoalPerMonth)! } : undefined} onClick={() => setContactListStage({ stage: "Leads", colour: "#0071E3" })} />
+              <KpiCard label="Home Visits" value={dispHomeVisits} colour="#10B981" subtitle={siteVisits && siteVisits.cancelled > 0 ? `${siteVisits.cancelled} cancelled` : undefined} comparison={!isSourceFiltered && previousPeriod ? { current: homeVisits ?? 0, previous: previousPeriod.homeVisits } : undefined} goal={!isSourceFiltered && proratedGoal(goals.visitsGoalPerMonth) ? { current: homeVisits ?? 0, target: proratedGoal(goals.visitsGoalPerMonth)! } : undefined} onClick={() => setContactListStage({ stage: "Home Visits", colour: "#10B981" })} />
+              <KpiCard label="Won Jobs" value={dispWonJobs} colour="#059669" subtitle={!isSourceFiltered && wonValue ? `£${wonValue.toLocaleString()} value` : undefined} comparison={!isSourceFiltered && previousPeriod ? { current: wonJobs ?? 0, previous: previousPeriod.wonJobs } : undefined} onClick={() => setContactListStage({ stage: "Won Jobs", colour: "#059669" })} />
             </div>
             </div>
 
@@ -3464,6 +3717,15 @@ export default function Dashboard() {
       )}
 
       {showSettings && <SettingsModal initialGoals={goals} onClose={() => setShowSettings(false)} />}
+      {contactListStage && (
+        <ContactListModal
+          stage={contactListStage.stage}
+          colour={contactListStage.colour}
+          from={from}
+          to={to}
+          onClose={() => setContactListStage(null)}
+        />
+      )}
     </div>
   );
 }
@@ -3671,13 +3933,14 @@ const KPI_ICONS: Record<string, { icon: React.ReactNode; bg: string }> = {
   },
 };
 
-function KpiCard({ label, value, colour, subtitle, detail, goal, comparison, liveNow }: { label: string; value: number | null; colour: string; subtitle?: string; detail?: string; goal?: { current: number; target: number }; comparison?: { current: number; previous: number }; liveNow?: number | null }) {
+function KpiCard({ label, value, colour, subtitle, detail, goal, comparison, liveNow, onClick }: { label: string; value: number | null; colour: string; subtitle?: string; detail?: string; goal?: { current: number; target: number }; comparison?: { current: number; previous: number }; liveNow?: number | null; onClick?: () => void }) {
   const pct = goal ? Math.min((goal.current / goal.target) * 100, 100) : 0;
   const met = goal ? goal.current >= goal.target : false;
   const kpiIcon = KPI_ICONS[label];
 
   return (
     <div
+      onClick={onClick}
       style={{
         background: "white",
         borderRadius: "20px",
@@ -3686,7 +3949,11 @@ function KpiCard({ label, value, colour, subtitle, detail, goal, comparison, liv
         display: "flex",
         flexDirection: "column",
         gap: "10px",
+        cursor: onClick ? "pointer" : undefined,
+        transition: "box-shadow 0.15s ease",
       }}
+      onMouseEnter={(e) => { if (onClick) e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.1)"; }}
+      onMouseLeave={(e) => { if (onClick) e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.04)"; }}
     >
       {/* Header: icon + label */}
       <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
