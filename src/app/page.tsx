@@ -1010,6 +1010,89 @@ function InstallListModal({ title, from, to, onClose }: {
   );
 }
 
+/* ── Journey List Modal ── */
+
+function JourneyListModal({ path, contacts, onClose }: {
+  path: string;
+  contacts: { id: string; name: string; email: string; phone: string; leadSource: string; conversionAction: string }[];
+  onClose: () => void;
+}) {
+  const steps = path.split(" → ");
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000,
+        background: "rgba(0, 0, 0, 0.5)", backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "20px",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "white", borderRadius: "20px",
+          width: "100%", maxWidth: "1000px", maxHeight: "85vh",
+          display: "flex", flexDirection: "column",
+          boxShadow: "0 25px 50px rgba(0,0,0,0.25)",
+          overflow: "hidden",
+        }}
+      >
+        <div style={{
+          padding: "18px 24px", borderBottom: "1px solid #F5F5F7",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px", marginBottom: "4px" }}>
+              {steps.map((step, i) => (
+                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                  {i > 0 && <span style={{ color: "#D2D2D7", fontSize: "11px", fontWeight: 600 }}>→</span>}
+                  <span style={{ fontSize: "11px", fontWeight: 600, color: "#1D1D1F", background: "#F5F5F7", borderRadius: "5px", padding: "2px 8px" }}>{step}</span>
+                </span>
+              ))}
+            </div>
+            <p style={{ margin: 0, fontSize: "12px", color: "#86868B" }}>
+              {contacts.length} contact{contacts.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: "#F5F5F7", border: "none", fontSize: "16px", color: "#86868B", cursor: "pointer", padding: "6px 10px", borderRadius: "10px", lineHeight: 1, flexShrink: 0 }}>✕</button>
+        </div>
+        <div style={{ overflow: "auto", flex: 1 }}>
+          {contacts.length === 0 && <div style={{ padding: "40px", textAlign: "center", color: "#86868B" }}>No contacts found.</div>}
+          {contacts.length > 0 && (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+              <thead>
+                <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #F5F5F7" }}>
+                  {["Name", "Email", "Phone", "Source", "Action"].map((h) => (
+                    <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "#86868B", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {contacts.map((c) => {
+                  const hsUrl = `https://app-eu1.hubspot.com/contacts/${HUBSPOT_HUB_ID}/record/0-1/${c.id}`;
+                  return (
+                    <tr key={c.id} onClick={() => window.open(hsUrl, "_blank")} style={{ borderBottom: "1px solid #F5F5F7", cursor: "pointer", transition: "background 0.15s" }} onMouseEnter={(e) => (e.currentTarget.style.background = "#FAFAFA")} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                      <td style={{ padding: "12px 16px", fontWeight: 500, color: "#1D1D1F" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>{c.name} <span style={{ fontSize: "11px", color: "#AEAEB2" }}>↗</span></div>
+                      </td>
+                      <td style={{ padding: "12px 16px", color: "#1D1D1F" }}>{c.email}</td>
+                      <td style={{ padding: "12px 16px", color: "#1D1D1F" }}>{c.phone || <span style={{ color: "#D1D1D6" }}>—</span>}</td>
+                      <td style={{ padding: "12px 16px", color: "#1D1D1F", fontSize: "12px" }}>{c.leadSource}</td>
+                      <td style={{ padding: "12px 16px", color: "#1D1D1F", fontSize: "12px" }}>{c.conversionAction || <span style={{ color: "#D1D1D6" }}>—</span>}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Feedback List Modal ── */
 
 interface FeedbackRow {
@@ -1231,7 +1314,7 @@ export default function Dashboard() {
     journeys: { path: string; steps: string[]; count: number }[];
     totalContacts: number;
     filters: { leadSources: string[]; conversionActions: string[]; forms: string[] };
-    contactJourneys: { path: string; steps: string[]; leadSource: string; conversionAction: string; forms: string[]; createdInPeriod: boolean }[];
+    contactJourneys: { id: string; name: string; email: string; phone: string; path: string; steps: string[]; leadSource: string; conversionAction: string; forms: string[]; createdInPeriod: boolean }[];
   } | null>(null);
   const [journeyFilterSource, setJourneyFilterSource] = useState<string | null>(null);
   const [journeyFilterAction, setJourneyFilterAction] = useState<string | null>(null);
@@ -1278,6 +1361,7 @@ export default function Dashboard() {
   const [visitListModal, setVisitListModal] = useState<{ title: string; from: string; to: string; mode: "booked" | "scheduled"; salesman?: string } | null>(null);
   const [installListModal, setInstallListModal] = useState<{ title: string; from: string; to: string } | null>(null);
   const [feedbackListModal, setFeedbackListModal] = useState<{ title: string; feedback?: string; source?: string } | null>(null);
+  const [journeyListModal, setJourneyListModal] = useState<{ path: string } | null>(null);
   const inlineFilterRef = useRef<HTMLDivElement>(null);
   const [stickyFilterVisible, setStickyFilterVisible] = useState(false);
 
@@ -3495,7 +3579,7 @@ export default function Dashboard() {
                     {visible.map((j, i) => {
                       const pct = (j.count / maxCount) * 100;
                       return (
-                        <div key={i}>
+                        <div key={i} onClick={() => setJourneyListModal({ path: j.path })} style={{ cursor: "pointer", borderRadius: "10px", padding: "6px 8px", margin: "-6px -8px", transition: "background 0.15s" }} onMouseEnter={(e) => (e.currentTarget.style.background = "#F5F5F7")} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
                             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px", flex: 1, minWidth: 0 }}>
                               {j.steps.map((step, si) => (
@@ -4096,6 +4180,18 @@ export default function Dashboard() {
           onClose={() => setInstallListModal(null)}
         />
       )}
+      {journeyListModal && customerJourneys && (() => {
+        const matchingContacts = customerJourneys.contactJourneys
+          .filter((cj) => cj.path === journeyListModal.path)
+          .map((cj) => ({ id: cj.id, name: cj.name, email: cj.email, phone: cj.phone, leadSource: cj.leadSource, conversionAction: cj.conversionAction }));
+        return (
+          <JourneyListModal
+            path={journeyListModal.path}
+            contacts={matchingContacts}
+            onClose={() => setJourneyListModal(null)}
+          />
+        );
+      })()}
       {feedbackListModal && (
         <FeedbackListModal
           title={feedbackListModal.title}

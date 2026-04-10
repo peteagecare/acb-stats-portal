@@ -114,6 +114,9 @@ async function hubspotFetch(url: string, token: string, options?: RequestInit) {
 
 interface ContactInfo {
   id: string;
+  name: string;
+  email: string;
+  phone: string;
   createdInPeriod: boolean;
   leadSource: string | null;
   conversionAction: string | null;
@@ -166,6 +169,11 @@ async function searchContacts(
       ],
       properties: [
         "createdate",
+        "firstname",
+        "lastname",
+        "email",
+        "phone",
+        "mobilephone",
         "original_lead_source",
         "conversion_action",
         "date_that_initial_visit_booked_is_set_to_yes",
@@ -198,6 +206,9 @@ async function searchContacts(
       const createMs = props.createdate ? new Date(props.createdate).getTime() : 0;
       contacts.push({
         id: c.id,
+        name: [props.firstname, props.lastname].filter(Boolean).join(" ") || "Unknown",
+        email: props.email ?? "",
+        phone: props.phone || props.mobilephone || "",
         createdInPeriod: createMs >= fromMs && createMs <= toMs,
         leadSource: props.original_lead_source || null,
         conversionAction: props.conversion_action || null,
@@ -305,6 +316,10 @@ export async function GET(request: NextRequest) {
 
     // Track per-contact journey info for aggregation + filtering
     interface ContactJourney {
+      id: string;
+      name: string;
+      email: string;
+      phone: string;
       steps: string[];
       leadSource: string;
       conversionAction: string;
@@ -388,6 +403,10 @@ export async function GET(request: NextRequest) {
       steps.unshift(source);
 
       contactJourneys.push({
+        id: c.id,
+        name: c.name,
+        email: c.email,
+        phone: c.phone,
         steps,
         leadSource: source,
         conversionAction: c.conversionAction ? friendlyName(c.conversionAction) : "",
@@ -431,6 +450,10 @@ export async function GET(request: NextRequest) {
       },
       // Raw per-contact data so the frontend can re-filter without another API call
       contactJourneys: contactJourneys.map((cj) => ({
+        id: cj.id,
+        name: cj.name,
+        email: cj.email,
+        phone: cj.phone,
         path: cj.steps.join(" → "),
         steps: cj.steps,
         leadSource: cj.leadSource,
