@@ -539,7 +539,7 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
 
 /* ── Contact List Modal ── */
 
-const HUBSPOT_HUB_ID = "145276300";
+const HUBSPOT_HUB_ID = "25733939";
 
 interface ContactRow {
   id: string;
@@ -719,7 +719,7 @@ function ContactListModal({ stage, colour, from, to, onClose }: {
               <tbody>
                 {sorted.map((c) => {
                   const badge = attentionBadge(c);
-                  const hsUrl = `https://app.hubspot.com/contacts/${HUBSPOT_HUB_ID}/contact/${c.id}`;
+                  const hsUrl = `https://app-eu1.hubspot.com/contacts/${HUBSPOT_HUB_ID}/record/0-1/${c.id}`;
                   return (
                     <tr
                       key={c.id}
