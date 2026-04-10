@@ -13,6 +13,17 @@ export default function LoginPage() {
 
 type Tab = "email" | "authenticator";
 
+type PeriodOption = "this_month" | "last_month" | "last_7" | "last_30" | "last_90" | "this_year";
+
+const PERIOD_OPTIONS: { value: PeriodOption; label: string }[] = [
+  { value: "this_month", label: "This Month" },
+  { value: "last_month", label: "Last Month" },
+  { value: "last_7", label: "Last 7 Days" },
+  { value: "last_30", label: "Last 30 Days" },
+  { value: "last_90", label: "Last 90 Days" },
+  { value: "this_year", label: "This Year" },
+];
+
 function LoginForm() {
   const params = useSearchParams();
   const router = useRouter();
@@ -26,6 +37,7 @@ function LoginForm() {
   const [code, setCode] = useState("");
   const [codeStatus, setCodeStatus] = useState<"idle" | "checking">("idle");
   const [error, setError] = useState<string | null>(initialError);
+  const [period, setPeriod] = useState<PeriodOption>("this_month");
 
   async function requestLink(e: React.FormEvent) {
     e.preventDefault();
@@ -66,8 +78,9 @@ function LoginForm() {
         setCodeStatus("idle");
         return;
       }
-      const next = params.get("next") || "/";
-      router.push(next);
+      const base = params.get("next") || "/";
+      const sep = base.includes("?") ? "&" : "?";
+      router.push(`${base}${sep}period=${period}`);
     } catch {
       setError("Network error. Please try again.");
       setCodeStatus("idle");
@@ -161,6 +174,35 @@ function LoginForm() {
           <button type="button" onClick={() => switchTab("email")} style={tabStyle(tab === "email")}>
             Email link
           </button>
+        </div>
+
+        {/* Period picker */}
+        <div>
+          <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            Load dashboard with
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px" }}>
+            {PERIOD_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setPeriod(opt.value)}
+                style={{
+                  padding: "10px 4px",
+                  fontSize: "12px",
+                  fontWeight: period === opt.value ? 600 : 400,
+                  color: period === opt.value ? "white" : "#3A3A3C",
+                  background: period === opt.value ? "#1D1D1F" : "#F5F5F7",
+                  border: period === opt.value ? "1px solid #1D1D1F" : "1px solid rgba(0,0,0,0.06)",
+                  borderRadius: "10px",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Error banner */}

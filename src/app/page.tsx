@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef, Fragment } from "react";
+import React, { useState, useEffect, useCallback, useRef, Fragment, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { PieChart, Pie, ResponsiveContainer, Tooltip, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, AreaChart, Area } from "recharts";
 
 interface LeadSource {
@@ -1340,11 +1341,40 @@ function pad(n: number) {
   return n.toString().padStart(2, "0");
 }
 
-function getDefaultDates() {
+function getDefaultDates(period?: string | null) {
   const now = new Date();
   const to = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  const from = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
-  return { from, to };
+
+  switch (period) {
+    case "last_month": {
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastDay = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+      return {
+        from: `${prev.getFullYear()}-${pad(prev.getMonth() + 1)}-01`,
+        to: `${prev.getFullYear()}-${pad(prev.getMonth() + 1)}-${pad(lastDay)}`,
+      };
+    }
+    case "last_7": {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 6);
+      return { from: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, to };
+    }
+    case "last_30": {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 29);
+      return { from: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, to };
+    }
+    case "last_90": {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 89);
+      return { from: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, to };
+    }
+    case "this_year":
+      return { from: `${now.getFullYear()}-01-01`, to };
+    case "this_month":
+    default:
+      return { from: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`, to };
+  }
 }
 
 /* ── Nav Menu ── */
@@ -1410,8 +1440,17 @@ function NavMenu({ currentPage }: { currentPage: string }) {
 
 /* ── Dashboard ── */
 
-export default function Dashboard() {
-  const defaults = getDefaultDates();
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <Dashboard />
+    </Suspense>
+  );
+}
+
+function Dashboard() {
+  const searchParams = useSearchParams();
+  const defaults = getDefaultDates(searchParams.get("period"));
   const [from, setFrom] = useState(defaults.from);
   const [to, setTo] = useState(defaults.to);
   const [autoFetchTrigger, setAutoFetchTrigger] = useState(0);
