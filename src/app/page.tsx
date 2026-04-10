@@ -1555,8 +1555,8 @@ function Dashboard() {
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
   const [leadCreationTimeline, setLeadCreationTimeline] = useState<{
     total: number;
-    stages: { label: string; count: number; order: number }[];
-    sources: { label: string; count: number }[];
+    funnel: { label: string; count: number; colour: string }[];
+    sources: { label: string; contacts: number; prospects: number; leads: number; homeVisits: number; wonJobs: number; lostJobs: number }[];
   } | null>(null);
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const [aiDismissed, setAiDismissed] = useState<Set<number>>(new Set());
@@ -3383,13 +3383,6 @@ function Dashboard() {
                     Kevin: 10,
                     Tony: 10,
                   };
-                  const cellColour = (n: number, goal: number) => {
-                    if (n >= goal) return { bg: "#ECFDF5", border: "#A7F3D0", text: "#059669" };
-                    const ratio = n / goal;
-                    if (ratio >= 0.7) return { bg: "#FFFBEB", border: "#FDE68A", text: "#B45309" };
-                    if (ratio >= 0.4) return { bg: "#FFF7ED", border: "#FED7AA", text: "#C2410C" };
-                    return { bg: "#FEF2F2", border: "#FECACA", text: "#DC2626" };
-                  };
                   return (
                     <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "20px", marginTop: "12px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "16px" }}>
@@ -3400,45 +3393,68 @@ function Dashboard() {
                           Weekly targets
                         </span>
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "80px repeat(4, 1fr)", gap: "8px 10px", alignItems: "center" }}>
+                      {/* Table-style layout */}
+                      <div style={{ borderRadius: "12px", border: "1px solid #F1F5F9", overflow: "hidden" }}>
                         {/* Header row */}
-                        <div />
-                        {siteVisits.upcoming.map((wk) => (
-                          <div key={wk.label} style={{ fontSize: "11px", fontWeight: 500, color: "#86868B", textAlign: "center" }}>
-                            {wk.label}
-                          </div>
-                        ))}
-                        {/* Rows */}
-                        {SALESMEN.map((name) => {
+                        <div style={{ display: "grid", gridTemplateColumns: "100px 50px repeat(4, 1fr)", background: "#F8FAFC", borderBottom: "1px solid #F1F5F9" }}>
+                          <div style={{ padding: "10px 14px", fontSize: "11px", fontWeight: 600, color: "#64748B", textTransform: "uppercase" }}>Name</div>
+                          <div style={{ padding: "10px 6px", fontSize: "11px", fontWeight: 600, color: "#64748B", textTransform: "uppercase", textAlign: "center" }}>Goal</div>
+                          {siteVisits.upcoming.map((wk) => (
+                            <div key={wk.label} style={{ padding: "10px 8px", fontSize: "11px", fontWeight: 600, color: "#64748B", textAlign: "center", textTransform: "uppercase", borderLeft: "1px solid #F1F5F9" }}>
+                              {wk.label}
+                            </div>
+                          ))}
+                        </div>
+                        {/* Data rows */}
+                        {SALESMEN.map((name, rowIdx) => {
                           const goal = SALESMAN_GOALS[name] ?? 10;
                           return (
-                            <React.Fragment key={name}>
-                              <div style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F" }}>{name}</div>
+                            <div key={name} style={{ display: "grid", gridTemplateColumns: "100px 50px repeat(4, 1fr)", borderBottom: rowIdx < SALESMEN.length - 1 ? "1px solid #F1F5F9" : "none", background: rowIdx % 2 === 1 ? "#FAFBFC" : "white" }}>
+                              <div style={{ padding: "12px 14px", fontSize: "13px", fontWeight: 600, color: "#1D1D1F", display: "flex", alignItems: "center" }}>{name}</div>
+                              <div style={{ padding: "12px 6px", fontSize: "12px", fontWeight: 500, color: "#94A3B8", display: "flex", alignItems: "center", justifyContent: "center" }}>{goal}</div>
                               {siteVisits.upcoming.map((wk) => {
                                 const n = wk.bySalesman?.[name] ?? 0;
                                 const pctFill = Math.min((n / goal) * 100, 100);
                                 const hit = n >= goal;
                                 const ringCol = hit ? "#10B981" : n >= goal * 0.5 ? "#F59E0B" : n > 0 ? "#0071E3" : "#E5E5EA";
                                 const rs = 44;
-                                const sw = 3;
+                                const sw = 3.5;
                                 const r = (rs - sw) / 2;
                                 const circ = 2 * Math.PI * r;
                                 const dashOff = circ - (pctFill / 100) * circ;
                                 return (
-                                  <div key={`${name}-${wk.label}`} onClick={() => n > 0 && setVisitListModal({ title: `${name} — ${wk.label}`, from: wk.weekStart, to: wk.weekEnd, mode: "scheduled", salesman: name })} style={{ display: "flex", justifyContent: "center", cursor: n > 0 ? "pointer" : undefined, borderRadius: "12px", transition: "background 0.15s" }} onMouseEnter={(e) => { if (n > 0) e.currentTarget.style.background = "#F5F5F7"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                                  <div
+                                    key={`${name}-${wk.label}`}
+                                    onClick={() => n > 0 && setVisitListModal({ title: `${name} — ${wk.label}`, from: wk.weekStart, to: wk.weekEnd, mode: "scheduled", salesman: name })}
+                                    style={{
+                                      display: "flex",
+                                      flexDirection: "column",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      padding: "8px 4px",
+                                      cursor: n > 0 ? "pointer" : undefined,
+                                      borderLeft: "1px solid #F1F5F9",
+                                      transition: "background 0.15s",
+                                    }}
+                                    onMouseEnter={(e) => { if (n > 0) e.currentTarget.style.background = "#F0F4FF"; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                                  >
                                     <div style={{ position: "relative", width: `${rs}px`, height: `${rs}px` }}>
                                       <svg width={rs} height={rs} style={{ transform: "rotate(-90deg)" }}>
-                                        <circle cx={rs / 2} cy={rs / 2} r={r} fill="none" stroke="#F5F5F7" strokeWidth={sw} />
+                                        <circle cx={rs / 2} cy={rs / 2} r={r} fill="none" stroke="#F1F5F9" strokeWidth={sw} />
                                         <circle cx={rs / 2} cy={rs / 2} r={r} fill="none" stroke={ringCol} strokeWidth={sw} strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dashOff} style={{ transition: "stroke-dashoffset 0.5s cubic-bezier(0.25,0.1,0.25,1)" }} />
                                       </svg>
                                       <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                        <span style={{ fontSize: "13px", fontWeight: 600, color: n > 0 ? "#1D1D1F" : "#D2D2D7", lineHeight: 1 }}>{n}</span>
+                                        <span style={{ fontSize: "14px", fontWeight: 600, color: n > 0 ? "#1D1D1F" : "#D2D2D7", lineHeight: 1 }}>{n}</span>
                                       </div>
                                     </div>
+                                    <span style={{ fontSize: "9px", fontWeight: 500, color: hit ? "#059669" : n > 0 ? "#94A3B8" : "#D2D2D7", marginTop: "2px" }}>
+                                      {hit ? "Target met" : `${n} / ${goal}`}
+                                    </span>
                                   </div>
                                 );
                               })}
-                            </React.Fragment>
+                            </div>
                           );
                         })}
                       </div>
@@ -4069,52 +4085,45 @@ function Dashboard() {
 
             {/* === LEAD CREATION TIMELINE === */}
             {!isSourceFiltered && leadCreationTimeline && leadCreationTimeline.total > 0 && (() => {
-              const { total, stages, sources } = leadCreationTimeline;
-              // Colour map for common lifecycle stages
-              const stageColour = (label: string): string => {
-                const l = label.toLowerCase();
-                if (l.includes("subscriber")) return "#94A3B8";
-                if (l.includes("lead")) return "#0071E3";
-                if (l.includes("prospect")) return "#F59E0B";
-                if (l.includes("opportunity")) return "#8B5CF6";
-                if (l.includes("customer")) return "#059669";
-                if (l.includes("won")) return "#059669";
-                if (l.includes("completed")) return "#10B981";
-                if (l.includes("evangelist")) return "#14B8A6";
-                if (l.includes("other")) return "#64748B";
-                return "#6366F1";
-              };
-              const maxStageCount = Math.max(...stages.map((s) => s.count), 1);
+              const { total, funnel, sources } = leadCreationTimeline;
+              // Funnel steps excluding "Contacts" (that's the total) and zero-count items
+              const funnelSteps = funnel.filter((f) => f.label !== "Contacts");
               const topSources = sources.slice(0, 8);
-              const maxSourceCount = topSources.length > 0 ? Math.max(...topSources.map((s) => s.count), 1) : 1;
               return (
                 <div>
-                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "10px" }}>
-                    <h2 style={{ fontSize: "13px", fontWeight: 600, color: "#86868B", margin: 0 }}>
+                  {/* Big clear header */}
+                  <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "24px 28px", marginBottom: "12px" }}>
+                    <p style={{ fontSize: "17px", fontWeight: 600, color: "#1D1D1F", margin: "0 0 4px", letterSpacing: "-0.2px" }}>
                       Lead Creation Timeline
-                    </h2>
-                    <span style={{ fontSize: "10px", color: "#AEAEB2" }}>
-                      {total} contacts created in period — where are they now?
-                    </span>
+                    </p>
+                    <p style={{ fontSize: "13px", color: "#86868B", margin: 0 }}>
+                      <strong style={{ color: "#6366F1" }}>{total.toLocaleString()}</strong> contacts were created in this period — here is where they are now
+                    </p>
                   </div>
+
+                  {/* Funnel bars */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                    {/* Current stage breakdown */}
                     <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "20px" }}>
-                      <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: "0 0 14px", textTransform: "uppercase" }}>
-                        Current Stage
+                      <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: "0 0 16px", textTransform: "uppercase" }}>
+                        Funnel Breakdown
                       </p>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                        {stages.map((s) => {
-                          const pct = total > 0 ? (s.count / total) * 100 : 0;
-                          const col = stageColour(s.label);
+                      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                        {funnelSteps.map((step) => {
+                          const pct = total > 0 ? (step.count / total) * 100 : 0;
                           return (
-                            <div key={s.label}>
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "4px" }}>
-                                <span style={{ fontSize: "13px", fontWeight: 500, color: "#1D1D1F" }}>{s.label}</span>
-                                <span style={{ fontSize: "13px", fontWeight: 600, color: col }}>{s.count} <span style={{ fontSize: "10px", fontWeight: 400, color: "#AEAEB2" }}>({pct.toFixed(1)}%)</span></span>
+                            <div key={step.label}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "6px" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                  <div style={{ width: "10px", height: "10px", borderRadius: "3px", background: step.colour, flexShrink: 0 }} />
+                                  <span style={{ fontSize: "14px", fontWeight: 500, color: "#1D1D1F" }}>{step.label}</span>
+                                </div>
+                                <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
+                                  <span style={{ fontSize: "18px", fontWeight: 600, color: step.colour, lineHeight: 1 }}>{step.count.toLocaleString()}</span>
+                                  <span style={{ fontSize: "11px", fontWeight: 400, color: "#AEAEB2" }}>({pct.toFixed(1)}%)</span>
+                                </div>
                               </div>
-                              <div style={{ height: "6px", borderRadius: "3px", background: "#F1F5F9", overflow: "hidden" }}>
-                                <div style={{ height: "100%", borderRadius: "3px", background: col, width: `${(s.count / maxStageCount) * 100}%`, transition: "width 0.4s ease" }} />
+                              <div style={{ height: "8px", borderRadius: "4px", background: "#F1F5F9", overflow: "hidden" }}>
+                                <div style={{ height: "100%", borderRadius: "4px", background: step.colour, width: `${pct}%`, minWidth: step.count > 0 ? "4px" : "0", transition: "width 0.4s ease" }} />
                               </div>
                             </div>
                           );
@@ -4122,32 +4131,49 @@ function Dashboard() {
                       </div>
                     </div>
 
-                    {/* Source breakdown */}
+                    {/* Source breakdown with mini funnel per source */}
                     <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "20px" }}>
-                      <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: "0 0 14px", textTransform: "uppercase" }}>
-                        Where They Came From
+                      <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: "0 0 16px", textTransform: "uppercase" }}>
+                        By Source
                       </p>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
                         {topSources.map((s) => {
-                          const pct = total > 0 ? (s.count / total) * 100 : 0;
-                          const sourceCol = s.label === "(No source)" ? "#94A3B8" :
+                          const sourceCol =
+                            s.label === "(No source)" ? "#94A3B8" :
                             ["Google Ads", "Bing Ads", "Facebook Ads"].includes(s.label) ? "#0071E3" :
                             ["Organic Search", "AI", "Directory Referral"].includes(s.label) ? "#10B981" :
                             ["Organic Social", "Organic YouTube"].includes(s.label) ? "#8B5CF6" : "#64748B";
                           return (
                             <div key={s.label}>
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "4px" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "6px" }}>
                                 <span style={{ fontSize: "13px", fontWeight: 500, color: "#1D1D1F" }}>{s.label}</span>
-                                <span style={{ fontSize: "13px", fontWeight: 600, color: sourceCol }}>{s.count} <span style={{ fontSize: "10px", fontWeight: 400, color: "#AEAEB2" }}>({pct.toFixed(1)}%)</span></span>
+                                <span style={{ fontSize: "14px", fontWeight: 600, color: sourceCol }}>{s.contacts}</span>
                               </div>
-                              <div style={{ height: "6px", borderRadius: "3px", background: "#F1F5F9", overflow: "hidden" }}>
-                                <div style={{ height: "100%", borderRadius: "3px", background: sourceCol, width: `${(s.count / maxSourceCount) * 100}%`, transition: "width 0.4s ease" }} />
+                              {/* Stacked mini bar showing funnel progression */}
+                              <div style={{ height: "8px", borderRadius: "4px", background: "#F1F5F9", overflow: "hidden", display: "flex" }}>
+                                {[
+                                  { count: s.wonJobs, col: "#059669" },
+                                  { count: s.homeVisits, col: "#10B981" },
+                                  { count: s.leads, col: "#0071E3" },
+                                  { count: s.prospects, col: "#F59E0B" },
+                                  { count: s.lostJobs, col: "#EF4444" },
+                                ].filter((seg) => seg.count > 0).map((seg, i) => (
+                                  <div key={i} style={{ height: "100%", background: seg.col, width: `${(seg.count / s.contacts) * 100}%`, minWidth: "3px" }} />
+                                ))}
+                              </div>
+                              {/* Mini legend */}
+                              <div style={{ display: "flex", gap: "8px", marginTop: "4px", flexWrap: "wrap" }}>
+                                {s.prospects > 0 && <span style={{ fontSize: "10px", color: "#F59E0B" }}>{s.prospects} prospect{s.prospects !== 1 ? "s" : ""}</span>}
+                                {s.leads > 0 && <span style={{ fontSize: "10px", color: "#0071E3" }}>{s.leads} lead{s.leads !== 1 ? "s" : ""}</span>}
+                                {s.homeVisits > 0 && <span style={{ fontSize: "10px", color: "#10B981" }}>{s.homeVisits} visit{s.homeVisits !== 1 ? "s" : ""}</span>}
+                                {s.wonJobs > 0 && <span style={{ fontSize: "10px", color: "#059669" }}>{s.wonJobs} won</span>}
+                                {s.lostJobs > 0 && <span style={{ fontSize: "10px", color: "#EF4444" }}>{s.lostJobs} lost</span>}
                               </div>
                             </div>
                           );
                         })}
                         {sources.length > 8 && (
-                          <p style={{ fontSize: "10px", color: "#AEAEB2", margin: "4px 0 0", textAlign: "center" }}>
+                          <p style={{ fontSize: "10px", color: "#AEAEB2", margin: "2px 0 0", textAlign: "center" }}>
                             + {sources.length - 8} more sources
                           </p>
                         )}
