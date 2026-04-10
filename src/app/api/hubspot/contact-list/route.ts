@@ -47,7 +47,27 @@ function londonDateToUtcMs(dateStr: string, time: string): number {
 }
 
 /**
- * Classify a contact into a funnel stage based on their properties.
+ * Check whether a contact matches the requested stage.
+ * Matches the dashboard KPI card logic:
+ * - Contacts: all contacts with a conversion_action
+ * - Prospects: conversion_action is in PROSPECT_ACTIONS
+ * - Leads: conversion_action is in LEAD_ACTIONS
+ * - Home Visits: has date_that_initial_visit_booked_is_set_to_yes
+ * - Won Jobs: has won_date
+ */
+function matchesStage(stage: string, action: string, visitBooked: boolean, won: boolean): boolean {
+  switch (stage.toLowerCase()) {
+    case "contacts": return true;
+    case "prospects": return PROSPECT_ACTIONS.has(action);
+    case "leads": return LEAD_ACTIONS.has(action);
+    case "home visits": return visitBooked;
+    case "won jobs": return won;
+    default: return false;
+  }
+}
+
+/**
+ * Display label for the contact's current highest stage.
  */
 function classifyStage(action: string, visitBooked: boolean, won: boolean): string {
   if (won) return "Won Job";
@@ -126,15 +146,37 @@ export async function GET(request: NextRequest) {
       daysSinceActivity: number | null;
     }[] = [];
 
+    // Choose date filter based on stage to match dashboard KPI logic:
+    // - Contacts/Prospects/Leads: filter by createdate (contacts created in period)
+    // - Home Visits: filter by date_that_initial_visit_booked_is_set_to_yes (visits booked in period)
+    // - Won Jobs: filter by first_deal_created_date + won lifecycle stages
+    const stageNorm = stage.toLowerCase();
+    const WON_STAGES = ["151694551", "151694559"]; // Won-Waiting, Completed
+
+    let dateFilterProp = "createdate";
+    if (stageNorm === "home visits") dateFilterProp = "date_that_initial_visit_booked_is_set_to_yes";
+    else if (stageNorm === "won jobs") dateFilterProp = "first_deal_created_date";
+
     do {
+      const filters: Record<string, unknown>[] = [
+        { propertyName: dateFilterProp, operator: "GTE", value: fromMs.toString() },
+        { propertyName: dateFilterProp, operator: "LTE", value: toMs.toString() },
+        LIFECYCLE_EXCLUSION_FILTER,
+      ];
+      // For Contacts/Prospects/Leads, require a conversion_action
+      if (stageNorm !== "home visits" && stageNorm !== "won jobs") {
+        filters.push({ propertyName: "conversion_action", operator: "HAS_PROPERTY" });
+      }
+      // For Won Jobs, filter by lifecycle stage
+      if (stageNorm === "won jobs") {
+        filters.push({ propertyName: "lifecyclestage", operator: "IN", values: WON_STAGES });
+      }
+
       const body: Record<string, unknown> = {
         filterGroups: [
           {
             filters: [
-              { propertyName: "createdate", operator: "GTE", value: fromMs.toString() },
-              { propertyName: "createdate", operator: "LTE", value: toMs.toString() },
-              { propertyName: "conversion_action", operator: "HAS_PROPERTY" },
-              LIFECYCLE_EXCLUSION_FILTER,
+              ...filters,
             ],
           },
         ],
@@ -149,11 +191,13 @@ export async function GET(request: NextRequest) {
           "original_lead_source",
           "date_that_initial_visit_booked_is_set_to_yes",
           "won_date",
+          "first_deal_created_date",
+          "lifecyclestage",
           "notes_last_updated",
           "hs_last_sales_activity_timestamp",
         ],
         limit: 100,
-        sorts: [{ propertyName: "createdate", direction: "DESCENDING" }],
+        sorts: [{ propertyName: dateFilterProp, direction: "DESCENDING" }],
       };
       if (after) body.after = after;
 
@@ -163,18 +207,13 @@ export async function GET(request: NextRequest) {
         const action = c.properties?.conversion_action ?? "";
         const visitBooked = !!c.properties?.date_that_initial_visit_booked_is_set_to_yes;
         const won = !!c.properties?.won_date;
+
+        // For Home Visits and Won Jobs, the HubSpot query already filters correctly.
+        // For Contacts/Prospects/Leads, apply client-side filter to match dashboard logic.
+        if (stageNorm !== "home visits" && stageNorm !== "won jobs") {
+          if (!matchesStage(stage, action, visitBooked, won)) continue;
+        }
         const contactStage = classifyStage(action, visitBooked, won);
-
-        // Filter by requested stage — exact match only
-        const stageNorm = stage.toLowerCase();
-        let matches = false;
-        if (stageNorm === "contacts") matches = contactStage === "Contact";
-        else if (stageNorm === "prospects") matches = contactStage === "Prospect";
-        else if (stageNorm === "leads") matches = contactStage === "Lead";
-        else if (stageNorm === "home visits") matches = contactStage === "Home Visit";
-        else if (stageNorm === "won jobs") matches = contactStage === "Won Job";
-
-        if (!matches) continue;
 
         // Filter by source category if specified
         const contactSource = c.properties?.original_lead_source ?? "";
