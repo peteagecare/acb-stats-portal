@@ -801,6 +801,215 @@ function ContactListModal({ stage, colour, from, to, sourceCategory, onClose }: 
   );
 }
 
+/* ── Site Visit List Modal ── */
+
+interface SiteVisitRow {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  source: string;
+  visitDate: string;
+  salesman: string;
+  status: string;
+}
+
+function SiteVisitListModal({ title, from, to, mode, salesman, onClose }: {
+  title: string;
+  from: string;
+  to: string;
+  mode: "booked" | "scheduled";
+  salesman?: string;
+  onClose: () => void;
+}) {
+  const [contacts, setContacts] = useState<SiteVisitRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    let url = `/api/hubspot/site-visit-list?from=${from}&to=${to}&mode=${mode}`;
+    if (salesman) url += `&salesman=${encodeURIComponent(salesman)}`;
+    fetch(url)
+      .then((r) => { if (!r.ok) throw new Error("Failed to fetch"); return r.json(); })
+      .then((data) => setContacts(data.contacts ?? []))
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [from, to, mode, salesman]);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000,
+        background: "rgba(0, 0, 0, 0.5)", backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "20px",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "white", borderRadius: "20px",
+          width: "100%", maxWidth: "1100px", maxHeight: "85vh",
+          display: "flex", flexDirection: "column",
+          boxShadow: "0 25px 50px rgba(0,0,0,0.25)",
+          overflow: "hidden",
+        }}
+      >
+        <div style={{
+          padding: "18px 24px", borderBottom: "1px solid #F5F5F7",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: "17px", fontWeight: 600, color: "#1D1D1F" }}>{title}</h2>
+            <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#86868B" }}>
+              {from} to {to} &middot; {contacts.length} visit{contacts.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: "#F5F5F7", border: "none", fontSize: "16px", color: "#86868B", cursor: "pointer", padding: "6px 10px", borderRadius: "10px", lineHeight: 1 }}>✕</button>
+        </div>
+        <div style={{ overflow: "auto", flex: 1 }}>
+          {loading && <div style={{ padding: "40px", textAlign: "center", color: "#86868B" }}>Loading...</div>}
+          {error && <div style={{ padding: "40px", textAlign: "center", color: "#DC2626" }}>{error}</div>}
+          {!loading && !error && contacts.length === 0 && <div style={{ padding: "40px", textAlign: "center", color: "#86868B" }}>No visits found.</div>}
+          {!loading && !error && contacts.length > 0 && (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+              <thead>
+                <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #F5F5F7" }}>
+                  {["Name", "Email", "Phone", "Source", "Visit Date", "Salesman"].map((h) => (
+                    <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "#86868B", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {contacts.map((c) => {
+                  const hsUrl = `https://app-eu1.hubspot.com/contacts/${HUBSPOT_HUB_ID}/record/0-1/${c.id}`;
+                  const fmtDate = c.visitDate ? new Date(c.visitDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
+                  return (
+                    <tr key={c.id} onClick={() => window.open(hsUrl, "_blank")} style={{ borderBottom: "1px solid #F5F5F7", cursor: "pointer", transition: "background 0.15s" }} onMouseEnter={(e) => (e.currentTarget.style.background = "#FAFAFA")} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                      <td style={{ padding: "12px 16px", fontWeight: 500, color: "#1D1D1F" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>{c.name} <span style={{ fontSize: "11px", color: "#AEAEB2" }}>↗</span></div>
+                      </td>
+                      <td style={{ padding: "12px 16px", color: "#1D1D1F" }}>{c.email}</td>
+                      <td style={{ padding: "12px 16px", color: "#1D1D1F" }}>{c.phone || <span style={{ color: "#D1D1D6" }}>—</span>}</td>
+                      <td style={{ padding: "12px 16px", color: "#1D1D1F", fontSize: "12px" }}>{c.source || <span style={{ color: "#D1D1D6" }}>—</span>}</td>
+                      <td style={{ padding: "12px 16px", color: "#1D1D1F", fontSize: "12px" }}>{fmtDate}</td>
+                      <td style={{ padding: "12px 16px", color: "#1D1D1F", fontSize: "12px" }}>{c.salesman || <span style={{ color: "#D1D1D6" }}>—</span>}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Install List Modal ── */
+
+interface InstallRow {
+  id: string;
+  name: string;
+  installDate: string;
+  amount: string;
+  stage: string;
+}
+
+function InstallListModal({ title, from, to, onClose }: {
+  title: string;
+  from: string;
+  to: string;
+  onClose: () => void;
+}) {
+  const [deals, setDeals] = useState<InstallRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    fetch(`/api/hubspot/install-list?from=${from}&to=${to}`)
+      .then((r) => { if (!r.ok) throw new Error("Failed to fetch"); return r.json(); })
+      .then((data) => setDeals(data.deals ?? []))
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [from, to]);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000,
+        background: "rgba(0, 0, 0, 0.5)", backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "20px",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "white", borderRadius: "20px",
+          width: "100%", maxWidth: "900px", maxHeight: "85vh",
+          display: "flex", flexDirection: "column",
+          boxShadow: "0 25px 50px rgba(0,0,0,0.25)",
+          overflow: "hidden",
+        }}
+      >
+        <div style={{
+          padding: "18px 24px", borderBottom: "1px solid #F5F5F7",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: "17px", fontWeight: 600, color: "#1D1D1F" }}>{title}</h2>
+            <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#86868B" }}>
+              {from} to {to} &middot; {deals.length} install{deals.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: "#F5F5F7", border: "none", fontSize: "16px", color: "#86868B", cursor: "pointer", padding: "6px 10px", borderRadius: "10px", lineHeight: 1 }}>✕</button>
+        </div>
+        <div style={{ overflow: "auto", flex: 1 }}>
+          {loading && <div style={{ padding: "40px", textAlign: "center", color: "#86868B" }}>Loading...</div>}
+          {error && <div style={{ padding: "40px", textAlign: "center", color: "#DC2626" }}>{error}</div>}
+          {!loading && !error && deals.length === 0 && <div style={{ padding: "40px", textAlign: "center", color: "#86868B" }}>No installs found.</div>}
+          {!loading && !error && deals.length > 0 && (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+              <thead>
+                <tr style={{ background: "#FAFAFA", borderBottom: "1px solid #F5F5F7" }}>
+                  {["Deal Name", "Install Date", "Amount", "Stage"].map((h) => (
+                    <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "#86868B", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {deals.map((d) => {
+                  const hsUrl = `https://app-eu1.hubspot.com/contacts/${HUBSPOT_HUB_ID}/record/0-3/${d.id}`;
+                  const fmtDate = d.installDate ? new Date(d.installDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
+                  return (
+                    <tr key={d.id} onClick={() => window.open(hsUrl, "_blank")} style={{ borderBottom: "1px solid #F5F5F7", cursor: "pointer", transition: "background 0.15s" }} onMouseEnter={(e) => (e.currentTarget.style.background = "#FAFAFA")} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                      <td style={{ padding: "12px 16px", fontWeight: 500, color: "#1D1D1F" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>{d.name} <span style={{ fontSize: "11px", color: "#AEAEB2" }}>↗</span></div>
+                      </td>
+                      <td style={{ padding: "12px 16px", color: "#1D1D1F" }}>{fmtDate}</td>
+                      <td style={{ padding: "12px 16px", color: "#1D1D1F" }}>{d.amount ? `£${parseFloat(d.amount).toLocaleString()}` : <span style={{ color: "#D1D1D6" }}>—</span>}</td>
+                      <td style={{ padding: "12px 16px", color: "#1D1D1F", fontSize: "12px" }}>{d.stage}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Helpers ── */
 
 function pad(n: number) {
@@ -955,6 +1164,8 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [contactListStage, setContactListStage] = useState<{ stage: string; colour: string; sourceCategory?: string } | null>(null);
+  const [visitListModal, setVisitListModal] = useState<{ title: string; from: string; to: string; mode: "booked" | "scheduled"; salesman?: string } | null>(null);
+  const [installListModal, setInstallListModal] = useState<{ title: string; from: string; to: string } | null>(null);
   const inlineFilterRef = useRef<HTMLDivElement>(null);
   const [stickyFilterVisible, setStickyFilterVisible] = useState(false);
 
@@ -2567,7 +2778,7 @@ export default function Dashboard() {
                     const circ = 2 * Math.PI * r;
                     const dashOff = circ - (pctFill / 100) * circ;
                     return (
-                      <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "24px 20px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px" }}>
+                      <div onClick={() => setVisitListModal({ title: "Site Visits — Booked In Period", from, to, mode: "booked" })} style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "24px 20px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px", cursor: "pointer", transition: "box-shadow 0.15s ease" }} onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.1)")} onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.04)")}>
                         <p style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F", margin: 0 }}>Booked In Period</p>
 
                         {/* Progress ring */}
@@ -2645,6 +2856,7 @@ export default function Dashboard() {
                         return (
                           <div
                             key={wk.label}
+                            onClick={() => setVisitListModal({ title: `Site Visits — ${wk.label}`, from: wk.weekStart, to: wk.weekEnd, mode: "scheduled" })}
                             style={{
                               background: "white",
                               boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
@@ -2655,7 +2867,11 @@ export default function Dashboard() {
                               alignItems: "center",
                               textAlign: "center",
                               gap: "4px",
+                              cursor: "pointer",
+                              transition: "box-shadow 0.15s ease",
                             }}
+                            onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.1)")}
+                            onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.04)")}
                           >
                             {/* Progress ring */}
                             <div style={{ position: "relative", width: `${ringSize}px`, height: `${ringSize}px`, marginBottom: "4px" }}>
@@ -2760,7 +2976,7 @@ export default function Dashboard() {
                                 const circ = 2 * Math.PI * r;
                                 const dashOff = circ - (pctFill / 100) * circ;
                                 return (
-                                  <div key={`${name}-${wk.label}`} style={{ display: "flex", justifyContent: "center" }}>
+                                  <div key={`${name}-${wk.label}`} onClick={() => n > 0 && setVisitListModal({ title: `${name} — ${wk.label}`, from: wk.weekStart, to: wk.weekEnd, mode: "scheduled", salesman: name })} style={{ display: "flex", justifyContent: "center", cursor: n > 0 ? "pointer" : undefined, borderRadius: "12px", transition: "background 0.15s" }} onMouseEnter={(e) => { if (n > 0) e.currentTarget.style.background = "#F5F5F7"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
                                     <div style={{ position: "relative", width: `${rs}px`, height: `${rs}px` }}>
                                       <svg width={rs} height={rs} style={{ transform: "rotate(-90deg)" }}>
                                         <circle cx={rs / 2} cy={rs / 2} r={r} fill="none" stroke="#F5F5F7" strokeWidth={sw} />
@@ -2811,9 +3027,15 @@ export default function Dashboard() {
                       const r = (ringSize - sw) / 2;
                       const circ = 2 * Math.PI * r;
                       const dashOff = circ - (pctFill / 100) * circ;
+                      // Compute month date range for the modal
+                      const moIdx = ["January","February","March","April","May","June","July","August","September","October","November","December"].indexOf(mo.monthName);
+                      const moFrom = `${mo.year}-${String(moIdx + 1).padStart(2, "0")}-01`;
+                      const lastDay = new Date(mo.year, moIdx + 1, 0).getDate();
+                      const moTo = `${mo.year}-${String(moIdx + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
                       return (
                         <div
                           key={mo.key}
+                          onClick={() => setInstallListModal({ title: `Installs — ${mo.monthName} ${mo.year}`, from: moFrom, to: moTo })}
                           style={{
                             background: "white",
                             boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
@@ -2824,7 +3046,11 @@ export default function Dashboard() {
                             alignItems: "center",
                             textAlign: "center",
                             gap: "4px",
+                            cursor: "pointer",
+                            transition: "box-shadow 0.15s ease",
                           }}
+                          onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.1)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.04)")}
                         >
                           {/* Progress ring */}
                           <div style={{ position: "relative", width: `${ringSize}px`, height: `${ringSize}px`, marginBottom: "4px" }}>
@@ -3737,6 +3963,24 @@ export default function Dashboard() {
           to={to}
           sourceCategory={contactListStage.sourceCategory}
           onClose={() => setContactListStage(null)}
+        />
+      )}
+      {visitListModal && (
+        <SiteVisitListModal
+          title={visitListModal.title}
+          from={visitListModal.from}
+          to={visitListModal.to}
+          mode={visitListModal.mode}
+          salesman={visitListModal.salesman}
+          onClose={() => setVisitListModal(null)}
+        />
+      )}
+      {installListModal && (
+        <InstallListModal
+          title={installListModal.title}
+          from={installListModal.from}
+          to={installListModal.to}
+          onClose={() => setInstallListModal(null)}
         />
       )}
     </div>
