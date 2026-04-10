@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 /* ── Flow Data ── */
 
-interface Node {
+interface FlowNode {
   id: string;
   label: string;
   sub?: string;
@@ -13,7 +13,7 @@ interface Node {
 }
 
 interface Row {
-  nodes: Node[];
+  nodes: FlowNode[];
   label?: string; // label shown above this row
 }
 
@@ -84,6 +84,60 @@ const allNodes = new Map(FLOW.flatMap((r) => r.nodes).map((n) => [n.id, n]));
 
 /* ── Page ── */
 
+function NavMenuDark({ currentPage }: { currentPage: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const items = [
+    { key: "dashboard", label: "Dashboard", href: "/" },
+    { key: "journey", label: "Customer Journey", href: "/automations" },
+    { key: "automations", label: "Automation Journey", href: "/customer-automation-journey" },
+  ];
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{ background: "#1E293B", border: "1px solid #334155", borderRadius: "8px", color: "#CBD5E1", padding: "6px 14px", cursor: "pointer", fontSize: "12px", display: "flex", alignItems: "center", gap: "6px" }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12h18M3 6h18M3 18h18" /></svg>
+        Menu
+      </button>
+      {open && (
+        <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", background: "#1E293B", border: "1px solid #334155", borderRadius: "10px", padding: "6px", minWidth: "200px", zIndex: 100, boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
+          {items.map((item) => {
+            const isCurrent = item.key === currentPage;
+            return isCurrent ? (
+              <div key={item.key} style={{ padding: "8px 14px", borderRadius: "6px", color: "white", fontSize: "13px", fontWeight: 600, background: "#334155" }}>
+                {item.label}
+              </div>
+            ) : (
+              <a
+                key={item.key}
+                href={item.href}
+                style={{ display: "block", padding: "8px 14px", borderRadius: "6px", color: "#CBD5E1", textDecoration: "none", fontSize: "13px" }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#334155")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              >
+                {item.label}
+              </a>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AutomationsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedNode = selectedId ? allNodes.get(selectedId) ?? null : null;
@@ -100,7 +154,7 @@ export default function AutomationsPage() {
             <a href="/"><img src="/acb-logo.png" alt="ACB" style={{ height: "28px", objectFit: "contain" }} /></a>
             <h1 style={{ fontSize: "14px", fontWeight: 600, margin: 0, color: "white" }}>Customer Journey</h1>
           </div>
-          <a href="/" style={{ fontSize: "12px", color: "#64748B", textDecoration: "none" }}>← Dashboard</a>
+          <NavMenuDark currentPage="journey" />
         </div>
       </header>
 

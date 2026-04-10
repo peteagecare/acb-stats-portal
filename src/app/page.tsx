@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { PieChart, Pie, ResponsiveContainer, Tooltip, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, AreaChart, Area } from "recharts";
 
 interface LeadSource {
@@ -1347,6 +1347,67 @@ function getDefaultDates() {
   return { from, to };
 }
 
+/* ── Nav Menu ── */
+
+function NavMenu({ currentPage }: { currentPage: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const items = [
+    { key: "dashboard", label: "Dashboard", href: "/" },
+    { key: "journey", label: "Customer Journey", href: "/automations" },
+    { key: "automations", label: "Automation Journey", href: "/customer-automation-journey" },
+  ];
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{ background: "rgba(0,0,0,0.04)", border: "none", borderRadius: "18px", padding: "8px 14px", cursor: "pointer", color: "#86868B", display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 500 }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12h18M3 6h18M3 18h18" /></svg>
+        Pages
+      </button>
+      {open && (
+        <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", background: "white", border: "1px solid rgba(0,0,0,0.08)", borderRadius: "12px", padding: "6px", minWidth: "220px", zIndex: 500, boxShadow: "0 8px 30px rgba(0,0,0,0.12)" }}>
+          {items.map((item) => {
+            const isCurrent = item.key === currentPage;
+            return (
+              <a
+                key={item.key}
+                href={item.href}
+                style={{
+                  display: "block",
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  color: isCurrent ? "#0071E3" : "#1D1D1F",
+                  fontWeight: isCurrent ? 600 : 400,
+                  textDecoration: "none",
+                  fontSize: "13px",
+                  background: isCurrent ? "rgba(0,113,227,0.06)" : "transparent",
+                }}
+                onMouseEnter={(e) => { if (!isCurrent) e.currentTarget.style.background = "rgba(0,0,0,0.04)"; }}
+                onMouseLeave={(e) => { if (!isCurrent) e.currentTarget.style.background = "transparent"; }}
+              >
+                {item.label}
+              </a>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Dashboard ── */
 
 export default function Dashboard() {
@@ -2207,6 +2268,8 @@ export default function Dashboard() {
                 />
               </svg>
             </button>}
+            {/* Nav menu */}
+            <NavMenu currentPage="dashboard" />
           </div>
         </div>
       </header>
