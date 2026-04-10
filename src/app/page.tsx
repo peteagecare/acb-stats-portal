@@ -105,6 +105,19 @@ function parseGoalDraft(val: string): number | null {
 }
 
 function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initialGoals: Goals }) {
+  // User management state
+  const [users, setUsers] = useState<{ email: string; label: string; role: string; createdAt: string }[]>([]);
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserLabel, setNewUserLabel] = useState("");
+  const [newUserResult, setNewUserResult] = useState<{ totpSecret: string; otpauthUrl: string } | null>(null);
+  const [userError, setUserError] = useState<string | null>(null);
+  const [userLoading, setUserLoading] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/admin/users").then((r) => r.ok ? r.json() : null).then((data) => {
+      if (data?.users) setUsers(data.users);
+    }).catch(() => {});
+  }, []);
   const [draftLead, setDraftLead] = useState(initialGoals.leadGoalPerMonth !== null ? String(initialGoals.leadGoalPerMonth) : "");
   const [draftProspects, setDraftProspects] = useState(initialGoals.prospectsGoalPerMonth !== null ? String(initialGoals.prospectsGoalPerMonth) : "");
   const [draftVisitsMonth, setDraftVisitsMonth] = useState(initialGoals.visitsGoalPerMonth !== null ? String(initialGoals.visitsGoalPerMonth) : "");
@@ -489,6 +502,123 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
               );
             })()}
           </div>
+        </div>
+
+        {/* ── User Management ── */}
+        <div style={{ padding: "16px 24px", borderTop: "1px solid #F1F5F9" }}>
+          <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+            User Management
+          </p>
+
+          {/* Existing users */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "14px" }}>
+            {users.map((u) => (
+              <div key={u.email} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "#F5F5F7", borderRadius: "10px" }}>
+                <div>
+                  <span style={{ fontSize: "13px", fontWeight: 600, color: "#1D1D1F" }}>{u.label}</span>
+                  <span style={{ fontSize: "11px", color: "#86868B", marginLeft: "8px" }}>{u.email}</span>
+                  {u.role === "admin" && (
+                    <span style={{ fontSize: "9px", fontWeight: 600, color: "#059669", background: "#F0FDF4", borderRadius: "4px", padding: "2px 6px", marginLeft: "8px" }}>Admin</span>
+                  )}
+                </div>
+                {u.role !== "admin" && (
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`Remove ${u.label}?`)) return;
+                      await fetch("/api/admin/users", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: u.email }) });
+                      setUsers(users.filter((x) => x.email !== u.email));
+                    }}
+                    style={{ fontSize: "11px", color: "#DC2626", background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Add new user */}
+          <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: "0 0 8px" }}>
+            Add new user
+          </p>
+          <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+            <input
+              placeholder="Name"
+              value={newUserLabel}
+              onChange={(e) => setNewUserLabel(e.target.value)}
+              style={{ flex: 1, padding: "8px 12px", fontSize: "13px", borderRadius: "10px", border: "1px solid #E2E8F0", outline: "none" }}
+            />
+            <input
+              placeholder="Email"
+              value={newUserEmail}
+              onChange={(e) => setNewUserEmail(e.target.value)}
+              style={{ flex: 1.5, padding: "8px 12px", fontSize: "13px", borderRadius: "10px", border: "1px solid #E2E8F0", outline: "none" }}
+            />
+            <button
+              disabled={userLoading || !newUserEmail || !newUserLabel}
+              onClick={async () => {
+                setUserLoading(true);
+                setUserError(null);
+                setNewUserResult(null);
+                try {
+                  const res = await fetch("/api/admin/users", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: newUserEmail, label: newUserLabel }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) { setUserError(data.error); return; }
+                  setNewUserResult({ totpSecret: data.totpSecret, otpauthUrl: data.otpauthUrl });
+                  setUsers([...users, data.user]);
+                  setNewUserEmail("");
+                  setNewUserLabel("");
+                } catch { setUserError("Failed to create user"); }
+                finally { setUserLoading(false); }
+              }}
+              style={{
+                padding: "8px 16px", fontSize: "12px", fontWeight: 600,
+                borderRadius: "10px", border: "none",
+                background: (!newUserEmail || !newUserLabel) ? "#E5E5EA" : "#0F172A",
+                color: (!newUserEmail || !newUserLabel) ? "#AEAEB2" : "white",
+                cursor: (!newUserEmail || !newUserLabel) ? "default" : "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {userLoading ? "..." : "Add"}
+            </button>
+          </div>
+          {userError && <p style={{ fontSize: "11px", color: "#DC2626", margin: "0 0 8px" }}>{userError}</p>}
+
+          {/* QR code for new user */}
+          {newUserResult && (
+            <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: "12px", padding: "16px", marginBottom: "8px" }}>
+              <p style={{ fontSize: "12px", fontWeight: 600, color: "#059669", margin: "0 0 10px" }}>
+                Scan this QR code with Google Authenticator
+              </p>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: "10px" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(newUserResult.otpauthUrl)}`}
+                  alt="TOTP QR Code"
+                  width={200}
+                  height={200}
+                  style={{ borderRadius: "8px" }}
+                />
+              </div>
+              <p style={{ fontSize: "10px", color: "#86868B", margin: "0 0 4px", textAlign: "center" }}>
+                Or enter this key manually:
+              </p>
+              <p style={{ fontSize: "12px", fontWeight: 600, color: "#1D1D1F", margin: 0, textAlign: "center", fontFamily: "monospace", letterSpacing: "1px", wordBreak: "break-all" }}>
+                {newUserResult.totpSecret}
+              </p>
+              <button
+                onClick={() => setNewUserResult(null)}
+                style={{ display: "block", margin: "10px auto 0", fontSize: "11px", fontWeight: 600, color: "#059669", background: "none", border: "none", cursor: "pointer" }}
+              >
+                Done
+              </button>
+            </div>
+          )}
         </div>
 
         <div
@@ -1357,6 +1487,7 @@ export default function Dashboard() {
   const [dataReady, setDataReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [userRole, setUserRole] = useState<"admin" | "viewer">("viewer");
   const [contactListStage, setContactListStage] = useState<{ stage: string; colour: string; sourceCategory?: string } | null>(null);
   const [visitListModal, setVisitListModal] = useState<{ title: string; from: string; to: string; mode: "booked" | "scheduled"; salesman?: string } | null>(null);
   const [installListModal, setInstallListModal] = useState<{ title: string; from: string; to: string } | null>(null);
@@ -1393,6 +1524,14 @@ export default function Dashboard() {
   useEffect(() => {
     loadGoalsFromServer().then(setGoals);
   }, [showSettings]);
+
+  // Fetch user role on mount
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data?.role) setUserRole(data.role); })
+      .catch(() => {});
+  }, []);
 
   // Realtime visitors — poll every 30s
   useEffect(() => {
@@ -2036,7 +2175,7 @@ export default function Dashboard() {
             >
               {loading ? "..." : "Go"}
             </button>
-            <button
+            {userRole === "admin" && <button
               onClick={() => setShowSettings(true)}
               title="Settings"
               style={{
@@ -2067,7 +2206,7 @@ export default function Dashboard() {
                   strokeLinejoin="round"
                 />
               </svg>
-            </button>
+            </button>}
           </div>
         </div>
       </header>

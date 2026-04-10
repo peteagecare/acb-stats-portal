@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const token = createMagicLinkToken();
+  const token = createMagicLinkToken(email);
   const origin = request.nextUrl.origin;
   const link = `${origin}/api/login/verify?token=${encodeURIComponent(token)}`;
 

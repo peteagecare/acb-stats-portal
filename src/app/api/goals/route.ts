@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { loadJson, saveJson } from "@/lib/blob-store";
+import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
 
 const KEY = "goals.json";
 const FALLBACK = "./goals.json";
@@ -25,6 +26,11 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
+  const user = parseSessionToken(token);
+  if (!user || user.role !== "admin") {
+    return Response.json({ error: "Admin access required" }, { status: 403 });
+  }
   const body = await request.json();
   const current = await loadJson<Partial<Goals>>(KEY, FALLBACK, DEFAULT_GOALS);
   const updated = { ...DEFAULT_GOALS, ...current, ...body };

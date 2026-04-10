@@ -1,11 +1,12 @@
 import { NextRequest } from "next/server";
-import { verifyTOTP } from "@/lib/totp";
+import { verifyTOTP, verifyTOTPWithSecret } from "@/lib/totp";
 import {
   createSessionToken,
   AUTH_COOKIE_NAME,
   AUTH_COOKIE_MAX_AGE,
 } from "@/lib/auth";
 import { rateLimit, clientKey } from "@/lib/rate-limit";
+import { loadUsers } from "@/lib/users";
 
 export async function POST(request: NextRequest) {
   const limit = rateLimit(`login-totp:${clientKey(request)}`, 5, 10 * 60_000);
@@ -33,33 +34,53 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "Enter a 6-digit code." }, { status: 400 });
   }
 
-  let valid: boolean;
+  // Try matching against registered users first
   try {
-    valid = verifyTOTP(code);
+    const users = await loadUsers();
+    for (const user of users) {
+      if (verifyTOTPWithSecret(code, user.totpSecret)) {
+        const session = createSessionToken({ email: user.email, role: user.role });
+        const res = Response.json({ ok: true });
+        res.headers.append(
+          "Set-Cookie",
+          [
+            `${AUTH_COOKIE_NAME}=${session}`,
+            "Path=/",
+            "HttpOnly",
+            "Secure",
+            "SameSite=Lax",
+            `Max-Age=${AUTH_COOKIE_MAX_AGE}`,
+          ].join("; "),
+        );
+        return res;
+      }
+    }
+  } catch (e) {
+    console.error("[login/totp] user lookup error:", e);
+  }
+
+  // Fallback: check env TOTP_SECRET (for backwards compat during migration)
+  try {
+    if (verifyTOTP(code)) {
+      // Env-based login = admin (Pete)
+      const session = createSessionToken({ email: "pete@agecare-bathrooms.co.uk", role: "admin" });
+      const res = Response.json({ ok: true });
+      res.headers.append(
+        "Set-Cookie",
+        [
+          `${AUTH_COOKIE_NAME}=${session}`,
+          "Path=/",
+          "HttpOnly",
+          "Secure",
+          "SameSite=Lax",
+          `Max-Age=${AUTH_COOKIE_MAX_AGE}`,
+        ].join("; "),
+      );
+      return res;
+    }
   } catch (e) {
     console.error("[login/totp] TOTP verification error:", e);
-    return Response.json(
-      { error: "Authenticator is not configured." },
-      { status: 500 },
-    );
   }
 
-  if (!valid) {
-    return Response.json({ error: "Invalid code. Try again." }, { status: 401 });
-  }
-
-  const session = createSessionToken();
-  const res = Response.json({ ok: true });
-  res.headers.append(
-    "Set-Cookie",
-    [
-      `${AUTH_COOKIE_NAME}=${session}`,
-      "Path=/",
-      "HttpOnly",
-      "Secure",
-      "SameSite=Lax",
-      `Max-Age=${AUTH_COOKIE_MAX_AGE}`,
-    ].join("; "),
-  );
-  return res;
+  return Response.json({ error: "Invalid code. Try again." }, { status: 401 });
 }

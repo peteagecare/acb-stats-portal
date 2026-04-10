@@ -41,6 +41,10 @@ function generateCode(secret: Buffer, counter: bigint): string {
 export function verifyTOTP(token: string): boolean {
   const secretB32 = process.env.TOTP_SECRET;
   if (!secretB32) throw new Error("TOTP_SECRET env var is not set");
+  return verifyTOTPWithSecret(token, secretB32);
+}
+
+export function verifyTOTPWithSecret(token: string, secretB32: string): boolean {
   const secret = base32Decode(secretB32);
   const now = Math.floor(Date.now() / 1000);
   const currentCounter = BigInt(Math.floor(now / STEP));
