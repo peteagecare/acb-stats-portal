@@ -647,7 +647,7 @@ function ContactListModal({ stage, colour, from, to, onClose }: {
         onClick={(e) => e.stopPropagation()}
         style={{
           background: "white", borderRadius: "20px",
-          width: "100%", maxWidth: "960px", maxHeight: "85vh",
+          width: "100%", maxWidth: "1200px", maxHeight: "85vh",
           display: "flex", flexDirection: "column",
           boxShadow: "0 25px 50px rgba(0,0,0,0.25)",
           overflow: "hidden",
@@ -708,6 +708,12 @@ function ContactListModal({ stage, colour, from, to, onClose }: {
                   <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "#86868B", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                     Phone
                   </th>
+                  <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "#86868B", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Source
+                  </th>
+                  <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "#86868B", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Action
+                  </th>
                   <th onClick={() => handleSort("stage")} style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "#86868B", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px", cursor: "pointer", userSelect: "none" }}>
                     Stage{sortArrow("stage")}
                   </th>
@@ -737,15 +743,18 @@ function ContactListModal({ stage, colour, from, to, onClose }: {
                           {c.name}
                           <span style={{ fontSize: "11px", color: "#AEAEB2" }}>↗</span>
                         </div>
-                        <div style={{ fontSize: "11px", color: "#AEAEB2", fontWeight: 400, marginTop: "1px" }}>
-                          {c.action}
-                        </div>
                       </td>
                       <td style={{ padding: "12px 16px", color: "#1D1D1F" }}>
                         {c.email}
                       </td>
                       <td style={{ padding: "12px 16px", color: "#1D1D1F" }}>
                         {c.phone || <span style={{ color: "#D1D1D6" }}>—</span>}
+                      </td>
+                      <td style={{ padding: "12px 16px", color: "#1D1D1F", fontSize: "12px" }}>
+                        {c.source || <span style={{ color: "#D1D1D6" }}>—</span>}
+                      </td>
+                      <td style={{ padding: "12px 16px", color: "#1D1D1F", fontSize: "12px" }}>
+                        {c.action || <span style={{ color: "#D1D1D6" }}>—</span>}
                       </td>
                       <td style={{ padding: "12px 16px" }}>
                         <span style={{
