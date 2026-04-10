@@ -149,13 +149,13 @@ export async function GET(request: NextRequest) {
         const won = !!c.properties?.won_date;
         const contactStage = classifyStage(action, visitBooked, won);
 
-        // Filter by requested stage
+        // Filter by requested stage — exact match only
         const stageNorm = stage.toLowerCase();
         let matches = false;
-        if (stageNorm === "contacts") matches = true; // all contacts
-        else if (stageNorm === "prospects") matches = contactStage === "Prospect" || contactStage === "Lead" || contactStage === "Home Visit" || contactStage === "Won Job";
-        else if (stageNorm === "leads") matches = contactStage === "Lead" || contactStage === "Home Visit" || contactStage === "Won Job";
-        else if (stageNorm === "home visits") matches = contactStage === "Home Visit" || contactStage === "Won Job";
+        if (stageNorm === "contacts") matches = contactStage === "Contact";
+        else if (stageNorm === "prospects") matches = contactStage === "Prospect";
+        else if (stageNorm === "leads") matches = contactStage === "Lead";
+        else if (stageNorm === "home visits") matches = contactStage === "Home Visit";
         else if (stageNorm === "won jobs") matches = contactStage === "Won Job";
 
         if (!matches) continue;
