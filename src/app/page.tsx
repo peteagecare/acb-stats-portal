@@ -1514,6 +1514,11 @@ export default function Dashboard() {
   const [journeyShowNoVisit, setJourneyShowNoVisit] = useState(10);
   const [attrShowCount, setAttrShowCount] = useState(5);
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
+  const [leadCreationTimeline, setLeadCreationTimeline] = useState<{
+    total: number;
+    stages: { label: string; count: number; order: number }[];
+    sources: { label: string; count: number }[];
+  } | null>(null);
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const [aiDismissed, setAiDismissed] = useState<Set<number>>(new Set());
   const [aiRejectingIdx, setAiRejectingIdx] = useState<number | null>(null);
@@ -1717,7 +1722,7 @@ export default function Dashboard() {
 
       // Batch 5: Timeline + unattributed + day-of-week conversion
       setSelectedMetric("contacts");
-      const [timelineRes, unattribRes, dowRes, siteVisitsRes, installsRes, hvBreakdownRes, funnelSourceRes, outreachRes, timingRes, p2lRes, journeysRes] = await Promise.all([
+      const [timelineRes, unattribRes, dowRes, siteVisitsRes, installsRes, hvBreakdownRes, funnelSourceRes, outreachRes, timingRes, p2lRes, journeysRes, lctRes] = await Promise.all([
         fetch(`/api/hubspot/contacts-daily?from=${from}&to=${to}&metric=contacts`),
         fetch(`/api/hubspot/unattributed?from=${from}&to=${to}`),
         fetch(`/api/hubspot/dow-conversion?from=${from}&to=${to}`),
@@ -1729,6 +1734,7 @@ export default function Dashboard() {
         fetch(`/api/hubspot/funnel-timing?from=${from}&to=${to}`),
         fetch(`/api/hubspot/prospect-to-lead?from=${from}&to=${to}`),
         fetch(`/api/hubspot/customer-journeys?from=${from}&to=${to}`),
+        fetch(`/api/hubspot/lead-creation-timeline?from=${from}&to=${to}`),
       ]);
       if (unattribRes.ok) {
         setUnattributed(await unattribRes.json());
@@ -1799,6 +1805,12 @@ export default function Dashboard() {
       } else {
         console.error("[customer-journeys] failed:", journeysRes.status, await journeysRes.text());
         setCustomerJourneys(null);
+      }
+      if (lctRes.ok) {
+        setLeadCreationTimeline(await lctRes.json());
+      } else {
+        console.error("[lead-creation-timeline] failed:", lctRes.status, await lctRes.text());
+        setLeadCreationTimeline(null);
       }
       setLoadProgress(100);
       setDataReady(true);
@@ -4010,6 +4022,97 @@ export default function Dashboard() {
                       {withoutVisit.length > 0 ? renderJourneyList(withoutVisit, "#8B5CF6", journeyShowNoVisit, () => setJourneyShowNoVisit((n) => n + 10)) : (
                         <p style={{ fontSize: "12px", color: "#AEAEB2", margin: 0 }}>None{isFiltered ? " matching filters" : " in this period"}</p>
                       )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* === LEAD CREATION TIMELINE === */}
+            {!isSourceFiltered && leadCreationTimeline && leadCreationTimeline.total > 0 && (() => {
+              const { total, stages, sources } = leadCreationTimeline;
+              // Colour map for common lifecycle stages
+              const stageColour = (label: string): string => {
+                const l = label.toLowerCase();
+                if (l.includes("subscriber")) return "#94A3B8";
+                if (l.includes("lead")) return "#0071E3";
+                if (l.includes("prospect")) return "#F59E0B";
+                if (l.includes("opportunity")) return "#8B5CF6";
+                if (l.includes("customer")) return "#059669";
+                if (l.includes("won")) return "#059669";
+                if (l.includes("completed")) return "#10B981";
+                if (l.includes("evangelist")) return "#14B8A6";
+                if (l.includes("other")) return "#64748B";
+                return "#6366F1";
+              };
+              const maxStageCount = Math.max(...stages.map((s) => s.count), 1);
+              const topSources = sources.slice(0, 8);
+              const maxSourceCount = topSources.length > 0 ? Math.max(...topSources.map((s) => s.count), 1) : 1;
+              return (
+                <div>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "10px" }}>
+                    <h2 style={{ fontSize: "13px", fontWeight: 600, color: "#86868B", margin: 0 }}>
+                      Lead Creation Timeline
+                    </h2>
+                    <span style={{ fontSize: "10px", color: "#AEAEB2" }}>
+                      {total} contacts created in period — where are they now?
+                    </span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                    {/* Current stage breakdown */}
+                    <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "20px" }}>
+                      <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: "0 0 14px", textTransform: "uppercase" }}>
+                        Current Stage
+                      </p>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                        {stages.map((s) => {
+                          const pct = total > 0 ? (s.count / total) * 100 : 0;
+                          const col = stageColour(s.label);
+                          return (
+                            <div key={s.label}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "4px" }}>
+                                <span style={{ fontSize: "13px", fontWeight: 500, color: "#1D1D1F" }}>{s.label}</span>
+                                <span style={{ fontSize: "13px", fontWeight: 600, color: col }}>{s.count} <span style={{ fontSize: "10px", fontWeight: 400, color: "#AEAEB2" }}>({pct.toFixed(1)}%)</span></span>
+                              </div>
+                              <div style={{ height: "6px", borderRadius: "3px", background: "#F1F5F9", overflow: "hidden" }}>
+                                <div style={{ height: "100%", borderRadius: "3px", background: col, width: `${(s.count / maxStageCount) * 100}%`, transition: "width 0.4s ease" }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Source breakdown */}
+                    <div style={{ background: "white", borderRadius: "20px", boxShadow: "0 2px 12px rgba(0,0,0,0.04)", padding: "20px" }}>
+                      <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: "0 0 14px", textTransform: "uppercase" }}>
+                        Where They Came From
+                      </p>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                        {topSources.map((s) => {
+                          const pct = total > 0 ? (s.count / total) * 100 : 0;
+                          const sourceCol = s.label === "(No source)" ? "#94A3B8" :
+                            ["Google Ads", "Bing Ads", "Facebook Ads"].includes(s.label) ? "#0071E3" :
+                            ["Organic Search", "AI", "Directory Referral"].includes(s.label) ? "#10B981" :
+                            ["Organic Social", "Organic YouTube"].includes(s.label) ? "#8B5CF6" : "#64748B";
+                          return (
+                            <div key={s.label}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "4px" }}>
+                                <span style={{ fontSize: "13px", fontWeight: 500, color: "#1D1D1F" }}>{s.label}</span>
+                                <span style={{ fontSize: "13px", fontWeight: 600, color: sourceCol }}>{s.count} <span style={{ fontSize: "10px", fontWeight: 400, color: "#AEAEB2" }}>({pct.toFixed(1)}%)</span></span>
+                              </div>
+                              <div style={{ height: "6px", borderRadius: "3px", background: "#F1F5F9", overflow: "hidden" }}>
+                                <div style={{ height: "100%", borderRadius: "3px", background: sourceCol, width: `${(s.count / maxSourceCount) * 100}%`, transition: "width 0.4s ease" }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {sources.length > 8 && (
+                          <p style={{ fontSize: "10px", color: "#AEAEB2", margin: "4px 0 0", textAlign: "center" }}>
+                            + {sources.length - 8} more sources
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
