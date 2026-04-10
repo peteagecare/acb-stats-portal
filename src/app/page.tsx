@@ -554,11 +554,12 @@ interface ContactRow {
   daysSinceActivity: number | null;
 }
 
-function ContactListModal({ stage, colour, from, to, onClose }: {
+function ContactListModal({ stage, colour, from, to, sourceCategory, onClose }: {
   stage: string;
   colour: string;
   from: string;
   to: string;
+  sourceCategory?: string;
   onClose: () => void;
 }) {
   const [contacts, setContacts] = useState<ContactRow[]>([]);
@@ -570,7 +571,9 @@ function ContactListModal({ stage, colour, from, to, onClose }: {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch(`/api/hubspot/contact-list?from=${from}&to=${to}&stage=${encodeURIComponent(stage)}`)
+    let url = `/api/hubspot/contact-list?from=${from}&to=${to}&stage=${encodeURIComponent(stage)}`;
+    if (sourceCategory) url += `&sourceCategory=${encodeURIComponent(sourceCategory)}`;
+    fetch(url)
       .then((r) => {
         if (!r.ok) throw new Error("Failed to fetch contacts");
         return r.json();
@@ -578,7 +581,7 @@ function ContactListModal({ stage, colour, from, to, onClose }: {
       .then((data) => setContacts(data.contacts ?? []))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [from, to, stage]);
+  }, [from, to, stage, sourceCategory]);
 
   const handleSort = (field: typeof sortField) => {
     if (sortField === field) {
@@ -660,7 +663,7 @@ function ContactListModal({ stage, colour, from, to, onClose }: {
         }}>
           <div>
             <h2 style={{ margin: 0, fontSize: "17px", fontWeight: 600, color: "#1D1D1F" }}>
-              {stage}
+              {stage}{sourceCategory ? ` — ${sourceCategory}` : ""}
             </h2>
             <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#86868B" }}>
               {from} to {to} &middot; {contacts.length} contact{contacts.length !== 1 ? "s" : ""}
@@ -951,7 +954,7 @@ export default function Dashboard() {
   const [dataReady, setDataReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [contactListStage, setContactListStage] = useState<{ stage: string; colour: string } | null>(null);
+  const [contactListStage, setContactListStage] = useState<{ stage: string; colour: string; sourceCategory?: string } | null>(null);
   const inlineFilterRef = useRef<HTMLDivElement>(null);
   const [stickyFilterVisible, setStickyFilterVisible] = useState(false);
 
@@ -2233,7 +2236,7 @@ export default function Dashboard() {
                     : null);
                 const teamGoal = proratedGoal(teamGoalMonth);
                 return (
-                  <SourcePanel key={cat.title} {...cat} sourcesTotal={sourcesTotal} breakdown={sourceBreakdown[cat.title]} goalPercent={goalPct} teamGoal={teamGoal} />
+                  <SourcePanel key={cat.title} {...cat} sourcesTotal={sourcesTotal} breakdown={sourceBreakdown[cat.title]} goalPercent={goalPct} teamGoal={teamGoal} onClick={() => setContactListStage({ stage: "Contacts", colour: cat.colour, sourceCategory: cat.title })} />
                 );
               })}
             </div>
@@ -3732,6 +3735,7 @@ export default function Dashboard() {
           colour={contactListStage.colour}
           from={from}
           to={to}
+          sourceCategory={contactListStage.sourceCategory}
           onClose={() => setContactListStage(null)}
         />
       )}
@@ -4068,6 +4072,7 @@ function SourcePanel({
   breakdown,
   goalPercent,
   teamGoal,
+  onClick,
 }: {
   title: string;
   total: number;
@@ -4079,6 +4084,7 @@ function SourcePanel({
   breakdown?: { prospects: number; leads: number };
   goalPercent?: number | null;
   teamGoal?: number | null;
+  onClick?: () => void;
 }) {
   const filtered = sources.filter((s) => s.count > 0).sort((a, b) => b.count - a.count);
   const pct = sourcesTotal > 0 ? ((total / sourcesTotal) * 100) : 0;
@@ -4086,6 +4092,7 @@ function SourcePanel({
 
   return (
     <div
+      onClick={onClick}
       style={{
         background: "white",
         borderRadius: "18px",
@@ -4094,7 +4101,11 @@ function SourcePanel({
         display: "flex",
         flexDirection: "column",
         gap: "10px",
+        cursor: onClick ? "pointer" : undefined,
+        transition: "box-shadow 0.15s ease",
       }}
+      onMouseEnter={(e) => { if (onClick) e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.1)"; }}
+      onMouseLeave={(e) => { if (onClick) e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.04)"; }}
     >
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>

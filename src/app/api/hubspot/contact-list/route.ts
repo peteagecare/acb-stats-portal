@@ -4,6 +4,21 @@ import { LIFECYCLE_EXCLUSION_FILTER } from "@/lib/hubspot-exclusions";
 const HUBSPOT_API = "https://api.hubapi.com";
 const TZ = "Europe/London";
 
+const SOURCE_CATEGORIES: Record<string, string> = {
+  "Google Ads": "PPC",
+  "Bing Ads": "PPC",
+  "Facebook Ads": "PPC",
+  "Organic Search": "SEO",
+  "AI": "SEO",
+  "Directory Referral": "SEO",
+  "Organic Social": "Content",
+  "Organic YouTube": "Content",
+};
+
+function getSourceCategory(value: string): string {
+  return SOURCE_CATEGORIES[value] ?? "Other";
+}
+
 const PROSPECT_ACTIONS = new Set([
   "Brochure Download Form", "Flipbook Form", "VAT Exempt Checker",
   "Pricing Guide", "Physical Brochure Request", "Newsletter Sign Up",
@@ -85,6 +100,7 @@ export async function GET(request: NextRequest) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
   const stage = searchParams.get("stage"); // "Contacts", "Prospects", "Leads", "Home Visits", "Won Jobs"
+  const sourceCategory = searchParams.get("sourceCategory"); // optional: "PPC", "SEO", "Content", "Other"
 
   if (!from || !to || !stage) {
     return Response.json({ error: "Missing required params: from, to, stage" }, { status: 400 });
@@ -159,6 +175,13 @@ export async function GET(request: NextRequest) {
         else if (stageNorm === "won jobs") matches = contactStage === "Won Job";
 
         if (!matches) continue;
+
+        // Filter by source category if specified
+        const contactSource = c.properties?.original_lead_source ?? "";
+        if (sourceCategory) {
+          const cat = getSourceCategory(contactSource);
+          if (cat !== sourceCategory) continue;
+        }
 
         const phone = c.properties?.phone || c.properties?.mobilephone || "";
         const lastActivity = c.properties?.hs_last_sales_activity_timestamp || c.properties?.notes_last_updated || "";
