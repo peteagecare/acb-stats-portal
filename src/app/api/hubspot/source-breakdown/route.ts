@@ -20,15 +20,18 @@ export async function GET(request: NextRequest) {
     const propData = await hubspotFetch("/crm/v3/properties/contacts/original_lead_source", token);
     const options: { value: string }[] = (propData as { options?: { value: string }[] }).options ?? [];
 
-    const categorySourceValues: Record<string, string[]> = { PPC: [], SEO: [], Content: [], Other: [] };
+    const categorySourceValues: Record<string, string[]> = { PPC: [], SEO: [], Content: [], TV: [], Other: [] };
     for (const opt of options) {
-      categorySourceValues[getSourceCategory(opt.value)].push(opt.value);
+      const cat = getSourceCategory(opt.value);
+      if (!categorySourceValues[cat]) categorySourceValues[cat] = [];
+      categorySourceValues[cat].push(opt.value);
     }
 
     const results: Record<string, { prospects: number; leads: number }> = {
       PPC: { prospects: 0, leads: 0 },
       SEO: { prospects: 0, leads: 0 },
       Content: { prospects: 0, leads: 0 },
+      TV: { prospects: 0, leads: 0 },
       Other: { prospects: 0, leads: 0 },
     };
 
@@ -38,8 +41,8 @@ export async function GET(request: NextRequest) {
       LIFECYCLE_EXCLUSION_FILTER,
     ];
 
-    // Fire all 8 queries in parallel (4 categories × 2 types)
-    const categories = ["PPC", "SEO", "Content", "Other"] as const;
+    // Fire queries in parallel (5 categories × 2 types)
+    const categories = ["PPC", "SEO", "Content", "TV", "Other"] as const;
     const queries = categories.flatMap((cat) => {
       const sourceValues = categorySourceValues[cat];
       if (sourceValues.length === 0) return [];

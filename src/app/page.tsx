@@ -22,10 +22,12 @@ interface Goals {
   seoGoalPerMonth: number | null;
   contentGoalPerMonth: number | null;
   otherGoalPerMonth: number | null;
+  tvGoalPerMonth: number | null;
   ppcPercentGoal: number | null;
   seoPercentGoal: number | null;
   contentPercentGoal: number | null;
   otherPercentGoal: number | null;
+  tvPercentGoal: number | null;
 }
 
 const DEFAULT_GOALS: Goals = {
@@ -39,10 +41,12 @@ const DEFAULT_GOALS: Goals = {
   seoGoalPerMonth: null,
   contentGoalPerMonth: null,
   otherGoalPerMonth: null,
+  tvGoalPerMonth: null,
   ppcPercentGoal: null,
   seoPercentGoal: null,
   contentPercentGoal: null,
   otherPercentGoal: null,
+  tvPercentGoal: 10,
 };
 
 async function loadGoalsFromServer(): Promise<Goals> {
@@ -72,7 +76,11 @@ const SOURCE_CATEGORIES: Record<string, string> = {
   "Directory Referral": "SEO",
   "Organic Social": "Content",
   "Organic YouTube": "Content",
+  "TV": "TV",
 };
+
+/** Sources in "Other" that should be redistributed evenly across PPC, SEO, Content */
+const REDISTRIBUTED_SOURCES = new Set(["Direct", "Phone Call", "(No value)", "__no_value__"]);
 
 function getSourceCategory(value: string): string {
   return SOURCE_CATEGORIES[value] ?? "Other";
@@ -180,6 +188,8 @@ function SettingsModal({ onClose, initialGoals }: { onClose: () => void; initial
       seoPercentGoal: parseGoalDraft(draftSeo),
       contentPercentGoal: parseGoalDraft(draftContent),
       otherPercentGoal: parseGoalDraft(draftOther),
+      tvGoalPerMonth: initialGoals.tvGoalPerMonth,
+      tvPercentGoal: initialGoals.tvPercentGoal,
     };
     await saveGoalsToServer(updated);
     // Update manual values
@@ -2044,14 +2054,41 @@ function Dashboard() {
   }
 
   const sourcesTotal = sources.reduce((sum, s) => sum + s.count, 0);
-  const ppcSources = sources.filter((s) => getSourceCategory(s.value) === "PPC");
-  const seoSources = sources.filter((s) => getSourceCategory(s.value) === "SEO");
-  const contentSources = sources.filter((s) => getSourceCategory(s.value) === "Content");
+
+  // Split sources into native categories + redistributable "Other"
+  const ppcNative = sources.filter((s) => getSourceCategory(s.value) === "PPC");
+  const seoNative = sources.filter((s) => getSourceCategory(s.value) === "SEO");
+  const contentNative = sources.filter((s) => getSourceCategory(s.value) === "Content");
+  const tvSources = sources.filter((s) => getSourceCategory(s.value) === "TV");
   const otherSources = sources.filter((s) => getSourceCategory(s.value) === "Other");
-  const ppcTotal = ppcSources.reduce((sum, s) => sum + s.count, 0);
-  const seoTotal = seoSources.reduce((sum, s) => sum + s.count, 0);
-  const contentTotal = contentSources.reduce((sum, s) => sum + s.count, 0);
-  const otherTotal = otherSources.reduce((sum, s) => sum + s.count, 0);
+
+  // Contacts to redistribute (Direct, Phone Call, No value) — split evenly across PPC, SEO, Content
+  const redistSources = otherSources.filter((s) => REDISTRIBUTED_SOURCES.has(s.value) || REDISTRIBUTED_SOURCES.has(s.label));
+  const remainingOther = otherSources.filter((s) => !REDISTRIBUTED_SOURCES.has(s.value) && !REDISTRIBUTED_SOURCES.has(s.label));
+  const redistTotal = redistSources.reduce((sum, s) => sum + s.count, 0);
+  const redistPerTeam = Math.round(redistTotal / 3);
+  const redistPerTeamRemainder = redistTotal - redistPerTeam * 3; // give remainder to PPC
+
+  // Build team sources with redistributed contacts shown separately
+  const redistLabel = (count: number) => redistSources.filter((s) => s.count > 0).map((s) => ({
+    ...s,
+    label: `${s.label} (shared)`,
+    count: Math.round((s.count / redistTotal) * count),
+  }));
+
+  const ppcRedistCount = redistPerTeam + redistPerTeamRemainder;
+  const seoRedistCount = redistPerTeam;
+  const contentRedistCount = redistPerTeam;
+
+  const ppcSources = [...ppcNative, ...redistLabel(ppcRedistCount)];
+  const seoSources = [...seoNative, ...redistLabel(seoRedistCount)];
+  const contentSources = [...contentNative, ...redistLabel(contentRedistCount)];
+
+  const ppcTotal = ppcNative.reduce((sum, s) => sum + s.count, 0) + ppcRedistCount;
+  const seoTotal = seoNative.reduce((sum, s) => sum + s.count, 0) + seoRedistCount;
+  const contentTotal = contentNative.reduce((sum, s) => sum + s.count, 0) + contentRedistCount;
+  const tvTotal = tvSources.reduce((sum, s) => sum + s.count, 0);
+  const otherTotal = remainingOther.reduce((sum, s) => sum + s.count, 0);
   const prospects = conversionActions.filter(
     (a) => a.value in PROSPECT_ACTIONS && a.count > 0
   );
@@ -2084,7 +2121,8 @@ function Dashboard() {
     { title: "PPC", total: ppcTotal, sources: ppcSources, colour: "#EF4444", bg: "#FEF2F2", icon: "Paid ads" },
     { title: "SEO", total: seoTotal, sources: seoSources, colour: "#10B981", bg: "#ECFDF5", icon: "Organic search" },
     { title: "Content", total: contentTotal, sources: contentSources, colour: "#8B5CF6", bg: "#F5F3FF", icon: "Social & video" },
-    { title: "Other", total: otherTotal, sources: otherSources, colour: "#64748B", bg: "#F8FAFC", icon: "Direct & misc" },
+    { title: "TV", total: tvTotal, sources: tvSources, colour: "#F97316", bg: "#FFF7ED", icon: "Television" },
+    ...(otherTotal > 0 ? [{ title: "Other", total: otherTotal, sources: remainingOther, colour: "#64748B", bg: "#F8FAFC", icon: "Uncategorised" }] : []),
   ];
 
   return (
@@ -2884,24 +2922,20 @@ function Dashboard() {
             <h2 style={{ fontSize: "13px", fontWeight: 600, color: "#86868B", margin: "0 0 10px" }}>
               Contacts Per Team
             </h2>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${categoryCards.length}, 1fr)`, gap: "10px" }}>
               {categoryCards.map((cat) => {
                 const goalPct = cat.title === "PPC" ? goals.ppcPercentGoal
                   : cat.title === "SEO" ? goals.seoPercentGoal
                   : cat.title === "Content" ? goals.contentPercentGoal
-                  : cat.title === "Other" ? goals.otherPercentGoal
-                  : null;
-                const teamPct = cat.title === "PPC" ? goals.ppcPercentGoal
-                  : cat.title === "SEO" ? goals.seoPercentGoal
-                  : cat.title === "Content" ? goals.contentPercentGoal
-                  : cat.title === "Other" ? goals.otherPercentGoal
-                  : null;
+                  : cat.title === "TV" ? goals.tvPercentGoal
+                  : null; // Other has no goal
+                const teamPct = goalPct;
                 const teamGoalMonth = (goals.contactsGoalPerMonth && teamPct)
                   ? Math.round((goals.contactsGoalPerMonth * teamPct) / 100)
                   : (cat.title === "PPC" ? goals.ppcGoalPerMonth
                     : cat.title === "SEO" ? goals.seoGoalPerMonth
                     : cat.title === "Content" ? goals.contentGoalPerMonth
-                    : cat.title === "Other" ? goals.otherGoalPerMonth
+                    : cat.title === "TV" ? goals.tvGoalPerMonth
                     : null);
                 const teamGoal = proratedGoal(teamGoalMonth);
                 return (

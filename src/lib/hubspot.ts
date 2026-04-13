@@ -196,6 +196,7 @@ export const SOURCE_CATEGORIES: Record<string, string> = {
   "Directory Referral": "SEO",
   "Organic Social": "Content",
   "Organic YouTube": "Content",
+  "TV": "TV",
 };
 
 export function getSourceCategory(value: string): string {
