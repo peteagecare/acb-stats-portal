@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, Fragment, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import Image from "next/image";
 import { PieChart, Pie, ResponsiveContainer, Tooltip, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, AreaChart, Area } from "recharts";
 
 interface LeadSource {
@@ -2096,7 +2097,7 @@ function Dashboard() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <img src="/acb-logo.png" alt="ACB" style={{ height: "28px", objectFit: "contain" }} />
+            <Image src="/acb-logo.png" alt="ACB" height={28} width={100} style={{ objectFit: "contain" }} />
             <div>
               <h1 style={{ fontSize: "14px", fontWeight: 600, margin: 0, color: "#1D1D1F", letterSpacing: "-0.3px" }}>
                 ACB Stats
@@ -2478,7 +2479,7 @@ function Dashboard() {
                 gap: "32px",
               }}
             >
-              <img src="/acb-logo.png" alt="Age Care Bathrooms" style={{ height: "64px", objectFit: "contain" }} />
+              <Image src="/acb-logo.png" alt="Age Care Bathrooms" height={64} width={228} style={{ objectFit: "contain" }} />
 
               <div style={{ textAlign: "center" }}>
                 <p style={{ fontSize: "17px", fontWeight: 500, color: "#1D1D1F", margin: "0 0 20px", letterSpacing: "-0.2px" }}>

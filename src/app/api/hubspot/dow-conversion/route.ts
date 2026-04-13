@@ -1,8 +1,7 @@
 import { NextRequest } from "next/server";
 import { LIFECYCLE_EXCLUSION_FILTER } from "@/lib/hubspot-exclusions";
-
-const HUBSPOT_API = "https://api.hubapi.com";
-const TZ = "Europe/London";
+import { londonDateToUtcMs, hubspotSearch, fetchPropertyLabels } from "@/lib/hubspot";
+import { cached, cacheKey, TTL } from "@/lib/cache";
 
 /**
  * For each day of the week, count:
@@ -23,6 +22,8 @@ const TZ = "Europe/London";
  * like "which source actually converts on a weekend".
  */
 
+const TZ = "Europe/London";
+
 interface DowSegment {
   contacts: number[];
   withVisit: number[];
@@ -32,82 +33,9 @@ function emptySegment(): DowSegment {
   return { contacts: [0, 0, 0, 0, 0, 0, 0], withVisit: [0, 0, 0, 0, 0, 0, 0] };
 }
 
-function londonDateToUtcMs(dateStr: string, time: string): number {
-  const formatter = new Intl.DateTimeFormat("en-GB", {
-    timeZone: TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-    timeZoneName: "shortOffset",
-  });
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const [hh, mm, ss] = time.split(":").map(Number);
-  const utcGuess = Date.UTC(y, m - 1, d, hh, mm, ss);
-  const parts = formatter.formatToParts(new Date(utcGuess));
-  const tzPart = parts.find((p) => p.type === "timeZoneName")?.value ?? "+00";
-  const offsetMatch = tzPart.match(/([+-]\d+)/);
-  const offsetHours = offsetMatch ? parseInt(offsetMatch[1], 10) : 0;
-  return Date.UTC(y, m - 1, d, hh - offsetHours, mm, ss);
-}
-
-async function hubspotSearch(token: string, body: object): Promise<{
-  results: { properties: Record<string, string | null> }[];
-  paging?: { next?: { after: string } };
-}> {
-  const MAX_RETRIES = 3;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts/search`, {
-      method: "POST",
-      cache: "no-store",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-    if (res.status === 429 && attempt < MAX_RETRIES) {
-      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
-      continue;
-    }
-    if (!res.ok) {
-      throw new Error(`HubSpot search failed: ${res.status} ${await res.text()}`);
-    }
-    return res.json();
-  }
-  throw new Error("HubSpot search failed after retries");
-}
-
-async function fetchPropertyLabels(
-  token: string,
-  propertyName: string,
-): Promise<Record<string, string>> {
-  try {
-    const res = await fetch(
-      `${HUBSPOT_API}/crm/v3/properties/contacts/${propertyName}`,
-      {
-        cache: "no-store",
-        headers: { Authorization: `Bearer ${token}` },
-      },
-    );
-    if (!res.ok) return {};
-    const data = await res.json();
-    const map: Record<string, string> = {};
-    for (const opt of data.options ?? []) {
-      if (opt?.value) map[opt.value] = opt.label ?? opt.value;
-    }
-    return map;
-  } catch {
-    return {};
-  }
-}
-
 /**
  * Convert a UTC ISO timestamp string into a London-zone day-of-week index
- * (0 = Monday … 6 = Sunday). Important: a contact created at 11pm GMT on
+ * (0 = Monday ... 6 = Sunday). Important: a contact created at 11pm GMT on
  * a Sunday should be Sunday in our chart, not Monday in UTC.
  */
 function londonDayOfWeek(isoUtc: string): number {
@@ -134,28 +62,29 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: "Missing required params: from, to" }, { status: 400 });
   }
 
-  const fromMs = londonDateToUtcMs(from, "00:00:00");
-  const toMs = londonDateToUtcMs(to, "23:59:59");
+  const key = cacheKey("dow-conversion", { from, to });
+  const data = await cached(key, TTL.MEDIUM, async () => {
+    const fromMs = londonDateToUtcMs(from, "00:00:00");
+    const toMs = londonDateToUtcMs(to, "23:59:59");
 
-  const overall = emptySegment();
-  const bySource = new Map<string, DowSegment>();
-  const byAction = new Map<string, DowSegment>();
+    const overall = emptySegment();
+    const bySource = new Map<string, DowSegment>();
+    const byAction = new Map<string, DowSegment>();
 
-  function bump(map: Map<string, DowSegment>, key: string, dow: number, hadVisit: boolean) {
-    let seg = map.get(key);
-    if (!seg) {
-      seg = emptySegment();
-      map.set(key, seg);
+    function bump(map: Map<string, DowSegment>, key: string, dow: number, hadVisit: boolean) {
+      let seg = map.get(key);
+      if (!seg) {
+        seg = emptySegment();
+        map.set(key, seg);
+      }
+      seg.contacts[dow] += 1;
+      if (hadVisit) seg.withVisit[dow] += 1;
     }
-    seg.contacts[dow] += 1;
-    if (hadVisit) seg.withVisit[dow] += 1;
-  }
 
-  let after: string | undefined;
-  let pages = 0;
-  const MAX_PAGES = 50; // 50 * 100 = 5000 contacts ceiling — more than enough
+    let after: string | undefined;
+    let pages = 0;
+    const MAX_PAGES = 50; // 50 * 100 = 5000 contacts ceiling — more than enough
 
-  try {
     // Fetch property labels in parallel with the first contacts page
     const labelsPromise = Promise.all([
       fetchPropertyLabels(token, "original_lead_source"),
@@ -185,9 +114,9 @@ export async function GET(request: NextRequest) {
       };
       if (after) body.after = after;
 
-      const data = await hubspotSearch(token, body);
+      const result = await hubspotSearch(token, body);
 
-      for (const contact of data.results ?? []) {
+      for (const contact of result.results ?? []) {
         const createdate = contact.properties?.createdate;
         if (!createdate) continue;
         const dow = londonDayOfWeek(createdate);
@@ -203,7 +132,7 @@ export async function GET(request: NextRequest) {
         bump(byAction, action, dow, hadVisit);
       }
 
-      after = data.paging?.next?.after;
+      after = result.paging?.next?.after;
       pages++;
       if (pages >= MAX_PAGES) break;
     } while (after);
@@ -222,17 +151,20 @@ export async function GET(request: NextRequest) {
         .sort((a, b) => b.totalContacts - a.totalContacts);
     }
 
-    return Response.json({
+    return {
       contacts: overall.contacts,
       withVisit: overall.withVisit,
       bySource: serialise(bySource, sourceLabels),
       byAction: serialise(byAction, actionLabels),
       truncated: pages >= MAX_PAGES,
-    });
-  } catch (e) {
-    return Response.json(
-      { error: e instanceof Error ? e.message : "HubSpot request failed" },
-      { status: 502 }
-    );
-  }
+    };
+  });
+
+  const isPast = to < new Date().toISOString().slice(0, 10);
+  return new Response(JSON.stringify(data), {
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": isPast ? "private, max-age=3600" : "private, max-age=300",
+    },
+  });
 }

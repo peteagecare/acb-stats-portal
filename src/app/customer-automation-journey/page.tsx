@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import Image from "next/image";
 
 /* ── Types ── */
 
@@ -176,7 +177,7 @@ export default function CustomerAutomationJourney() {
       <header style={{ borderBottom: "1px solid #1E293B", padding: "0 32px", flexShrink: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", height: "56px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <a href="/"><img src="/acb-logo.png" alt="ACB" style={{ height: "28px", objectFit: "contain" }} /></a>
+            <a href="/"><Image src="/acb-logo.png" alt="ACB" height={28} width={100} style={{ objectFit: "contain" }} /></a>
             <h1 style={{ fontSize: "14px", fontWeight: 600, margin: 0, color: "white" }}>Customer Automation Journey</h1>
           </div>
 

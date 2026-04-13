@@ -1,11 +1,10 @@
 import { NextRequest } from "next/server";
 import { LIFECYCLE_EXCLUSION_FILTER } from "@/lib/hubspot-exclusions";
-
-const HUBSPOT_API = "https://api.hubapi.com";
-const TZ = "Europe/London";
+import { londonDateToUtcMs, hubspotSearch } from "@/lib/hubspot";
+import { cached, cacheKey, TTL } from "@/lib/cache";
 
 /**
- * Real "Prospect → Lead" conversion rate.
+ * Real "Prospect -> Lead" conversion rate.
  *
  * The dashboard's Prospect total and Lead total are independent counts — a
  * contact whose conversion_action is a lead action was never counted as a
@@ -24,55 +23,6 @@ const TZ = "Europe/London";
 const PROSPECT_ENTERED = "hs_v2_date_entered_2444598513";
 const LEAD_ENTERED = "hs_v2_date_entered_5118566641";
 
-function londonDateToUtcMs(dateStr: string, time: string): number {
-  const formatter = new Intl.DateTimeFormat("en-GB", {
-    timeZone: TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-    timeZoneName: "shortOffset",
-  });
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const [hh, mm, ss] = time.split(":").map(Number);
-  const utcGuess = Date.UTC(y, m - 1, d, hh, mm, ss);
-  const parts = formatter.formatToParts(new Date(utcGuess));
-  const tzPart = parts.find((p) => p.type === "timeZoneName")?.value ?? "+00";
-  const offsetMatch = tzPart.match(/([+-]\d+)/);
-  const offsetHours = offsetMatch ? parseInt(offsetMatch[1], 10) : 0;
-  return Date.UTC(y, m - 1, d, hh - offsetHours, mm, ss);
-}
-
-async function hubspotSearch(token: string, body: object): Promise<{
-  results: { properties: Record<string, string | null> }[];
-  paging?: { next?: { after: string } };
-}> {
-  const MAX_RETRIES = 3;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts/search`, {
-      method: "POST",
-      cache: "no-store",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-    if (res.status === 429 && attempt < MAX_RETRIES) {
-      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
-      continue;
-    }
-    if (!res.ok) {
-      throw new Error(`HubSpot search failed: ${res.status} ${await res.text()}`);
-    }
-    return res.json();
-  }
-  throw new Error("HubSpot search failed after retries");
-}
-
 export async function GET(request: NextRequest) {
   const token = process.env.HUBSPOT_ACCESS_TOKEN;
   if (!token) {
@@ -86,13 +36,14 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: "Missing required params: from, to" }, { status: 400 });
   }
 
-  const fromMs = londonDateToUtcMs(from, "00:00:00");
-  const toMs = londonDateToUtcMs(to, "23:59:59");
+  const key = cacheKey("prospect-to-lead", { from, to });
+  const data = await cached(key, TTL.MEDIUM, async () => {
+    const fromMs = londonDateToUtcMs(from, "00:00:00");
+    const toMs = londonDateToUtcMs(to, "23:59:59");
 
-  let totalEverProspect = 0;
-  let convertedToLead = 0;
+    let totalEverProspect = 0;
+    let convertedToLead = 0;
 
-  try {
     let after: string | undefined;
     let pages = 0;
     const MAX_PAGES = 80;
@@ -115,28 +66,31 @@ export async function GET(request: NextRequest) {
       };
       if (after) body.after = after;
 
-      const data = await hubspotSearch(token, body);
-      for (const c of data.results ?? []) {
+      const result = await hubspotSearch(token, body);
+      for (const c of result.results ?? []) {
         totalEverProspect += 1;
         if (c.properties?.[LEAD_ENTERED]) {
           convertedToLead += 1;
         }
       }
 
-      after = data.paging?.next?.after;
+      after = result.paging?.next?.after;
       pages++;
       if (pages >= MAX_PAGES) break;
     } while (after);
 
-    return Response.json({
+    return {
       totalEverProspect,
       convertedToLead,
       rate: totalEverProspect > 0 ? (convertedToLead / totalEverProspect) * 100 : null,
-    });
-  } catch (e) {
-    return Response.json(
-      { error: e instanceof Error ? e.message : "HubSpot request failed" },
-      { status: 502 },
-    );
-  }
+    };
+  });
+
+  const isPast = to < new Date().toISOString().slice(0, 10);
+  return new Response(JSON.stringify(data), {
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": isPast ? "private, max-age=3600" : "private, max-age=300",
+    },
+  });
 }

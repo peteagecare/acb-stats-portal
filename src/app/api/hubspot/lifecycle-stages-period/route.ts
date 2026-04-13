@@ -1,40 +1,7 @@
 import { NextRequest } from "next/server";
 import { EXCLUDED_LIFECYCLE_STAGES } from "@/lib/hubspot-exclusions";
-
-const HUBSPOT_API = "https://api.hubapi.com";
-const TZ = "Europe/London";
-
-function londonDateToUtcMs(dateStr: string, time: string): number {
-  const formatter = new Intl.DateTimeFormat("en-GB", {
-    timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZoneName: "shortOffset",
-  });
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const [hh, mm, ss] = time.split(":").map(Number);
-  const utcGuess = Date.UTC(y, m - 1, d, hh, mm, ss);
-  const parts = formatter.formatToParts(new Date(utcGuess));
-  const tzPart = parts.find((p) => p.type === "timeZoneName")?.value ?? "+00";
-  const offsetMatch = tzPart.match(/([+-]\d+)/);
-  const offsetHours = offsetMatch ? parseInt(offsetMatch[1], 10) : 0;
-  return Date.UTC(y, m - 1, d, hh - offsetHours, mm, ss);
-}
-
-async function hubspotFetch(path: string, token: string, options?: RequestInit) {
-  const MAX_RETRIES = 3;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const res = await fetch(`${HUBSPOT_API}${path}`, {
-      ...options,
-      cache: "no-store",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...options?.headers },
-    });
-    if (res.status === 429 && attempt < MAX_RETRIES) {
-      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
-      continue;
-    }
-    if (!res.ok) throw new Error(`HubSpot API error: ${res.status} ${await res.text()}`);
-    return res.json();
-  }
-}
+import { londonDateToUtcMs, hubspotFetch } from "@/lib/hubspot";
+import { cached, cacheKey, TTL } from "@/lib/cache";
 
 async function countByStageInPeriod(token: string, stage: string, fromMs: number, toMs: number): Promise<number> {
   const body = {
@@ -49,7 +16,7 @@ async function countByStageInPeriod(token: string, stage: string, fromMs: number
     limit: 1,
   };
   const data = await hubspotFetch("/crm/v3/objects/contacts/search", token, { method: "POST", body: JSON.stringify(body) });
-  return data.total ?? 0;
+  return (data as { total?: number }).total ?? 0;
 }
 
 export async function GET(request: NextRequest) {
@@ -61,25 +28,37 @@ export async function GET(request: NextRequest) {
   const to = searchParams.get("to");
   if (!from || !to) return Response.json({ error: "Missing required params: from, to" }, { status: 400 });
 
-  const fromMs = londonDateToUtcMs(from, "00:00:00");
-  const toMs = londonDateToUtcMs(to, "23:59:59");
+  const key = cacheKey("lifecycle-stages-period", { from, to });
+  const data = await cached(key, TTL.MEDIUM, async () => {
+    const fromMs = londonDateToUtcMs(from, "00:00:00");
+    const toMs = londonDateToUtcMs(to, "23:59:59");
 
-  const propData = await hubspotFetch("/crm/v3/properties/contacts/lifecyclestage", token);
-  const allOptions: { value: string; label: string; displayOrder: number }[] = propData.options ?? [];
-  const options = allOptions.filter((o) => !EXCLUDED_LIFECYCLE_STAGES.includes(o.value));
+    const propData = await hubspotFetch("/crm/v3/properties/contacts/lifecyclestage", token);
+    const allOptions: { value: string; label: string; displayOrder: number }[] =
+      (propData as { options?: { value: string; label: string; displayOrder: number }[] }).options ?? [];
+    const options = allOptions.filter((o) => !EXCLUDED_LIFECYCLE_STAGES.includes(o.value));
 
-  const BATCH_SIZE = 4;
-  const counts: number[] = [];
-  for (let i = 0; i < options.length; i += BATCH_SIZE) {
-    const batch = options.slice(i, i + BATCH_SIZE);
-    const results = await Promise.all(batch.map((opt) => countByStageInPeriod(token, opt.value, fromMs, toMs)));
-    counts.push(...results);
-    if (i + BATCH_SIZE < options.length) await new Promise((r) => setTimeout(r, 1500));
-  }
+    const BATCH_SIZE = 4;
+    const counts: number[] = [];
+    for (let i = 0; i < options.length; i += BATCH_SIZE) {
+      const batch = options.slice(i, i + BATCH_SIZE);
+      const results = await Promise.all(batch.map((opt) => countByStageInPeriod(token, opt.value, fromMs, toMs)));
+      counts.push(...results);
+      if (i + BATCH_SIZE < options.length) await new Promise((r) => setTimeout(r, 1500));
+    }
 
-  const stages = options
-    .map((opt, i) => ({ label: opt.label, value: opt.value, count: counts[i], order: opt.displayOrder }))
-    .sort((a, b) => a.order - b.order);
+    const stages = options
+      .map((opt, i) => ({ label: opt.label, value: opt.value, count: counts[i], order: opt.displayOrder }))
+      .sort((a, b) => a.order - b.order);
 
-  return Response.json({ stages });
+    return { stages };
+  });
+
+  const isPast = to < new Date().toISOString().slice(0, 10);
+  return new Response(JSON.stringify(data), {
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": isPast ? "private, max-age=3600" : "private, max-age=300",
+    },
+  });
 }

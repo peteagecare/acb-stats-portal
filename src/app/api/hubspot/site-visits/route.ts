@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { LIFECYCLE_EXCLUSION_FILTER } from "@/lib/hubspot-exclusions";
+import { hubspotSearch } from "@/lib/hubspot";
+import { cached, cacheKey, TTL } from "@/lib/cache";
 
-const HUBSPOT_API = "https://api.hubapi.com";
 const TZ = "Europe/London";
 
 /**
@@ -18,34 +19,6 @@ const TZ = "Europe/London";
  * midnight UTC of the calendar day. We don't need timezone shifting on the
  * filter values, just on the week-boundary calculations themselves.
  */
-
-async function hubspotSearch(token: string, body: object): Promise<{
-  total?: number;
-  results?: { properties: Record<string, string | null> }[];
-  paging?: { next?: { after: string } };
-}> {
-  const MAX_RETRIES = 3;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts/search`, {
-      method: "POST",
-      cache: "no-store",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-    if (res.status === 429 && attempt < MAX_RETRIES) {
-      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
-      continue;
-    }
-    if (!res.ok) {
-      throw new Error(`HubSpot search failed: ${res.status} ${await res.text()}`);
-    }
-    return res.json();
-  }
-  throw new Error("HubSpot search failed after retries");
-}
 
 /** Midnight UTC of a YYYY-MM-DD string. HubSpot date filters use ms since epoch. */
 function dayStartUtcMs(dateStr: string): number {
@@ -107,7 +80,8 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: "Missing required params: from, to" }, { status: 400 });
   }
 
-  try {
+  const key = cacheKey("site-visits", { from, to });
+  const data = await cached(key, TTL.SHORT, async () => {
     // ──────────────────────────────────────────────────────────────────
     // 1. In-period counts:
     //    - "booked": visits BOOKED in the period (active, not cancelled)
@@ -192,8 +166,8 @@ export async function GET(request: NextRequest) {
       };
       if (after) body.after = after;
 
-      const data = await hubspotSearch(token, body);
-      for (const c of data.results ?? []) {
+      const result = await hubspotSearch(token, body);
+      for (const c of result.results ?? []) {
         const raw = c.properties?.initial_home_visit_date;
         if (!raw) continue;
         const [y, mo, d] = raw.split("-").map(Number);
@@ -216,12 +190,12 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      after = data.paging?.next?.after;
+      after = result.paging?.next?.after;
       pages++;
       if (pages >= MAX_PAGES) break;
     } while (after);
 
-    return Response.json({
+    return {
       inPeriod,
       cancelled,
       upcoming: buckets.map((b, i) => ({
@@ -232,11 +206,14 @@ export async function GET(request: NextRequest) {
         cancelled: weekCancelled[i],
         bySalesman: bySalesman[i],
       })),
-    });
-  } catch (e) {
-    return Response.json(
-      { error: e instanceof Error ? e.message : "HubSpot request failed" },
-      { status: 502 },
-    );
-  }
+    };
+  });
+
+  const isPast = to < new Date().toISOString().slice(0, 10);
+  return new Response(JSON.stringify(data), {
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": isPast ? "private, max-age=3600" : "private, max-age=300",
+    },
+  });
 }

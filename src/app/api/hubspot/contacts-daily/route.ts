@@ -1,31 +1,7 @@
 import { NextRequest } from "next/server";
 import { LIFECYCLE_EXCLUSION_FILTER } from "@/lib/hubspot-exclusions";
-
-const HUBSPOT_API = "https://api.hubapi.com";
-const TZ = "Europe/London";
-
-function londonDateToUtcMs(dateStr: string, time: string): number {
-  const formatter = new Intl.DateTimeFormat("en-GB", {
-    timeZone: TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-    timeZoneName: "shortOffset",
-  });
-
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const [hh, mm, ss] = time.split(":").map(Number);
-  const utcGuess = Date.UTC(y, m - 1, d, hh, mm, ss);
-  const parts = formatter.formatToParts(new Date(utcGuess));
-  const tzPart = parts.find((p) => p.type === "timeZoneName")?.value ?? "+00";
-  const offsetMatch = tzPart.match(/([+-]\d+)/);
-  const offsetHours = offsetMatch ? parseInt(offsetMatch[1], 10) : 0;
-  return Date.UTC(y, m - 1, d, hh - offsetHours, mm, ss);
-}
+import { londonDateToUtcMs, hubspotFetch, PROSPECT_ACTIONS, LEAD_ACTIONS } from "@/lib/hubspot";
+import { cached, cacheKey, TTL } from "@/lib/cache";
 
 function pad(n: number) {
   return n.toString().padStart(2, "0");
@@ -98,40 +74,6 @@ function buildBuckets(from: string, to: string): { buckets: Bucket[]; granularit
   return { buckets, granularity: "month" };
 }
 
-async function hubspotFetch(path: string, token: string, options?: RequestInit) {
-  const MAX_RETRIES = 3;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const res = await fetch(`${HUBSPOT_API}${path}`, {
-      ...options,
-      cache: "no-store",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        ...options?.headers,
-      },
-    });
-    if (res.status === 429 && attempt < MAX_RETRIES) {
-      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
-      continue;
-    }
-    if (!res.ok) {
-      throw new Error(`HubSpot API error: ${res.status} ${await res.text()}`);
-    }
-    return res.json();
-  }
-}
-
-const PROSPECT_ACTIONS = [
-  "Brochure Download Form", "Flipbook Form", "VAT Exempt Checker",
-  "Pricing Guide", "Physical Brochure Request", "Newsletter Sign Up",
-];
-
-const LEAD_ACTIONS = [
-  "Brochure - Call Me", "Request A Callback Form", "Contact Form",
-  "Free Home Design Form", "Phone Call", "Walk In Bath Form",
-  "Direct Email", "Brochure - Home Visit", "Pricing Guide Home Visit",
-];
-
 function buildFilters(metric: string, fromMs: number, toMs: number): { filterGroups: Record<string, unknown>[]; properties: string[]; dateProperty?: string } {
   const dateRange = [
     { propertyName: "createdate", operator: "GTE", value: fromMs.toString() },
@@ -181,7 +123,7 @@ async function countForRange(
     body: JSON.stringify({ filterGroups, properties, limit: 1 }),
   });
 
-  return data.total ?? 0;
+  return (data.total as number) ?? 0;
 }
 
 export async function GET(request: NextRequest) {
@@ -199,27 +141,38 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: "Missing required params: from, to" }, { status: 400 });
   }
 
-  const { buckets, granularity } = buildBuckets(from, to);
+  const key = cacheKey("contacts-daily", { from, to, metric });
+  const data = await cached(key, TTL.MEDIUM, async () => {
+    const { buckets, granularity } = buildBuckets(from, to);
 
-  const BATCH_SIZE = 4;
-  const results: { label: string; count: number }[] = [];
+    const BATCH_SIZE = 4;
+    const results: { label: string; count: number }[] = [];
 
-  for (let i = 0; i < buckets.length; i += BATCH_SIZE) {
-    const batch = buckets.slice(i, i + BATCH_SIZE);
-    const counts = await Promise.all(
-      batch.map((b) => {
-        const bFrom = londonDateToUtcMs(b.from, "00:00:00");
-        const bTo = londonDateToUtcMs(b.to, "23:59:59");
-        return countForRange(token, metric, bFrom, bTo);
-      })
-    );
-    for (let j = 0; j < batch.length; j++) {
-      results.push({ label: batch[j].label, count: counts[j] });
+    for (let i = 0; i < buckets.length; i += BATCH_SIZE) {
+      const batch = buckets.slice(i, i + BATCH_SIZE);
+      const counts = await Promise.all(
+        batch.map((b) => {
+          const bFrom = londonDateToUtcMs(b.from, "00:00:00");
+          const bTo = londonDateToUtcMs(b.to, "23:59:59");
+          return countForRange(token, metric, bFrom, bTo);
+        })
+      );
+      for (let j = 0; j < batch.length; j++) {
+        results.push({ label: batch[j].label, count: counts[j] });
+      }
+      if (i + BATCH_SIZE < buckets.length) {
+        await new Promise((r) => setTimeout(r, 1500));
+      }
     }
-    if (i + BATCH_SIZE < buckets.length) {
-      await new Promise((r) => setTimeout(r, 1500));
-    }
-  }
 
-  return Response.json({ data: results, granularity, metric });
+    return { data: results, granularity, metric };
+  });
+
+  const isPast = to < new Date().toISOString().slice(0, 10);
+  return new Response(JSON.stringify(data), {
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": isPast ? "private, max-age=3600" : "private, max-age=300",
+    },
+  });
 }

@@ -1,81 +1,7 @@
 import { NextRequest } from "next/server";
 import { LIFECYCLE_EXCLUSION_FILTER } from "@/lib/hubspot-exclusions";
-
-const HUBSPOT_API = "https://api.hubapi.com";
-const TZ = "Europe/London";
-
-const PROSPECT_ACTIONS = [
-  "Brochure Download Form",
-  "Flipbook Form",
-  "VAT Exempt Checker",
-  "Pricing Guide",
-  "Physical Brochure Request",
-  "Newsletter Sign Up",
-];
-
-const LEAD_ACTIONS = [
-  "Brochure - Call Me",
-  "Request A Callback Form",
-  "Contact Form",
-  "Free Home Design Form",
-  "Phone Call",
-  "Walk In Bath Form",
-  "Direct Email",
-  "Brochure - Home Visit",
-  "Pricing Guide Home Visit",
-];
-
-function londonDateToUtcMs(dateStr: string, time: string): number {
-  const formatter = new Intl.DateTimeFormat("en-GB", {
-    timeZone: TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-    timeZoneName: "shortOffset",
-  });
-
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const [hh, mm, ss] = time.split(":").map(Number);
-  const utcGuess = Date.UTC(y, m - 1, d, hh, mm, ss);
-  const parts = formatter.formatToParts(new Date(utcGuess));
-  const tzPart = parts.find((p) => p.type === "timeZoneName")?.value ?? "+00";
-  const offsetMatch = tzPart.match(/([+-]\d+)/);
-  const offsetHours = offsetMatch ? parseInt(offsetMatch[1], 10) : 0;
-  return Date.UTC(y, m - 1, d, hh - offsetHours, mm, ss);
-}
-
-async function searchContacts(
-  token: string,
-  filterGroups: Record<string, unknown>[],
-): Promise<number> {
-  const body = {
-    filterGroups,
-    properties: ["email"],
-    limit: 1,
-  };
-
-  const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts/search`, {
-    method: "POST",
-    cache: "no-store",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`HubSpot error ${res.status}: ${err}`);
-  }
-
-  const data = await res.json();
-  return data.total ?? 0;
-}
+import { londonDateToUtcMs, hubspotSearch, hubspotFetch, PROSPECT_ACTIONS, LEAD_ACTIONS } from "@/lib/hubspot";
+import { cached, cacheKey, TTL } from "@/lib/cache";
 
 export async function GET(request: NextRequest) {
   const token = process.env.HUBSPOT_ACCESS_TOKEN;
@@ -91,20 +17,21 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: "Missing required params: from, to" }, { status: 400 });
   }
 
-  // Calculate previous period of the same duration
-  const fromDate = new Date(from);
-  const toDate = new Date(to);
-  const durationMs = toDate.getTime() - fromDate.getTime();
-  const prevToDate = new Date(fromDate.getTime() - 1); // day before current from
-  const prevFromDate = new Date(prevToDate.getTime() - durationMs);
+  const key = cacheKey("previous-period", { from, to });
+  const data = await cached(key, TTL.VERY_LONG, async () => {
+    // Calculate previous period of the same duration
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    const durationMs = toDate.getTime() - fromDate.getTime();
+    const prevToDate = new Date(fromDate.getTime() - 1); // day before current from
+    const prevFromDate = new Date(prevToDate.getTime() - durationMs);
 
-  const prevFrom = prevFromDate.toISOString().split("T")[0];
-  const prevTo = prevToDate.toISOString().split("T")[0];
+    const prevFrom = prevFromDate.toISOString().split("T")[0];
+    const prevTo = prevToDate.toISOString().split("T")[0];
 
-  const prevFromMs = londonDateToUtcMs(prevFrom, "00:00:00");
-  const prevToMs = londonDateToUtcMs(prevTo, "23:59:59");
+    const prevFromMs = londonDateToUtcMs(prevFrom, "00:00:00");
+    const prevToMs = londonDateToUtcMs(prevTo, "23:59:59");
 
-  try {
     const dateFilters = [
       { propertyName: "createdate", operator: "GTE", value: prevFromMs.toString() },
       { propertyName: "createdate", operator: "LTE", value: prevToMs.toString() },
@@ -114,26 +41,47 @@ export async function GET(request: NextRequest) {
     // Run all 4 counts in parallel — each is a single HubSpot search with
     // limit:1 (just getting the `total`). Parallel is safe: HubSpot allows
     // ~4 requests/sec on private apps and these are lightweight.
-    const [contacts, prospects, leads, homeVisits] = await Promise.all([
-      searchContacts(token, [
-        { filters: [{ propertyName: "conversion_action", operator: "HAS_PROPERTY" }, ...dateFilters] },
-      ]),
-      searchContacts(token, [
-        { filters: [{ propertyName: "conversion_action", operator: "IN", values: PROSPECT_ACTIONS }, ...dateFilters] },
-      ]),
-      searchContacts(token, [
-        { filters: [{ propertyName: "conversion_action", operator: "IN", values: LEAD_ACTIONS }, ...dateFilters] },
-      ]),
-      searchContacts(token, [
-        {
-          filters: [
-            { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "GTE", value: prevFromMs.toString() },
-            { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "LTE", value: prevToMs.toString() },
-            LIFECYCLE_EXCLUSION_FILTER,
-          ],
-        },
-      ]),
+    const [contactsResult, prospectsResult, leadsResult, homeVisitsResult] = await Promise.all([
+      hubspotSearch(token, {
+        filterGroups: [
+          { filters: [{ propertyName: "conversion_action", operator: "HAS_PROPERTY" }, ...dateFilters] },
+        ],
+        properties: ["email"],
+        limit: 1,
+      }),
+      hubspotSearch(token, {
+        filterGroups: [
+          { filters: [{ propertyName: "conversion_action", operator: "IN", values: PROSPECT_ACTIONS }, ...dateFilters] },
+        ],
+        properties: ["email"],
+        limit: 1,
+      }),
+      hubspotSearch(token, {
+        filterGroups: [
+          { filters: [{ propertyName: "conversion_action", operator: "IN", values: LEAD_ACTIONS }, ...dateFilters] },
+        ],
+        properties: ["email"],
+        limit: 1,
+      }),
+      hubspotSearch(token, {
+        filterGroups: [
+          {
+            filters: [
+              { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "GTE", value: prevFromMs.toString() },
+              { propertyName: "date_that_initial_visit_booked_is_set_to_yes", operator: "LTE", value: prevToMs.toString() },
+              LIFECYCLE_EXCLUSION_FILTER,
+            ],
+          },
+        ],
+        properties: ["email"],
+        limit: 1,
+      }),
     ]);
+
+    const contacts = contactsResult.total ?? 0;
+    const prospects = prospectsResult.total ?? 0;
+    const leads = leadsResult.total ?? 0;
+    const homeVisits = homeVisitsResult.total ?? 0;
 
     // Won jobs — two sequential stage queries (small, fast)
     const WON_WAITING_STAGE = "151694551";
@@ -141,35 +89,27 @@ export async function GET(request: NextRequest) {
     let wonJobs = 0;
     let wonValue = 0;
     for (const stage of [WON_WAITING_STAGE, COMPLETED_STAGE]) {
-      const wonRes = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts/search`, {
-        method: "POST",
-        cache: "no-store",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filterGroups: [
-            {
-              filters: [
-                { propertyName: "lifecyclestage", operator: "EQ", value: stage },
-                { propertyName: "first_deal_created_date", operator: "GTE", value: prevFromMs.toString() },
-                { propertyName: "first_deal_created_date", operator: "LTE", value: prevToMs.toString() },
-              ],
-            },
-          ],
-          properties: ["recent_deal_amount"],
-          limit: 100,
-        }),
+      const wonResult = await hubspotSearch(token, {
+        filterGroups: [
+          {
+            filters: [
+              { propertyName: "lifecyclestage", operator: "EQ", value: stage },
+              { propertyName: "first_deal_created_date", operator: "GTE", value: prevFromMs.toString() },
+              { propertyName: "first_deal_created_date", operator: "LTE", value: prevToMs.toString() },
+            ],
+          },
+        ],
+        properties: ["recent_deal_amount"],
+        limit: 100,
       });
-      if (wonRes.ok) {
-        const data = await wonRes.json();
-        wonJobs += data.total ?? 0;
-        for (const c of data.results ?? []) {
-          const amt = parseFloat(c.properties?.recent_deal_amount ?? "0");
-          if (!isNaN(amt)) wonValue += amt;
-        }
+      wonJobs += wonResult.total ?? 0;
+      for (const c of wonResult.results ?? []) {
+        const amt = parseFloat(c.properties?.recent_deal_amount ?? "0");
+        if (!isNaN(amt)) wonValue += amt;
       }
     }
 
-    return Response.json({
+    return {
       contacts,
       prospects,
       leads,
@@ -179,9 +119,14 @@ export async function GET(request: NextRequest) {
       // Echo back the calculated previous period for the UI label
       from: prevFrom,
       to: prevTo,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return Response.json({ error: message }, { status: 500 });
-  }
+    };
+  });
+
+  const isPast = to < new Date().toISOString().slice(0, 10);
+  return new Response(JSON.stringify(data), {
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": isPast ? "private, max-age=3600" : "private, max-age=300",
+    },
+  });
 }

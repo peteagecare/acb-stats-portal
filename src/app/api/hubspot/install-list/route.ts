@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
-
-const HUBSPOT_API = "https://api.hubapi.com";
+import { HUBSPOT_API } from "@/lib/hubspot";
+import { cached, cacheKey, TTL } from "@/lib/cache";
 
 async function dealsSearch(token: string, body: object): Promise<{
   results: { id: string; properties: Record<string, string | null> }[];
@@ -48,12 +48,13 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: "Missing required params: from, to" }, { status: 400 });
   }
 
-  const [fy, fm, fd] = from.split("-").map(Number);
-  const [ty, tm, td] = to.split("-").map(Number);
-  const fromMs = Date.UTC(fy, fm - 1, fd, 0, 0, 0);
-  const toMs = Date.UTC(ty, tm - 1, td, 23, 59, 59, 999);
+  const key = cacheKey("install-list", { from, to });
+  const data = await cached(key, TTL.SHORT, async () => {
+    const [fy, fm, fd] = from.split("-").map(Number);
+    const [ty, tm, td] = to.split("-").map(Number);
+    const fromMs = Date.UTC(fy, fm - 1, fd, 0, 0, 0);
+    const toMs = Date.UTC(ty, tm - 1, td, 23, 59, 59, 999);
 
-  try {
     let after: string | undefined;
     let pages = 0;
     const MAX_PAGES = 20;
@@ -82,8 +83,8 @@ export async function GET(request: NextRequest) {
       };
       if (after) body.after = after;
 
-      const data = await dealsSearch(token, body);
-      for (const d of data.results ?? []) {
+      const result = await dealsSearch(token, body);
+      for (const d of result.results ?? []) {
         allDeals.push({
           id: d.id,
           name: d.properties?.dealname ?? "Unnamed deal",
@@ -93,16 +94,19 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      after = data.paging?.next?.after;
+      after = result.paging?.next?.after;
       pages++;
       if (pages >= MAX_PAGES) break;
     } while (after);
 
-    return Response.json({ deals: allDeals });
-  } catch (e) {
-    return Response.json(
-      { error: e instanceof Error ? e.message : "HubSpot request failed" },
-      { status: 502 },
-    );
-  }
+    return { deals: allDeals };
+  });
+
+  const isPast = to < new Date().toISOString().slice(0, 10);
+  return new Response(JSON.stringify(data), {
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": isPast ? "private, max-age=3600" : "private, max-age=300",
+    },
+  });
 }

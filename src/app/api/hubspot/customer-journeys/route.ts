@@ -1,8 +1,7 @@
 import { NextRequest } from "next/server";
 import { LIFECYCLE_EXCLUSION_FILTER } from "@/lib/hubspot-exclusions";
-
-const HUBSPOT_API = "https://api.hubapi.com";
-const TZ = "Europe/London";
+import { londonDateToUtcMs, hubspotFetch, HUBSPOT_API } from "@/lib/hubspot";
+import { cached, cacheKey, TTL } from "@/lib/cache";
 
 /** Friendly labels for form titles / conversion actions.
  *  Keys are lowercase for case-insensitive matching.
@@ -62,52 +61,6 @@ function friendlyName(raw: string): string {
     if (re.test(key)) return label;
   }
   return raw;
-}
-
-function londonDateToUtcMs(dateStr: string, time: string): number {
-  const formatter = new Intl.DateTimeFormat("en-GB", {
-    timeZone: TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-    timeZoneName: "shortOffset",
-  });
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const [hh, mm, ss] = time.split(":").map(Number);
-  const utcGuess = Date.UTC(y, m - 1, d, hh, mm, ss);
-  const parts = formatter.formatToParts(new Date(utcGuess));
-  const tzPart = parts.find((p) => p.type === "timeZoneName")?.value ?? "+00";
-  const offsetMatch = tzPart.match(/([+-]\d+)/);
-  const offsetHours = offsetMatch ? parseInt(offsetMatch[1], 10) : 0;
-  return Date.UTC(y, m - 1, d, hh - offsetHours, mm, ss);
-}
-
-async function hubspotFetch(url: string, token: string, options?: RequestInit) {
-  const MAX_RETRIES = 3;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const res = await fetch(url, {
-      cache: "no-store",
-      ...options,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        ...options?.headers,
-      },
-    });
-    if (res.status === 429 && attempt < MAX_RETRIES) {
-      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
-      continue;
-    }
-    if (!res.ok) {
-      throw new Error(`HubSpot ${res.status}: ${await res.text()}`);
-    }
-    return res.json();
-  }
-  throw new Error("HubSpot request failed after retries");
 }
 
 /* ── Step 1: search contacts in period ── */
@@ -193,7 +146,7 @@ async function searchContacts(
       { method: "POST", body: JSON.stringify(body) },
     );
 
-    for (const c of data.results ?? []) {
+    for (const c of (data.results as { id: string; properties: Record<string, string | null> }[]) ?? []) {
       if (seen.has(c.id)) continue;
       seen.add(c.id);
       const props = c.properties ?? {};
@@ -220,7 +173,7 @@ async function searchContacts(
       });
     }
 
-    after = data.paging?.next?.after;
+    after = (data.paging as { next?: { after: string } })?.next?.after;
     pages++;
   } while (after && pages < 80);
 
@@ -289,14 +242,15 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: "Missing required params: from, to" }, { status: 400 });
   }
 
-  const fromMs = londonDateToUtcMs(from, "00:00:00");
-  const toMs = londonDateToUtcMs(to, "23:59:59");
+  const key = cacheKey("customer-journeys", { from, to });
+  const data = await cached(key, TTL.MEDIUM, async () => {
+    const fromMs = londonDateToUtcMs(from, "00:00:00");
+    const toMs = londonDateToUtcMs(to, "23:59:59");
 
-  try {
     const contacts = await searchContacts(token, fromMs, toMs);
 
     if (contacts.length === 0) {
-      return Response.json({ journeys: [], totalContacts: 0 });
+      return { journeys: [], totalContacts: 0, filters: { leadSources: [], conversionActions: [], forms: [] }, contactJourneys: [] };
     }
 
     const ids = contacts.map((c) => c.id);
@@ -309,7 +263,7 @@ export async function GET(request: NextRequest) {
         `${HUBSPOT_API}/crm/v3/properties/contacts/original_lead_source`,
         token,
       );
-      for (const opt of res.options ?? []) {
+      for (const opt of (res.options as { value: string; label: string }[]) ?? []) {
         if (opt?.value) sourceLabels[opt.value] = opt.label ?? opt.value;
       }
     } catch { /* non-critical */ }
@@ -418,8 +372,8 @@ export async function GET(request: NextRequest) {
     // Aggregate into unique paths
     const pathCounts = new Map<string, number>();
     for (const cj of contactJourneys) {
-      const key = cj.steps.join(" → ");
-      pathCounts.set(key, (pathCounts.get(key) ?? 0) + 1);
+      const pathKey = cj.steps.join(" → ");
+      pathCounts.set(pathKey, (pathCounts.get(pathKey) ?? 0) + 1);
     }
 
     const journeys = Array.from(pathCounts.entries())
@@ -440,7 +394,7 @@ export async function GET(request: NextRequest) {
       for (const f of cj.forms) formSet.add(f);
     }
 
-    return Response.json({
+    return {
       journeys,
       totalContacts: contacts.length,
       filters: {
@@ -461,12 +415,14 @@ export async function GET(request: NextRequest) {
         forms: cj.forms,
         createdInPeriod: cj.createdInPeriod,
       })),
-    });
-  } catch (e) {
-    console.error("[customer-journeys] error:", e);
-    return Response.json(
-      { error: e instanceof Error ? e.message : "HubSpot request failed" },
-      { status: 502 },
-    );
-  }
+    };
+  });
+
+  const isPast = to < new Date().toISOString().slice(0, 10);
+  return new Response(JSON.stringify(data), {
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": isPast ? "private, max-age=3600" : "private, max-age=300",
+    },
+  });
 }

@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
+import { HUBSPOT_API } from "@/lib/hubspot";
+import { cached, cacheKey, TTL } from "@/lib/cache";
 
-const HUBSPOT_API = "https://api.hubapi.com";
 const TZ = "Europe/London";
 
 /**
@@ -64,26 +65,27 @@ export async function GET(_request: NextRequest) {
     return Response.json({ error: "Missing HUBSPOT_ACCESS_TOKEN" }, { status: 500 });
   }
 
-  const today = londonToday();
+  const key = cacheKey("installs", {});
+  const data = await cached(key, TTL.SHORT, async () => {
+    const today = londonToday();
 
-  // Build the three month windows: this month, next month, month after
-  function monthWindow(offset: number): { startMs: number; endMs: number; label: string; year: number; month: number } {
-    let m = today.m - 1 + offset; // 0-indexed
-    let y = today.y;
-    while (m < 0) { m += 12; y -= 1; }
-    while (m > 11) { m -= 12; y += 1; }
-    const startMs = Date.UTC(y, m, 1, 0, 0, 0);
-    const endMs = Date.UTC(y, m + 1, 0, 23, 59, 59, 999); // last day of month
-    return { startMs, endMs, label: MONTH_LABELS[m], year: y, month: m + 1 };
-  }
+    // Build the three month windows: this month, next month, month after
+    function monthWindow(offset: number): { startMs: number; endMs: number; label: string; year: number; month: number } {
+      let m = today.m - 1 + offset; // 0-indexed
+      let y = today.y;
+      while (m < 0) { m += 12; y -= 1; }
+      while (m > 11) { m -= 12; y += 1; }
+      const startMs = Date.UTC(y, m, 1, 0, 0, 0);
+      const endMs = Date.UTC(y, m + 1, 0, 23, 59, 59, 999); // last day of month
+      return { startMs, endMs, label: MONTH_LABELS[m], year: y, month: m + 1 };
+    }
 
-  const months = [
-    { ...monthWindow(0), key: "thisMonth" as const, displayLabel: "This Month" },
-    { ...monthWindow(1), key: "nextMonth" as const, displayLabel: "Next Month" },
-    { ...monthWindow(2), key: "monthAfter" as const, displayLabel: "Month After" },
-  ];
+    const months = [
+      { ...monthWindow(0), key: "thisMonth" as const, displayLabel: "This Month" },
+      { ...monthWindow(1), key: "nextMonth" as const, displayLabel: "Next Month" },
+      { ...monthWindow(2), key: "monthAfter" as const, displayLabel: "Month After" },
+    ];
 
-  try {
     const counts = await Promise.all(
       months.map((m) =>
         dealsSearch(token, {
@@ -102,7 +104,7 @@ export async function GET(_request: NextRequest) {
       ),
     );
 
-    return Response.json({
+    return {
       months: months.map((m, i) => ({
         key: m.key,
         label: m.displayLabel,
@@ -110,11 +112,13 @@ export async function GET(_request: NextRequest) {
         year: m.year,
         count: counts[i].total ?? 0,
       })),
-    });
-  } catch (e) {
-    return Response.json(
-      { error: e instanceof Error ? e.message : "HubSpot request failed" },
-      { status: 502 },
-    );
-  }
+    };
+  });
+
+  return new Response(JSON.stringify(data), {
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "private, max-age=300",
+    },
+  });
 }

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
-
-const HUBSPOT_API = "https://api.hubapi.com";
+import { hubspotSearch } from "@/lib/hubspot";
+import { cached, cacheKey, TTL } from "@/lib/cache";
 
 export async function GET(request: NextRequest) {
   const token = process.env.HUBSPOT_ACCESS_TOKEN;
@@ -8,38 +8,32 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: "Missing HUBSPOT_ACCESS_TOKEN" }, { status: 500 });
   }
 
-  const body = {
-    filterGroups: [
-      {
-        filters: [
-          {
-            propertyName: "lifecyclestage",
-            operator: "EQ",
-            value: "151694551",
-          },
-        ],
-      },
-    ],
-    properties: ["lifecyclestage"],
-    limit: 1,
-  };
+  const key = cacheKey("pipeline-value", {});
+  const data = await cached(key, TTL.LONG, async () => {
+    const body = {
+      filterGroups: [
+        {
+          filters: [
+            {
+              propertyName: "lifecyclestage",
+              operator: "EQ",
+              value: "151694551",
+            },
+          ],
+        },
+      ],
+      properties: ["lifecyclestage"],
+      limit: 1,
+    };
 
-  const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts/search`, {
-    method: "POST",
-    cache: "no-store",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
+    const result = await hubspotSearch(token, body);
+    return { count: result.total ?? 0 };
   });
 
-  if (!res.ok) {
-    const err = await res.text();
-    return Response.json({ error: err }, { status: res.status });
-  }
-
-  const data = await res.json();
-
-  return Response.json({ count: data.total ?? 0 });
+  return new Response(JSON.stringify(data), {
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "private, max-age=300",
+    },
+  });
 }
