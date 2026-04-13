@@ -1720,49 +1720,23 @@ function Dashboard() {
     setError(null);
     setLoadProgress(5);
     setDataReady(false);
+    setSelectedMetric("contacts");
     try {
-      const gaRes = await fetch(`/api/ga/active-users?from=${from}&to=${to}`);
-      if (gaRes.ok) setActiveUsers((await gaRes.json()).activeUsers);
-      setLoadProgress(15);
-
-      // Batch 1: Core data
-      const [sourcesRes, actionsRes, visitsRes] = await Promise.all([
+      // Fire ALL API calls in parallel — no sequential batching
+      const [
+        gaRes, sourcesRes, actionsRes, visitsRes, wonRes, organicRes,
+        breakdownRes, lcPeriodRes, timelineRes, unattribRes, dowRes,
+        siteVisitsRes, installsRes, hvBreakdownRes, funnelSourceRes,
+        outreachRes, timingRes, p2lRes, journeysRes, lctRes,
+      ] = await Promise.all([
+        fetch(`/api/ga/active-users?from=${from}&to=${to}`),
         fetch(`/api/hubspot/lead-sources?from=${from}&to=${to}`),
         fetch(`/api/hubspot/conversion-actions?from=${from}&to=${to}`),
         fetch(`/api/hubspot/home-visits?from=${from}&to=${to}`),
-      ]);
-      if (sourcesRes.ok) setSources((await sourcesRes.json()).sources);
-      if (actionsRes.ok) setConversionActions((await actionsRes.json()).actions);
-      if (visitsRes.ok) setHomeVisits((await visitsRes.json()).total);
-      setLoadProgress(40);
-
-      // Batch 2: Won jobs + organic leads
-      const [wonRes, organicRes] = await Promise.all([
         fetch(`/api/hubspot/won-deals?from=${from}&to=${to}`),
         fetch(`/api/hubspot/organic-leads?from=${from}&to=${to}`),
-      ]);
-      if (wonRes.ok) {
-        const wonData = await wonRes.json();
-        setWonJobs(wonData.total);
-        setWonValue(wonData.totalValue);
-        setWonBySource(wonData.bySource ?? []);
-      }
-      if (organicRes.ok) setOrganicLeads((await organicRes.json()).total);
-      setLoadProgress(55);
-
-      // Batch 3: Source breakdown
-      const breakdownRes = await fetch(`/api/hubspot/source-breakdown?from=${from}&to=${to}`);
-      if (breakdownRes.ok) setSourceBreakdown((await breakdownRes.json()).breakdown);
-      setLoadProgress(70);
-
-      // Batch 4: Lifecycle period
-      const lcPeriodRes = await fetch(`/api/hubspot/lifecycle-stages-period?from=${from}&to=${to}`);
-      if (lcPeriodRes.ok) setLifecyclePeriod((await lcPeriodRes.json()).stages);
-      setLoadProgress(85);
-
-      // Batch 5: Timeline + unattributed + day-of-week conversion
-      setSelectedMetric("contacts");
-      const [timelineRes, unattribRes, dowRes, siteVisitsRes, installsRes, hvBreakdownRes, funnelSourceRes, outreachRes, timingRes, p2lRes, journeysRes, lctRes] = await Promise.all([
+        fetch(`/api/hubspot/source-breakdown?from=${from}&to=${to}`),
+        fetch(`/api/hubspot/lifecycle-stages-period?from=${from}&to=${to}`),
         fetch(`/api/hubspot/contacts-daily?from=${from}&to=${to}&metric=contacts`),
         fetch(`/api/hubspot/unattributed?from=${from}&to=${to}`),
         fetch(`/api/hubspot/dow-conversion?from=${from}&to=${to}`),
@@ -1776,6 +1750,22 @@ function Dashboard() {
         fetch(`/api/hubspot/customer-journeys?from=${from}&to=${to}`),
         fetch(`/api/hubspot/lead-creation-timeline?from=${from}&to=${to}`),
       ]);
+      setLoadProgress(80);
+
+      // Process all responses
+      if (gaRes.ok) setActiveUsers((await gaRes.json()).activeUsers);
+      if (sourcesRes.ok) setSources((await sourcesRes.json()).sources);
+      if (actionsRes.ok) setConversionActions((await actionsRes.json()).actions);
+      if (visitsRes.ok) setHomeVisits((await visitsRes.json()).total);
+      if (wonRes.ok) {
+        const wonData = await wonRes.json();
+        setWonJobs(wonData.total);
+        setWonValue(wonData.totalValue);
+        setWonBySource(wonData.bySource ?? []);
+      }
+      if (organicRes.ok) setOrganicLeads((await organicRes.json()).total);
+      if (breakdownRes.ok) setSourceBreakdown((await breakdownRes.json()).breakdown);
+      if (lcPeriodRes.ok) setLifecyclePeriod((await lcPeriodRes.json()).stages);
       if (unattribRes.ok) {
         setUnattributed(await unattribRes.json());
       } else {

@@ -38,14 +38,10 @@ export async function GET(request: NextRequest) {
       (propData as { options?: { value: string; label: string; displayOrder: number }[] }).options ?? [];
     const options = allOptions.filter((o) => !EXCLUDED_LIFECYCLE_STAGES.includes(o.value));
 
-    const BATCH_SIZE = 4;
-    const counts: number[] = [];
-    for (let i = 0; i < options.length; i += BATCH_SIZE) {
-      const batch = options.slice(i, i + BATCH_SIZE);
-      const results = await Promise.all(batch.map((opt) => countByStageInPeriod(token, opt.value, fromMs, toMs)));
-      counts.push(...results);
-      if (i + BATCH_SIZE < options.length) await new Promise((r) => setTimeout(r, 1500));
-    }
+    // Fire all stage counts in parallel — no delays needed
+    const counts = await Promise.all(
+      options.map((opt) => countByStageInPeriod(token, opt.value, fromMs, toMs))
+    );
 
     const stages = options
       .map((opt, i) => ({ label: opt.label, value: opt.value, count: counts[i], order: opt.displayOrder }))

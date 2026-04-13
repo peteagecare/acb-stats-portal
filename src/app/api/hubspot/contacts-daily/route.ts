@@ -145,25 +145,15 @@ export async function GET(request: NextRequest) {
   const data = await cached(key, TTL.MEDIUM, async () => {
     const { buckets, granularity } = buildBuckets(from, to);
 
-    const BATCH_SIZE = 4;
-    const results: { label: string; count: number }[] = [];
-
-    for (let i = 0; i < buckets.length; i += BATCH_SIZE) {
-      const batch = buckets.slice(i, i + BATCH_SIZE);
-      const counts = await Promise.all(
-        batch.map((b) => {
-          const bFrom = londonDateToUtcMs(b.from, "00:00:00");
-          const bTo = londonDateToUtcMs(b.to, "23:59:59");
-          return countForRange(token, metric, bFrom, bTo);
-        })
-      );
-      for (let j = 0; j < batch.length; j++) {
-        results.push({ label: batch[j].label, count: counts[j] });
-      }
-      if (i + BATCH_SIZE < buckets.length) {
-        await new Promise((r) => setTimeout(r, 1500));
-      }
-    }
+    // Fire all bucket counts in parallel — no delays needed
+    const counts = await Promise.all(
+      buckets.map((b) => {
+        const bFrom = londonDateToUtcMs(b.from, "00:00:00");
+        const bTo = londonDateToUtcMs(b.to, "23:59:59");
+        return countForRange(token, metric, bFrom, bTo);
+      })
+    );
+    const results = buckets.map((b, i) => ({ label: b.label, count: counts[i] }));
 
     return { data: results, granularity, metric };
   });

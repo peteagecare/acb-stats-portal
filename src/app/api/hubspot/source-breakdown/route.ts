@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { LIFECYCLE_EXCLUSION_FILTER } from "@/lib/hubspot-exclusions";
-import { londonDateToUtcMs, hubspotSearch, hubspotFetch, PROSPECT_ACTIONS, LEAD_ACTIONS, SOURCE_CATEGORIES, getSourceCategory } from "@/lib/hubspot";
+import { londonDateToUtcMs, hubspotSearch, hubspotFetch, PROSPECT_ACTIONS, LEAD_ACTIONS, getSourceCategory } from "@/lib/hubspot";
 import { cached, cacheKey, TTL } from "@/lib/cache";
 
 export async function GET(request: NextRequest) {
@@ -17,14 +17,9 @@ export async function GET(request: NextRequest) {
     const fromMs = londonDateToUtcMs(from, "00:00:00");
     const toMs = londonDateToUtcMs(to, "23:59:59");
 
-    // Get source options
-    const propData = await hubspotFetch(
-      "/crm/v3/properties/contacts/original_lead_source",
-      token,
-    );
+    const propData = await hubspotFetch("/crm/v3/properties/contacts/original_lead_source", token);
     const options: { value: string }[] = (propData as { options?: { value: string }[] }).options ?? [];
 
-    // Group sources by category
     const categorySourceValues: Record<string, string[]> = { PPC: [], SEO: [], Content: [], Other: [] };
     for (const opt of options) {
       categorySourceValues[getSourceCategory(opt.value)].push(opt.value);
@@ -43,40 +38,25 @@ export async function GET(request: NextRequest) {
       LIFECYCLE_EXCLUSION_FILTER,
     ];
 
-    // 8 queries total: 4 categories x 2 types (prospect/lead)
-    // Run them one at a time with delays to avoid rate limits
-    for (const cat of ["PPC", "SEO", "Content", "Other"] as const) {
+    // Fire all 8 queries in parallel (4 categories × 2 types)
+    const categories = ["PPC", "SEO", "Content", "Other"] as const;
+    const queries = categories.flatMap((cat) => {
       const sourceValues = categorySourceValues[cat];
-      if (sourceValues.length === 0) continue;
+      if (sourceValues.length === 0) return [];
+      const sourceFilter = { propertyName: "original_lead_source", operator: "IN", values: sourceValues };
+      return [
+        { cat, type: "prospects" as const, body: { filterGroups: [{ filters: [...dateFilters, sourceFilter, { propertyName: "conversion_action", operator: "IN", values: PROSPECT_ACTIONS }] }], properties: ["conversion_action"], limit: 1 } },
+        { cat, type: "leads" as const, body: { filterGroups: [{ filters: [...dateFilters, sourceFilter, { propertyName: "conversion_action", operator: "IN", values: LEAD_ACTIONS }] }], properties: ["conversion_action"], limit: 1 } },
+      ];
+    });
 
-      // Prospects for this category
-      const prospectResult = await hubspotSearch(token, {
-        filterGroups: [{ filters: [
-          ...dateFilters,
-          { propertyName: "original_lead_source", operator: "IN", values: sourceValues },
-          { propertyName: "conversion_action", operator: "IN", values: PROSPECT_ACTIONS },
-        ] }],
-        properties: ["conversion_action"],
-        limit: 1,
-      });
-      results[cat].prospects = prospectResult.total ?? 0;
+    const counts = await Promise.all(
+      queries.map((q) => hubspotSearch(token, q.body).then((r) => r.total ?? 0))
+    );
 
-      await new Promise((r) => setTimeout(r, 500));
-
-      // Leads for this category
-      const leadResult = await hubspotSearch(token, {
-        filterGroups: [{ filters: [
-          ...dateFilters,
-          { propertyName: "original_lead_source", operator: "IN", values: sourceValues },
-          { propertyName: "conversion_action", operator: "IN", values: LEAD_ACTIONS },
-        ] }],
-        properties: ["conversion_action"],
-        limit: 1,
-      });
-      results[cat].leads = leadResult.total ?? 0;
-
-      await new Promise((r) => setTimeout(r, 500));
-    }
+    queries.forEach((q, i) => {
+      results[q.cat][q.type] = counts[i];
+    });
 
     return { breakdown: results };
   });

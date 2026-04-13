@@ -12,91 +12,43 @@ async function countContacts(
     | { operator: "NOT_HAS_PROPERTY" }
 ): Promise<number> {
   const filters = [
-    {
-      propertyName: "createdate",
-      operator: "GTE",
-      value: fromMs.toString(),
-    },
-    {
-      propertyName: "createdate",
-      operator: "LTE",
-      value: toMs.toString(),
-    },
-    {
-      propertyName: "conversion_action",
-      ...actionFilter,
-    },
+    { propertyName: "createdate", operator: "GTE", value: fromMs.toString() },
+    { propertyName: "createdate", operator: "LTE", value: toMs.toString() },
+    { propertyName: "conversion_action", ...actionFilter },
     LIFECYCLE_EXCLUSION_FILTER,
   ];
 
-  const data = await hubspotFetch(
-    "/crm/v3/objects/contacts/search",
-    token,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        filterGroups: [{ filters }],
-        properties: ["conversion_action"],
-        limit: 1,
-      }),
-    }
-  );
+  const data = await hubspotFetch("/crm/v3/objects/contacts/search", token, {
+    method: "POST",
+    body: JSON.stringify({ filterGroups: [{ filters }], properties: ["conversion_action"], limit: 1 }),
+  });
 
   return (data as { total?: number }).total ?? 0;
 }
 
 export async function GET(request: NextRequest) {
   const token = process.env.HUBSPOT_ACCESS_TOKEN;
-  if (!token) {
-    return Response.json({ error: "Missing HUBSPOT_ACCESS_TOKEN" }, { status: 500 });
-  }
+  if (!token) return Response.json({ error: "Missing HUBSPOT_ACCESS_TOKEN" }, { status: 500 });
 
   const { searchParams } = request.nextUrl;
   const from = searchParams.get("from");
   const to = searchParams.get("to");
-
-  if (!from || !to) {
-    return Response.json({ error: "Missing required params: from, to" }, { status: 400 });
-  }
+  if (!from || !to) return Response.json({ error: "Missing required params: from, to" }, { status: 400 });
 
   const key = cacheKey("conversion-actions", { from, to });
   const data = await cached(key, TTL.MEDIUM, async () => {
     const fromMs = londonDateToUtcMs(from, "00:00:00");
     const toMs = londonDateToUtcMs(to, "23:59:59");
 
-    // Fetch property definition to get all conversion action options
-    const propData = await hubspotFetch(
-      "/crm/v3/properties/contacts/conversion_action",
-      token
-    );
-
+    const propData = await hubspotFetch("/crm/v3/properties/contacts/conversion_action", token);
     const options: { value: string; label: string }[] = (propData as { options?: { value: string; label: string }[] }).options ?? [];
 
-    // Count contacts for each action, batched to avoid rate limits
-    const allQueries: Array<
-      | { operator: "EQ"; value: string }
-      | { operator: "NOT_HAS_PROPERTY" }
-    > = options.map((opt) => ({ operator: "EQ" as const, value: opt.value }));
+    // Fire all queries in parallel — HubSpot allows 100 req/10s
+    const allCounts = await Promise.all(
+      options.map((opt) => countContacts(token, fromMs, toMs, { operator: "EQ", value: opt.value }))
+    );
 
-    const BATCH_SIZE = 4;
-    const allCounts: number[] = [];
-
-    for (let i = 0; i < allQueries.length; i += BATCH_SIZE) {
-      const batch = allQueries.slice(i, i + BATCH_SIZE);
-      const results = await Promise.all(
-        batch.map((q) => countContacts(token, fromMs, toMs, q))
-      );
-      allCounts.push(...results);
-      if (i + BATCH_SIZE < allQueries.length) {
-        await new Promise((r) => setTimeout(r, 1500));
-      }
-    }
-
-    const actions = options.map((opt, i) => ({
-      label: opt.label,
-      value: opt.value,
-      count: allCounts[i],
-    }));
+    const actions = options.map((opt, i) => ({ label: opt.label, value: opt.value, count: allCounts[i] }));
 
     return { actions };
   });
