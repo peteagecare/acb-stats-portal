@@ -1749,10 +1749,15 @@ function Dashboard() {
       ]);
       setLoadProgress(50);
 
-      // Batch 3: Heavy N+1 routes (each fires 8-15+ internal HubSpot queries)
-      const [sourcesRes, actionsRes, breakdownRes, lcPeriodRes, lctRes] = await Promise.all([
+      // Batch 3a: Heavy N+1 routes — only 2 at a time to respect HubSpot search limit (4 req/s)
+      const [sourcesRes, actionsRes] = await Promise.all([
         fetch(`/api/hubspot/lead-sources?from=${from}&to=${to}`),
         fetch(`/api/hubspot/conversion-actions?from=${from}&to=${to}`),
+      ]);
+      setLoadProgress(65);
+
+      // Batch 3b: More N+1 routes
+      const [breakdownRes, lcPeriodRes, lctRes] = await Promise.all([
         fetch(`/api/hubspot/source-breakdown?from=${from}&to=${to}`),
         fetch(`/api/hubspot/lifecycle-stages-period?from=${from}&to=${to}`),
         fetch(`/api/hubspot/lead-creation-timeline?from=${from}&to=${to}`),

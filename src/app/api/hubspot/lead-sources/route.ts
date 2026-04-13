@@ -50,9 +50,10 @@ export async function GET(request: NextRequest) {
       ...options.map((opt) => ({ operator: "EQ" as const, value: opt.value })),
     ];
 
-    const BATCH = 8;
+    const BATCH = 4;
     const allCounts: number[] = [];
     for (let i = 0; i < allQueries.length; i += BATCH) {
+      if (i > 0) await new Promise((r) => setTimeout(r, 250));
       const results = await Promise.all(
         allQueries.slice(i, i + BATCH).map((q) => countContacts(token, fromMs, toMs, q))
       );

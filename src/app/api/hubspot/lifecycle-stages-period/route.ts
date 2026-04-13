@@ -39,9 +39,10 @@ export async function GET(request: NextRequest) {
     const options = allOptions.filter((o) => !EXCLUDED_LIFECYCLE_STAGES.includes(o.value));
 
     // Batch stage counts 8 at a time to avoid HubSpot rate limits
-    const BATCH = 8;
+    const BATCH = 4;
     const counts: number[] = [];
     for (let i = 0; i < options.length; i += BATCH) {
+      if (i > 0) await new Promise((r) => setTimeout(r, 250));
       const results = await Promise.all(
         options.slice(i, i + BATCH).map((opt) => countByStageInPeriod(token, opt.value, fromMs, toMs))
       );

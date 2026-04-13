@@ -44,9 +44,10 @@ export async function GET(request: NextRequest) {
     const options: { value: string; label: string }[] = (propData as { options?: { value: string; label: string }[] }).options ?? [];
 
     // Batch queries 8 at a time to avoid HubSpot rate limits
-    const BATCH = 8;
+    const BATCH = 4;
     const allCounts: number[] = [];
     for (let i = 0; i < options.length; i += BATCH) {
+      if (i > 0) await new Promise((r) => setTimeout(r, 250));
       const results = await Promise.all(
         options.slice(i, i + BATCH).map((opt) => countContacts(token, fromMs, toMs, { operator: "EQ", value: opt.value }))
       );

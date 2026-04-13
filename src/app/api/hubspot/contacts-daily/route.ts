@@ -146,9 +146,10 @@ export async function GET(request: NextRequest) {
     const { buckets, granularity } = buildBuckets(from, to);
 
     // Batch bucket counts 8 at a time to avoid HubSpot rate limits
-    const BATCH = 8;
+    const BATCH = 4;
     const allCounts: number[] = [];
     for (let i = 0; i < buckets.length; i += BATCH) {
+      if (i > 0) await new Promise((r) => setTimeout(r, 250));
       const batchCounts = await Promise.all(
         buckets.slice(i, i + BATCH).map((b) => {
           const bFrom = londonDateToUtcMs(b.from, "00:00:00");
