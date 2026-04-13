@@ -41,13 +41,40 @@ export function londonDateToUtcMs(dateStr: string, time: string): number {
 }
 
 // ---------------------------------------------------------------------------
+// Concurrency limiter — keeps total in-flight HubSpot requests ≤ MAX_CONCURRENT
+// so parallel routes don't blow past HubSpot's 100 req/10s rate limit.
+// ---------------------------------------------------------------------------
+
+const MAX_CONCURRENT = 8;
+let inflight = 0;
+const queue: Array<() => void> = [];
+
+function acquire(): Promise<void> {
+  if (inflight < MAX_CONCURRENT) {
+    inflight++;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    queue.push(() => { inflight++; resolve(); });
+  });
+}
+
+function release(): void {
+  inflight--;
+  if (queue.length > 0) {
+    const next = queue.shift()!;
+    next();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Fetch helpers with retry
 // ---------------------------------------------------------------------------
 
 const MAX_RETRIES = 3;
 
 /**
- * Generic HubSpot API call with 429 retry + exponential backoff.
+ * Generic HubSpot API call with concurrency limiting, 429 retry + backoff.
  * `pathOrUrl` can be a path like "/crm/v3/..." (prefixed with HUBSPOT_API)
  * or a full URL.
  */
@@ -60,26 +87,31 @@ export async function hubspotFetch(
     ? pathOrUrl
     : `${HUBSPOT_API}${pathOrUrl}`;
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const res = await fetch(url, {
-      ...options,
-      cache: "no-store",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        ...options?.headers,
-      },
-    });
-    if (res.status === 429 && attempt < MAX_RETRIES) {
-      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
-      continue;
+  await acquire();
+  try {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const res = await fetch(url, {
+        ...options,
+        cache: "no-store",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          ...options?.headers,
+        },
+      });
+      if (res.status === 429 && attempt < MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+        continue;
+      }
+      if (!res.ok) {
+        throw new Error(`HubSpot API error: ${res.status} ${await res.text()}`);
+      }
+      return res.json();
     }
-    if (!res.ok) {
-      throw new Error(`HubSpot API error: ${res.status} ${await res.text()}`);
-    }
-    return res.json();
+    throw new Error("HubSpot request failed after retries");
+  } finally {
+    release();
   }
-  throw new Error("HubSpot request failed after retries");
 }
 
 /**
