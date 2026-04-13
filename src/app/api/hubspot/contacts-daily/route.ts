@@ -145,15 +145,20 @@ export async function GET(request: NextRequest) {
   const data = await cached(key, TTL.MEDIUM, async () => {
     const { buckets, granularity } = buildBuckets(from, to);
 
-    // Fire all bucket counts in parallel — no delays needed
-    const counts = await Promise.all(
-      buckets.map((b) => {
-        const bFrom = londonDateToUtcMs(b.from, "00:00:00");
-        const bTo = londonDateToUtcMs(b.to, "23:59:59");
-        return countForRange(token, metric, bFrom, bTo);
-      })
-    );
-    const results = buckets.map((b, i) => ({ label: b.label, count: counts[i] }));
+    // Batch bucket counts 8 at a time to avoid HubSpot rate limits
+    const BATCH = 8;
+    const allCounts: number[] = [];
+    for (let i = 0; i < buckets.length; i += BATCH) {
+      const batchCounts = await Promise.all(
+        buckets.slice(i, i + BATCH).map((b) => {
+          const bFrom = londonDateToUtcMs(b.from, "00:00:00");
+          const bTo = londonDateToUtcMs(b.to, "23:59:59");
+          return countForRange(token, metric, bFrom, bTo);
+        })
+      );
+      allCounts.push(...batchCounts);
+    }
+    const results = buckets.map((b, i) => ({ label: b.label, count: allCounts[i] }));
 
     return { data: results, granularity, metric };
   });

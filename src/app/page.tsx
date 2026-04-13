@@ -1722,35 +1722,43 @@ function Dashboard() {
     setDataReady(false);
     setSelectedMetric("contacts");
     try {
-      // Fire ALL API calls in parallel — no sequential batching
-      const [
-        gaRes, sourcesRes, actionsRes, visitsRes, wonRes, organicRes,
-        breakdownRes, lcPeriodRes, timelineRes, unattribRes, dowRes,
-        siteVisitsRes, installsRes, hvBreakdownRes, funnelSourceRes,
-        outreachRes, timingRes, p2lRes, journeysRes, lctRes,
-      ] = await Promise.all([
+      // Fire API calls in 3 controlled batches to avoid HubSpot rate limits.
+      // Each batch runs in parallel; batches run sequentially.
+
+      // Batch 1: Light/fast queries (single HubSpot call each)
+      const [gaRes, visitsRes, wonRes, organicRes, unattribRes, installsRes] = await Promise.all([
         fetch(`/api/ga/active-users?from=${from}&to=${to}`),
-        fetch(`/api/hubspot/lead-sources?from=${from}&to=${to}`),
-        fetch(`/api/hubspot/conversion-actions?from=${from}&to=${to}`),
         fetch(`/api/hubspot/home-visits?from=${from}&to=${to}`),
         fetch(`/api/hubspot/won-deals?from=${from}&to=${to}`),
         fetch(`/api/hubspot/organic-leads?from=${from}&to=${to}`),
+        fetch(`/api/hubspot/unattributed?from=${from}&to=${to}`),
+        fetch(`/api/hubspot/installs`),
+      ]);
+      setLoadProgress(30);
+
+      // Batch 2: Medium queries (multiple HubSpot sub-queries each)
+      const [sourcesRes, actionsRes, breakdownRes, lcPeriodRes, siteVisitsRes, hvBreakdownRes, dowRes, timingRes, p2lRes, outreachRes] = await Promise.all([
+        fetch(`/api/hubspot/lead-sources?from=${from}&to=${to}`),
+        fetch(`/api/hubspot/conversion-actions?from=${from}&to=${to}`),
         fetch(`/api/hubspot/source-breakdown?from=${from}&to=${to}`),
         fetch(`/api/hubspot/lifecycle-stages-period?from=${from}&to=${to}`),
-        fetch(`/api/hubspot/contacts-daily?from=${from}&to=${to}&metric=contacts`),
-        fetch(`/api/hubspot/unattributed?from=${from}&to=${to}`),
-        fetch(`/api/hubspot/dow-conversion?from=${from}&to=${to}`),
         fetch(`/api/hubspot/site-visits?from=${from}&to=${to}`),
-        fetch(`/api/hubspot/installs`),
         fetch(`/api/hubspot/home-visit-breakdown?from=${from}&to=${to}`),
-        fetch(`/api/hubspot/funnel-by-source?from=${from}&to=${to}`),
-        fetch(`/api/hubspot/outreach-feedback?from=${from}&to=${to}`),
+        fetch(`/api/hubspot/dow-conversion?from=${from}&to=${to}`),
         fetch(`/api/hubspot/funnel-timing?from=${from}&to=${to}`),
         fetch(`/api/hubspot/prospect-to-lead?from=${from}&to=${to}`),
+        fetch(`/api/hubspot/outreach-feedback?from=${from}&to=${to}`),
+      ]);
+      setLoadProgress(65);
+
+      // Batch 3: Heavy queries (pagination, many sub-queries)
+      const [timelineRes, funnelSourceRes, journeysRes, lctRes] = await Promise.all([
+        fetch(`/api/hubspot/contacts-daily?from=${from}&to=${to}&metric=contacts`),
+        fetch(`/api/hubspot/funnel-by-source?from=${from}&to=${to}`),
         fetch(`/api/hubspot/customer-journeys?from=${from}&to=${to}`),
         fetch(`/api/hubspot/lead-creation-timeline?from=${from}&to=${to}`),
       ]);
-      setLoadProgress(80);
+      setLoadProgress(90);
 
       // Process all responses
       if (gaRes.ok) setActiveUsers((await gaRes.json()).activeUsers);

@@ -44,15 +44,20 @@ export async function GET(request: NextRequest) {
     const propData = await hubspotFetch("/crm/v3/properties/contacts/original_lead_source", token);
     const options: { value: string; label: string }[] = (propData as { options?: { value: string; label: string }[] }).options ?? [];
 
-    // Fire all queries in parallel — HubSpot allows 100 req/10s, we're well under that
+    // Batch queries 8 at a time to avoid HubSpot rate limits (no delays, just concurrency control)
     const allQueries: Array<{ operator: "EQ"; value: string } | { operator: "NOT_HAS_PROPERTY" }> = [
       { operator: "NOT_HAS_PROPERTY" },
       ...options.map((opt) => ({ operator: "EQ" as const, value: opt.value })),
     ];
 
-    const allCounts = await Promise.all(
-      allQueries.map((q) => countContacts(token, fromMs, toMs, q))
-    );
+    const BATCH = 8;
+    const allCounts: number[] = [];
+    for (let i = 0; i < allQueries.length; i += BATCH) {
+      const results = await Promise.all(
+        allQueries.slice(i, i + BATCH).map((q) => countContacts(token, fromMs, toMs, q))
+      );
+      allCounts.push(...results);
+    }
 
     const noValueCount = allCounts[0];
     const counts = allCounts.slice(1);

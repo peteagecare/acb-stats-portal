@@ -43,10 +43,15 @@ export async function GET(request: NextRequest) {
     const propData = await hubspotFetch("/crm/v3/properties/contacts/conversion_action", token);
     const options: { value: string; label: string }[] = (propData as { options?: { value: string; label: string }[] }).options ?? [];
 
-    // Fire all queries in parallel — HubSpot allows 100 req/10s
-    const allCounts = await Promise.all(
-      options.map((opt) => countContacts(token, fromMs, toMs, { operator: "EQ", value: opt.value }))
-    );
+    // Batch queries 8 at a time to avoid HubSpot rate limits
+    const BATCH = 8;
+    const allCounts: number[] = [];
+    for (let i = 0; i < options.length; i += BATCH) {
+      const results = await Promise.all(
+        options.slice(i, i + BATCH).map((opt) => countContacts(token, fromMs, toMs, { operator: "EQ", value: opt.value }))
+      );
+      allCounts.push(...results);
+    }
 
     const actions = options.map((opt, i) => ({ label: opt.label, value: opt.value, count: allCounts[i] }));
 

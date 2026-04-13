@@ -26,10 +26,15 @@ export async function GET() {
       (propData as { options?: { value: string; label: string; displayOrder: number }[] }).options ?? [];
     const options = allOptions.filter((o) => !EXCLUDED_LIFECYCLE_STAGES.includes(o.value));
 
-    // Fire all stage counts in parallel — no delays needed
-    const counts = await Promise.all(
-      options.map((opt) => countByLifecycleStage(token, opt.value))
-    );
+    // Batch stage counts 8 at a time to avoid HubSpot rate limits
+    const BATCH = 8;
+    const counts: number[] = [];
+    for (let i = 0; i < options.length; i += BATCH) {
+      const results = await Promise.all(
+        options.slice(i, i + BATCH).map((opt) => countByLifecycleStage(token, opt.value))
+      );
+      counts.push(...results);
+    }
 
     const stages = options
       .map((opt, i) => ({ label: opt.label, value: opt.value, count: counts[i], order: opt.displayOrder }))
