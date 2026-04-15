@@ -51,6 +51,13 @@ body {
   .dashboard-quick-ranges {
     display: none !important;
   }
+  .dashboard-header-bar {
+    flex-wrap: nowrap !important;
+  }
+  .dashboard-header-bar > div:nth-child(2) {
+    flex: 1 1 0 !important;
+    min-width: 120px !important;
+  }
 }
 
 /* ── Phone — single column, responsive everything ── */
