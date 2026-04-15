@@ -47,7 +47,7 @@ body {
 }
 
 /* ── Medium — keep header on one row ── */
-@media (max-width: 1200px) and (min-width: 769px) {
+@media (max-width: 1550px) and (min-width: 769px) {
   .dashboard-quick-ranges {
     display: none !important;
   }
