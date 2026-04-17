@@ -1611,6 +1611,7 @@ function Dashboard() {
   const [journeyListModal, setJourneyListModal] = useState<{ path: string } | null>(null);
   const inlineFilterRef = useRef<HTMLDivElement>(null);
   const [stickyFilterVisible, setStickyFilterVisible] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const el = inlineFilterRef.current;
@@ -2128,7 +2129,7 @@ function Dashboard() {
   return (
     <div className="dashboard-root" style={{ minHeight: "100vh", background: "#F5F5F7" }}>
       {/* Header */}
-      <header style={{ background: "rgba(255,255,255,0.72)", backdropFilter: "saturate(180%) blur(20px)", WebkitBackdropFilter: "saturate(180%) blur(20px)", borderBottom: "1px solid rgba(0,0,0,0.08)", padding: "0 16px", position: "sticky", top: 0, zIndex: 200 }}>
+      <header data-mobile-open={mobileMenuOpen ? "true" : "false"} style={{ background: "rgba(255,255,255,0.72)", backdropFilter: "saturate(180%) blur(20px)", WebkitBackdropFilter: "saturate(180%) blur(20px)", borderBottom: "1px solid rgba(0,0,0,0.08)", padding: "0 16px", position: "sticky", top: 0, zIndex: 200 }}>
         <div
           className="dashboard-header-bar"
           style={{
@@ -2150,10 +2151,25 @@ function Dashboard() {
               </h1>
               <p style={{ fontSize: "10px", margin: 0, color: "#86868B" }}>Marketing Funnel</p>
             </div>
+            <button
+              type="button"
+              className="dashboard-header-mobile-toggle"
+              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+              onClick={() => setMobileMenuOpen((v) => !v)}
+              style={{ display: "none", marginLeft: "auto", background: "rgba(0,0,0,0.04)", border: "none", borderRadius: "10px", padding: "8px", cursor: "pointer", color: "#1D1D1F", alignItems: "center", justifyContent: "center" }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                {mobileMenuOpen ? (
+                  <><path d="M6 6l12 12" /><path d="M18 6L6 18" /></>
+                ) : (
+                  <><path d="M3 6h18" /><path d="M3 12h18" /><path d="M3 18h18" /></>
+                )}
+              </svg>
+            </button>
           </div>
 
           {/* AI Search Bar */}
-          <div ref={searchRef} style={{ position: "relative", flex: "0 1 420px", minWidth: "200px" }}>
+          <div ref={searchRef} className="dashboard-header-collapsible" style={{ position: "relative", flex: "0 1 420px", minWidth: "200px" }}>
             <div style={{ display: "flex", alignItems: "center", background: "rgba(0,0,0,0.04)", borderRadius: "12px", padding: "0 12px", gap: "8px" }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, opacity: 0.4 }}>
                 <circle cx="11" cy="11" r="7" stroke="#1D1D1F" strokeWidth="2" />
@@ -2231,7 +2247,7 @@ function Dashboard() {
             )}
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <div className="dashboard-header-collapsible" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             {/* Quick date range links */}
             {(() => {
               const today = new Date();

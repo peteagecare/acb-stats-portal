@@ -74,13 +74,19 @@ body {
   .dashboard-header-bar {
     flex-direction: column !important;
     height: auto !important;
-    padding: 12px 16px !important;
+    padding: 10px 12px !important;
     gap: 10px !important;
     align-items: stretch !important;
   }
   .dashboard-header-bar > div {
     flex-wrap: wrap !important;
     justify-content: center !important;
+  }
+  .dashboard-header-mobile-toggle {
+    display: inline-flex !important;
+  }
+  header[data-mobile-open="false"] .dashboard-header-collapsible {
+    display: none !important;
   }
 
   .dashboard-quick-ranges {
