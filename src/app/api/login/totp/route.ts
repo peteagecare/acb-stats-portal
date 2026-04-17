@@ -8,6 +8,8 @@ import {
 import { rateLimit, clientKey } from "@/lib/rate-limit";
 import { loadUsers } from "@/lib/users";
 
+const IS_DEV = process.env.NODE_ENV === "development";
+
 export async function POST(request: NextRequest) {
   const limit = rateLimit(`login-totp:${clientKey(request)}`, 5, 10 * 60_000);
   if (!limit.ok) {
@@ -47,7 +49,7 @@ export async function POST(request: NextRequest) {
             `${AUTH_COOKIE_NAME}=${session}`,
             "Path=/",
             "HttpOnly",
-            "Secure",
+            ...(IS_DEV ? [] : ["Secure"]),
             "SameSite=Lax",
             `Max-Age=${AUTH_COOKIE_MAX_AGE}`,
           ].join("; "),

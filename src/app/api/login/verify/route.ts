@@ -8,6 +8,8 @@ import {
 } from "@/lib/auth";
 import { isAdmin } from "@/lib/users";
 
+const IS_DEV = process.env.NODE_ENV === "development";
+
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token");
   if (!verifyMagicLinkToken(token)) {
@@ -30,7 +32,7 @@ export async function GET(request: NextRequest) {
     value: session,
     path: "/",
     httpOnly: true,
-    secure: true,
+    secure: !IS_DEV,
     sameSite: "lax",
     maxAge: AUTH_COOKIE_MAX_AGE,
   });

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef, Fragment, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
-import { PieChart, Pie, ResponsiveContainer, Tooltip, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, AreaChart, Area } from "recharts";
+import { PieChart, Pie, ResponsiveContainer, Tooltip, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, AreaChart, Area, ReferenceLine } from "recharts";
 
 interface LeadSource {
   label: string;
@@ -1478,6 +1478,21 @@ function Dashboard() {
   const [homeVisits, setHomeVisits] = useState<number | null>(null);
   const [timelineData, setTimelineData] = useState<{ label: string; count: number }[]>([]);
   const [timelineGranularity, setTimelineGranularity] = useState<string>("day");
+  const [chartNotes, setChartNotes] = useState<{ date: string; text: string; author: string }[]>([]);
+  const [noteEditing, setNoteEditing] = useState<{ date: string; text: string } | null>(null);
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [lifecycleBreakdown, setLifecycleBreakdown] = useState<Record<string, { sources: { label: string; count: number }[]; actions: { label: string; count: number }[] }>>({});
+  const [aiSummary, setAiSummary] = useState<string>("");
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const [aiSummaryMetric, setAiSummaryMetric] = useState<string>("");
+  const [dailyBreakdown, setDailyBreakdown] = useState<Record<string, {
+    sources: { label: string; count: number }[];
+    actions: { label: string; count: number }[];
+    prospectSources: { label: string; count: number }[];
+    prospectActions: { label: string; count: number }[];
+    leadSources: { label: string; count: number }[];
+    leadActions: { label: string; count: number }[];
+  }>>({});
   const [lifecycleStages, setLifecycleStages] = useState<{ label: string; value: string; count: number }[]>([]);
   const [lifecyclePeriod, setLifecyclePeriod] = useState<{ label: string; value: string; count: number }[]>([]);
   const [organicLeads, setOrganicLeads] = useState<number>(0);
@@ -1708,12 +1723,54 @@ function Dashboard() {
       .catch(() => {});
   }, [from, to]);
 
+  // Chart notes — load once
+  useEffect(() => {
+    fetch("/api/chart-notes")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data?.notes) setChartNotes(data.notes); })
+      .catch(() => {});
+  }, []);
+
+  // AI summary — regenerate when metric or data changes
+  useEffect(() => {
+    if (timelineData.length === 0 || !from || !to) return;
+    const key = `${selectedMetric}:${from}:${to}`;
+    if (key === aiSummaryMetric) return;
+    setAiSummaryLoading(true);
+    setAiSummary("");
+    setAiSummaryMetric(key);
+    fetch("/api/ai-summary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        metric: selectedMetric,
+        from,
+        to,
+        timelineData,
+        dailyBreakdown,
+        totalContacts: sourcesTotal,
+        totalProspects: conversionActions.filter((a) => a.value in PROSPECT_ACTIONS).reduce((s, a) => s + a.count, 0),
+        totalLeads: conversionActions.filter((a) => a.value in LEAD_ACTIONS).reduce((s, a) => s + a.count, 0),
+        totalVisits: homeVisits,
+      }),
+    })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data?.summary) setAiSummary(data.summary); })
+      .catch(() => {})
+      .finally(() => setAiSummaryLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMetric, timelineData, from, to]);
+
   // Lifecycle stages — live count, not date-filtered
   useEffect(() => {
     fetch("/api/hubspot/lifecycle-stages")
       .then((r) => r.ok ? r.json() : null)
       .then((data) => { if (data?.stages) setLifecycleStages(data.stages); })
       .catch(() => {});
+    fetch("/api/hubspot/lifecycle-breakdown")
+      .then((r) => { console.log("[lifecycle-breakdown] status:", r.status); return r.ok ? r.json() : r.text().then(t => { console.error("[lifecycle-breakdown] error:", t); return null; }); })
+      .then((data) => { if (data?.stages) { console.log("[lifecycle-breakdown] keys:", Object.keys(data.stages)); setLifecycleBreakdown(data.stages); } else { console.log("[lifecycle-breakdown] no stages in response", data); } })
+      .catch((e) => { console.error("[lifecycle-breakdown] fetch failed:", e); });
     // Recent contacts
     fetch("/api/hubspot/recent-contacts")
       .then((r) => r.ok ? r.json() : null)
@@ -1775,9 +1832,10 @@ function Dashboard() {
       ]);
       setLoadProgress(80);
 
-      // Batch 4: contacts-daily (fires 30-45 sub-queries for daily buckets)
-      const [timelineRes] = await Promise.all([
+      // Batch 4: contacts-daily + daily breakdown
+      const [timelineRes, dailyBreakdownRes] = await Promise.all([
         fetch(`/api/hubspot/contacts-daily?from=${from}&to=${to}&metric=contacts`),
+        fetch(`/api/hubspot/daily-breakdown?from=${from}&to=${to}`),
       ]);
       setLoadProgress(95);
 
@@ -1852,6 +1910,10 @@ function Dashboard() {
         const timelineJson = await timelineRes.json();
         setTimelineData(timelineJson.data);
         setTimelineGranularity(timelineJson.granularity);
+      }
+      if (dailyBreakdownRes.ok) {
+        const bdData = await dailyBreakdownRes.json();
+        setDailyBreakdown(bdData.days ?? {});
       }
       if (journeysRes.ok) {
         setCustomerJourneys(await journeysRes.json());
@@ -2955,7 +3017,7 @@ function Dashboard() {
                     : null);
                 const teamGoal = proratedGoal(teamGoalMonth);
                 return (
-                  <SourcePanel key={cat.title} {...cat} sourcesTotal={sourcesTotal} breakdown={sourceBreakdown[cat.title]} goalPercent={goalPct} teamGoal={teamGoal} onClick={() => setContactListStage({ stage: "Contacts", colour: cat.colour, sourceCategory: cat.title })} />
+                  <SourcePanel key={cat.title} {...cat} sourcesTotal={sourcesTotal} breakdown={sourceBreakdown[cat.title]} goalPercent={goalPct} teamGoal={teamGoal} onClick={() => setContactListStage({ stage: "Contacts", colour: cat.colour, sourceCategory: cat.title })} sharedTotal={cat.title === "PPC" ? ppcRedistCount : cat.title === "SEO" ? seoRedistCount : cat.title === "Content" ? contentRedistCount : undefined} sharedGrandTotal={["PPC", "SEO", "Content"].includes(cat.title) ? redistTotal : undefined} />
                 );
               })}
             </div>
@@ -3044,10 +3106,92 @@ function Dashboard() {
                         <p style={{ fontSize: "13px", color: "#86868B", margin: 0, fontWeight: 600 }}>Loading...</p>
                       </div>
                     )}
+                    {/* Note editing popover */}
+                    {noteEditing && (
+                      <div style={{ background: "#FAFAFA", border: "1px solid #E2E8F0", borderRadius: "12px", padding: "12px", marginBottom: "8px", display: "flex", gap: "8px", alignItems: "flex-start" }}>
+                        <div style={{ flex: 1 }}>
+                          <p style={{ fontSize: "10px", fontWeight: 600, color: "#64748B", margin: "0 0 4px" }}>
+                            Note for {(() => { const [y, m, d] = noteEditing.date.split("-"); return `${parseInt(d)}/${parseInt(m)}/${y}`; })()}
+                          </p>
+                          <textarea
+                            value={noteEditing.text}
+                            onChange={(e) => setNoteEditing({ ...noteEditing, text: e.target.value })}
+                            placeholder="e.g. Paused Google Ads, changed landing page..."
+                            rows={2}
+                            style={{ width: "100%", fontSize: "12px", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "8px", resize: "vertical", fontFamily: "inherit" }}
+                          />
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <button
+                            disabled={noteSaving || !noteEditing.text.trim()}
+                            onClick={async () => {
+                              setNoteSaving(true);
+                              const res = await fetch("/api/chart-notes", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ date: noteEditing.date, text: noteEditing.text }),
+                              });
+                              if (res.ok) {
+                                const data = await res.json();
+                                setChartNotes(data.notes);
+                              }
+                              setNoteSaving(false);
+                              setNoteEditing(null);
+                            }}
+                            style={{ fontSize: "11px", fontWeight: 600, background: "#0071E3", color: "#fff", border: "none", borderRadius: "8px", padding: "6px 12px", cursor: "pointer", opacity: noteSaving || !noteEditing.text.trim() ? 0.5 : 1 }}
+                          >
+                            {noteSaving ? "..." : "Save"}
+                          </button>
+                          {chartNotes.some((n) => n.date === noteEditing.date) && (
+                            <button
+                              disabled={noteSaving}
+                              onClick={async () => {
+                                setNoteSaving(true);
+                                const res = await fetch(`/api/chart-notes?date=${noteEditing.date}`, { method: "DELETE" });
+                                if (res.ok) {
+                                  const data = await res.json();
+                                  setChartNotes(data.notes);
+                                }
+                                setNoteSaving(false);
+                                setNoteEditing(null);
+                              }}
+                              style={{ fontSize: "11px", fontWeight: 600, background: "#FEF2F2", color: "#DC2626", border: "none", borderRadius: "8px", padding: "6px 12px", cursor: "pointer" }}
+                            >
+                              Delete
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setNoteEditing(null)}
+                            style={{ fontSize: "11px", color: "#94A3B8", background: "none", border: "none", cursor: "pointer", padding: "4px" }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {/* AI Insights — single line fader */}
+                    {(aiSummary || aiSummaryLoading) && (
+                      <div style={{ textAlign: "right", marginBottom: "4px", minHeight: "18px" }}>
+                        {aiSummaryLoading ? (
+                          <span style={{ fontSize: "10px", color: "#94A3B8" }}>Analysing...</span>
+                        ) : (
+                          <AiInsightFader lines={aiSummary.split("\n").filter((l: string) => l.trim()).map((l: string) => l.replace(/^[\s\-\u2022\u2023\u25E6\u2043\u2219*]+/, "").trim())} />
+                        )}
+                      </div>
+                    )}
                     <div style={{ width: "100%", height: 320, opacity: timelineLoading ? 0.3 : 1, transition: "opacity 0.2s" }}>
                       {timelineData.length > 0 ? (
                         <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={timelineData} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+                          <BarChart
+                            data={timelineData}
+                            margin={{ top: 16, right: 8, bottom: 0, left: -16 }}
+                            onClick={(state) => {
+                              if (!state?.activeLabel || timelineGranularity !== "day") return;
+                              const date = String(state.activeLabel);
+                              const existing = chartNotes.find((n) => n.date === date);
+                              setNoteEditing({ date, text: existing?.text ?? "" });
+                            }}
+                          >
                             <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#F1F5F9" />
                             <XAxis
                               dataKey="label"
@@ -3065,11 +3209,61 @@ function Dashboard() {
                             />
                             <YAxis tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} allowDecimals={false} />
                             <Tooltip
-                              labelFormatter={(d) => String(d)}
-                              formatter={(value) => [Number(value).toLocaleString(), active.label]}
                               cursor={{ fill: "#F1F5F9" }}
-                              contentStyle={{ borderRadius: "18px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.08)", fontSize: "12px" }}
+                              content={({ active: isActive, payload, label }) => {
+                                if (!isActive || !payload?.length) return null;
+                                const note = chartNotes.find((n) => n.date === label);
+                                const dayData = timelineGranularity === "day" ? dailyBreakdown[String(label)] : null;
+                                // Pick sources/actions based on active metric
+                                const metricKey = active.key;
+                                const sources = dayData
+                                  ? (metricKey === "prospects" ? dayData.prospectSources : metricKey === "leads" ? dayData.leadSources : dayData.sources)
+                                  : [];
+                                const actions = dayData
+                                  ? (metricKey === "prospects" ? dayData.prospectActions : metricKey === "leads" ? dayData.leadActions : dayData.actions)
+                                  : [];
+                                return (
+                                  <div style={{ background: "#fff", borderRadius: "12px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)", padding: "10px 14px", fontSize: "12px", maxWidth: "300px", minWidth: "200px" }}>
+                                    <p style={{ margin: "0 0 2px", fontWeight: 600, color: "#1D1D1F" }}>{String(label)}</p>
+                                    <p style={{ margin: "0 0 6px", color: active.colour, fontWeight: 600 }}>{active.label}: {Number(payload[0].value).toLocaleString()}</p>
+                                    {sources.length > 0 && (
+                                      <div style={{ margin: "0 0 6px" }}>
+                                        <p style={{ margin: "0 0 3px", fontSize: "10px", fontWeight: 600, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em" }}>Lead Source</p>
+                                        {sources.map((s) => (
+                                          <div key={s.label} style={{ display: "flex", justifyContent: "space-between", gap: "12px", marginBottom: "1px" }}>
+                                            <span style={{ color: "#3A3A3C", fontSize: "11px" }}>{s.label}</span>
+                                            <span style={{ color: "#1D1D1F", fontWeight: 600, fontSize: "11px", fontVariantNumeric: "tabular-nums" }}>{s.count}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {actions.length > 0 && (
+                                      <div>
+                                        <p style={{ margin: "0 0 3px", fontSize: "10px", fontWeight: 600, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em" }}>Conversion Action</p>
+                                        {actions.map((a) => (
+                                          <div key={a.label} style={{ display: "flex", justifyContent: "space-between", gap: "12px", marginBottom: "1px" }}>
+                                            <span style={{ color: "#3A3A3C", fontSize: "11px" }}>{a.label}</span>
+                                            <span style={{ color: "#1D1D1F", fontWeight: 600, fontSize: "11px", fontVariantNumeric: "tabular-nums" }}>{a.count}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {note && (
+                                      <p style={{ margin: "6px 0 0", padding: "6px 8px", background: "#FFFBEB", borderRadius: "6px", border: "1px solid #FDE68A", color: "#92400E", fontSize: "11px", lineHeight: 1.4 }}>
+                                        {note.text}
+                                      </p>
+                                    )}
+                                    {timelineGranularity === "day" && !note && (
+                                      <p style={{ margin: "4px 0 0", color: "#AEAEB2", fontSize: "10px" }}>Click to add a note</p>
+                                    )}
+                                  </div>
+                                );
+                              }}
                             />
+                            {/* Note indicators — vertical dashed lines for dates with notes */}
+                            {timelineGranularity === "day" && chartNotes.filter((n) => timelineData.some((d) => d.label === n.date)).map((n) => (
+                              <ReferenceLine key={n.date} x={n.date} stroke="#F59E0B" strokeDasharray="3 3" strokeWidth={1.5} label={{ value: "\u270E", position: "top", fill: "#F59E0B", fontSize: 12 }} />
+                            ))}
                             <Bar
                               dataKey="count"
                               radius={[4, 4, 0, 0]}
@@ -3082,7 +3276,16 @@ function Dashboard() {
                                   const dow = new Date(d.label + "T12:00:00").getDay();
                                   isWeekend = dow === 0 || dow === 6;
                                 }
-                                return <Cell key={i} fill={isWeekend ? "#F59E0B" : active.colour} />;
+                                if (!isWeekend) return <Cell key={i} fill={active.colour} />;
+                                // Lighten the active colour for weekends so they're always distinct
+                                const weekendColours: Record<string, string> = {
+                                  "#6366F1": "#A5B4FC", // Contacts — light indigo
+                                  "#F59E0B": "#FCD34D", // Prospects — light amber
+                                  "#0071E3": "#7DD3FC", // Leads — light blue
+                                  "#10B981": "#6EE7B7", // Home Visits — light green
+                                  "#8B5CF6": "#C4B5FD", // Visitors — light purple
+                                };
+                                return <Cell key={i} fill={weekendColours[active.colour] ?? "#E2E8F0"} />;
                               })}
                             </Bar>
                           </BarChart>
@@ -3097,18 +3300,17 @@ function Dashboard() {
                 );
               })()}
 
-              {/* ROW 2: Lifecycle pipeline + Visit conversion (both metric-independent) */}
-              {(() => {
-                const hasLifecycle = lifecycleStages.length > 0;
-                const hasDow = dowConversion && dowConversion.contacts.some((c) => c > 0);
-                if (!hasLifecycle && !hasDow) return null;
-                const cols = hasLifecycle && hasDow ? "2fr 1fr" : "1fr";
-                return (
-              <div style={{ display: "grid", gridTemplateColumns: cols, gap: "10px" }}>
-              {/* LIFECYCLE STAGES */}
+              {/* LIFECYCLE STAGES — full width */}
               {lifecycleStages.length > 0 && (
-                <LifecyclePipeline stages={lifecycleStages} periodStages={lifecyclePeriod} />
+                <LifecyclePipeline stages={lifecycleStages} periodStages={lifecyclePeriod} stageBreakdown={lifecycleBreakdown} />
               )}
+
+              {/* ROW 2: Visit conversion */}
+              {(() => {
+                const hasDow = dowConversion && dowConversion.contacts.some((c) => c > 0);
+                if (!hasDow) return null;
+                return (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "10px" }}>
 
               {/* VISIT CONVERSION BY DAY OF WEEK — answers "are weekend leads worth it?" */}
               {dowConversion && dowConversion.contacts.some((c) => c > 0) && (() => {
@@ -4652,10 +4854,11 @@ const LIFECYCLE_COLOURS: Record<string, string> = {
   "Suppliers & Muppets": "#CBD5E1",
 };
 
-function LifecyclePipeline({ stages, periodStages }: { stages: { label: string; value: string; count: number }[]; periodStages: { label: string; value: string; count: number }[] }) {
+function LifecyclePipeline({ stages, periodStages, stageBreakdown }: { stages: { label: string; value: string; count: number }[]; periodStages: { label: string; value: string; count: number }[]; stageBreakdown?: Record<string, { sources: { label: string; count: number }[]; actions: { label: string; count: number }[] }> }) {
   const total = stages.reduce((s, st) => s + st.count, 0);
   const periodMap = new Map(periodStages.map((s) => [s.value, s.count]));
   const hasPeriod = periodStages.length > 0;
+  const [expandedStage, setExpandedStage] = useState<string | null>(null);
 
   const featuredOrder = ["Cold - Unsubscribed", "Cold - Subscribed", "Prospect", "Lead"];
   const featuredStages = featuredOrder
@@ -4664,6 +4867,41 @@ function LifecyclePipeline({ stages, periodStages }: { stages: { label: string; 
   const featuredLabels = new Set(featuredOrder);
   const otherStages = stages.filter((s) => !featuredLabels.has(s.label) && s.count > 0);
   const maxCount = Math.max(...featuredStages.map((s) => s.count), 1);
+
+  const allStagesOrdered = [...featuredStages, ...otherStages];
+
+  function renderBreakdown(stageValue: string, colour: string) {
+    const bd = stageBreakdown?.[stageValue];
+    if (!bd || (bd.sources.length === 0 && bd.actions.length === 0)) return null;
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "8px" }}>
+        {bd.sources.length > 0 && (
+          <div>
+            <p style={{ fontSize: "9px", fontWeight: 600, color: "#AEAEB2", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.6px" }}>Lead Source</p>
+            {bd.sources.slice(0, 6).map((s) => (
+              <div key={s.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "2px 0" }}>
+                <span style={{ fontSize: "10px", color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, marginRight: "6px" }}>{s.label}</span>
+                <span style={{ fontSize: "10px", fontWeight: 600, color: colour, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{s.count.toLocaleString()}</span>
+              </div>
+            ))}
+            {bd.sources.length > 6 && <p style={{ fontSize: "9px", color: "#AEAEB2", margin: "2px 0 0" }}>+{bd.sources.length - 6} more</p>}
+          </div>
+        )}
+        {bd.actions.length > 0 && (
+          <div>
+            <p style={{ fontSize: "9px", fontWeight: 600, color: "#AEAEB2", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.6px" }}>Conversion Action</p>
+            {bd.actions.slice(0, 6).map((a) => (
+              <div key={a.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "2px 0" }}>
+                <span style={{ fontSize: "10px", color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, marginRight: "6px" }}>{a.label}</span>
+                <span style={{ fontSize: "10px", fontWeight: 600, color: colour, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{a.count.toLocaleString()}</span>
+              </div>
+            ))}
+            {bd.actions.length > 6 && <p style={{ fontSize: "9px", color: "#AEAEB2", margin: "2px 0 0" }}>+{bd.actions.length - 6} more</p>}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -4688,8 +4926,8 @@ function LifecyclePipeline({ stages, periodStages }: { stages: { label: string; 
         </p>
       </div>
 
+      {/* Pipeline circles row */}
       <div style={{ display: "flex", gap: "20px", alignItems: "stretch" }}>
-        {/* Main pipeline */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1, padding: "8px 0" }}>
           {featuredStages.map((stage, i) => {
             const colour = LIFECYCLE_COLOURS[stage.label] ?? "#94A3B8";
@@ -4725,7 +4963,9 @@ function LifecyclePipeline({ stages, periodStages }: { stages: { label: string; 
                       gap: "2px",
                       transition: "all 0.3s ease",
                       boxShadow: isLead ? `0 0 20px ${colour}35, 0 0 40px ${colour}15` : `0 2px 8px ${colour}15`,
+                      cursor: "pointer",
                     }}
+                    onClick={() => setExpandedStage(expandedStage === stage.value ? null : stage.value)}
                   >
                     <span style={{ fontSize: size > 72 ? "17px" : size > 60 ? "14px" : "12px", fontWeight: 600, color: colour, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
                       {stage.count.toLocaleString()}
@@ -4774,13 +5014,17 @@ function LifecyclePipeline({ stages, periodStages }: { stages: { label: string; 
                 return (
                   <div
                     key={stage.value}
+                    onClick={() => setExpandedStage(expandedStage === stage.value ? null : stage.value)}
                     style={{
                       display: "flex",
                       alignItems: "center",
                       padding: "7px 10px",
                       borderRadius: "8px",
                       gap: "10px",
-                      background: "#FAFBFC",
+                      background: expandedStage === stage.value ? `${colour}08` : "#FAFBFC",
+                      cursor: "pointer",
+                      border: expandedStage === stage.value ? `1px solid ${colour}30` : "1px solid transparent",
+                      transition: "all 0.15s",
                     }}
                   >
                     <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: colour, flexShrink: 0 }} />
@@ -4803,9 +5047,39 @@ function LifecyclePipeline({ stages, periodStages }: { stages: { label: string; 
 
       {hasPeriod && (
         <p style={{ fontSize: "10px", color: "#AEAEB2", margin: "10px 0 0", textAlign: "center" }}>
-          Green badges show contacts created in the selected date range
+          Green badges show contacts created in the selected date range — click a stage to see breakdown
         </p>
       )}
+
+      {/* Per-stage breakdown — shown when a stage is clicked */}
+      {expandedStage && (() => {
+        const stage = allStagesOrdered.find((s) => s.value === expandedStage);
+        if (!stage) return null;
+        const colour = LIFECYCLE_COLOURS[stage.label] ?? "#94A3B8";
+        const hasBreakdownData = Object.keys(stageBreakdown ?? {}).length > 0;
+        const bd = renderBreakdown(stage.value, colour);
+        if (!hasBreakdownData) return (
+          <div style={{ borderTop: "1px solid #F1F5F9", marginTop: "12px", paddingTop: "12px" }}>
+            <p style={{ fontSize: "11px", color: "#94A3B8", margin: 0 }}>Loading breakdown for {stage.label}...</p>
+          </div>
+        );
+        if (!bd) return (
+          <div style={{ borderTop: "1px solid #F1F5F9", marginTop: "12px", paddingTop: "12px" }}>
+            <p style={{ fontSize: "11px", color: "#AEAEB2", margin: 0 }}>No breakdown data available for {stage.label}</p>
+          </div>
+        );
+        return (
+          <div style={{ borderTop: "1px solid #F1F5F9", marginTop: "12px", paddingTop: "12px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+              <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: colour, flexShrink: 0 }} />
+              <span style={{ fontSize: "12px", fontWeight: 600, color: colour }}>{stage.label}</span>
+              <span style={{ fontSize: "11px", color: "#AEAEB2" }}>{stage.count.toLocaleString()} contacts</span>
+              <button onClick={() => setExpandedStage(null)} style={{ marginLeft: "auto", fontSize: "10px", color: "#94A3B8", background: "none", border: "none", cursor: "pointer", padding: "2px 6px" }}>Close</button>
+            </div>
+            {bd}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -4965,6 +5239,8 @@ function SourcePanel({
   goalPercent,
   teamGoal,
   onClick,
+  sharedTotal,
+  sharedGrandTotal,
 }: {
   title: string;
   total: number;
@@ -4977,6 +5253,8 @@ function SourcePanel({
   goalPercent?: number | null;
   teamGoal?: number | null;
   onClick?: () => void;
+  sharedTotal?: number;
+  sharedGrandTotal?: number;
 }) {
   const filtered = sources.filter((s) => s.count > 0).sort((a, b) => b.count - a.count);
   const pct = sourcesTotal > 0 ? ((total / sourcesTotal) * 100) : 0;
@@ -5086,7 +5364,7 @@ function SourcePanel({
 
       {/* Breakdown rows */}
       <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-        {filtered.map((s) => (
+        {filtered.filter((s) => !s.label.includes("(shared)")).map((s) => (
           <div key={s.value} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: "11px", color: "#3A3A3C" }}>{s.label}</span>
             <span style={{ fontSize: "11px", fontWeight: 600, color: "#1D1D1F", fontVariantNumeric: "tabular-nums" }}>
@@ -5098,7 +5376,62 @@ function SourcePanel({
           <p style={{ fontSize: "11px", color: "#D2D2D7", margin: 0 }}>No data</p>
         )}
       </div>
+
+      {/* Shared numbers total */}
+      {sharedTotal != null && sharedTotal > 0 && (
+        <div style={{ borderTop: "1px solid #F1F5F9", paddingTop: "8px", marginTop: "2px" }}>
+          {sharedGrandTotal != null && sharedGrandTotal > 0 && (
+            <p style={{ fontSize: "9px", color: "#AEAEB2", margin: "0 0 6px" }}>
+              {sharedGrandTotal.toLocaleString()} total shared across 3 teams
+            </p>
+          )}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+            <span style={{ fontSize: "11px", fontWeight: 600, color: "#64748B" }}>Shared numbers</span>
+            <span style={{ fontSize: "11px", fontWeight: 600, color: colour, fontVariantNumeric: "tabular-nums" }}>+{sharedTotal.toLocaleString()}</span>
+          </div>
+          {filtered.filter((s) => s.label.includes("(shared)")).map((s) => (
+            <div key={s.value} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2px" }}>
+              <span style={{ fontSize: "10px", color: "#94A3B8" }}>{s.label.replace(" (shared)", "")}</span>
+              <span style={{ fontSize: "10px", fontWeight: 500, color: "#94A3B8", fontVariantNumeric: "tabular-nums" }}>
+                {s.count.toLocaleString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+function AiInsightFader({ lines }: { lines: string[] }) {
+  const [index, setIndex] = useState(0);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    if (lines.length <= 1) return;
+    const interval = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setIndex((i) => (i + 1) % lines.length);
+        setVisible(true);
+      }, 500);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [lines.length]);
+
+  if (!lines.length) return null;
+
+  return (
+    <span style={{
+      fontSize: "12px",
+      color: "#64748B",
+      fontStyle: "italic",
+      opacity: visible ? 1 : 0,
+      transition: "opacity 0.5s ease",
+      display: "inline-block",
+    }}>
+      {lines[index % lines.length]}
+    </span>
   );
 }
 
