@@ -709,6 +709,8 @@ function ContactListModal({ stage, colour, from, to, sourceCategory, onClose }: 
   const [error, setError] = useState<string | null>(null);
   const [sortField, setSortField] = useState<"name" | "stage" | "created" | "daysSinceActivity">("created");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [segmentSaving, setSegmentSaving] = useState(false);
+  const [segmentMsg, setSegmentMsg] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -811,16 +813,57 @@ function ContactListModal({ stage, colour, from, to, sourceCategory, onClose }: 
               {from} to {to} &middot; {contacts.length} contact{contacts.length !== 1 ? "s" : ""}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: "#F5F5F7", border: "none", fontSize: "16px",
-              color: "#86868B", cursor: "pointer", padding: "6px 10px",
-              borderRadius: "10px", lineHeight: 1,
-            }}
-          >
-            ✕
-          </button>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <button
+              disabled={segmentSaving || contacts.length === 0}
+              onClick={async () => {
+                const defaultName = `${stage}${sourceCategory ? ` — ${sourceCategory}` : ""} · ${from}→${to}`;
+                const name = window.prompt("Name for the HubSpot segment (static list):", defaultName);
+                if (!name) return;
+                setSegmentSaving(true);
+                setSegmentMsg(null);
+                try {
+                  const res = await fetch("/api/hubspot/create-list", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name, contactIds: contacts.map((c) => c.id) }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) throw new Error(data?.error || "Failed to create list");
+                  setSegmentMsg(`Created · ${data.added} contacts`);
+                  window.open(data.url, "_blank");
+                } catch (e) {
+                  setSegmentMsg(e instanceof Error ? e.message : "Failed to create list");
+                } finally {
+                  setSegmentSaving(false);
+                }
+              }}
+              style={{
+                background: "#0071E3", border: "none", fontSize: "12px", fontWeight: 600,
+                color: "#fff", cursor: contacts.length === 0 ? "not-allowed" : "pointer",
+                padding: "8px 14px", borderRadius: "10px", lineHeight: 1,
+                opacity: segmentSaving || contacts.length === 0 ? 0.5 : 1,
+              }}
+              title="Create a static segment in HubSpot with these contacts"
+            >
+              {segmentSaving ? "Creating..." : "Create HubSpot Segment"}
+            </button>
+            {segmentMsg && (
+              <span style={{ fontSize: "11px", color: segmentMsg.startsWith("Created") ? "#059669" : "#DC2626" }}>
+                {segmentMsg}
+              </span>
+            )}
+            <button
+              onClick={onClose}
+              style={{
+                background: "#F5F5F7", border: "none", fontSize: "16px",
+                color: "#86868B", cursor: "pointer", padding: "6px 10px",
+                borderRadius: "10px", lineHeight: 1,
+              }}
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* Body */}
@@ -1478,7 +1521,7 @@ function Dashboard() {
   const [homeVisits, setHomeVisits] = useState<number | null>(null);
   const [timelineData, setTimelineData] = useState<{ label: string; count: number }[]>([]);
   const [timelineGranularity, setTimelineGranularity] = useState<string>("day");
-  const [chartNotes, setChartNotes] = useState<{ date: string; text: string; author: string }[]>([]);
+  const [chartNotes, setChartNotes] = useState<{ id: string; date: string; text: string; author: string; createdAt?: string }[]>([]);
   const [noteEditing, setNoteEditing] = useState<{ date: string; text: string } | null>(null);
   const [noteSaving, setNoteSaving] = useState(false);
   const [lifecycleBreakdown, setLifecycleBreakdown] = useState<Record<string, { sources: { label: string; count: number }[]; actions: { label: string; count: number }[] }>>({});
@@ -3107,68 +3150,80 @@ function Dashboard() {
                       </div>
                     )}
                     {/* Note editing popover */}
-                    {noteEditing && (
-                      <div style={{ background: "#FAFAFA", border: "1px solid #E2E8F0", borderRadius: "12px", padding: "12px", marginBottom: "8px", display: "flex", gap: "8px", alignItems: "flex-start" }}>
-                        <div style={{ flex: 1 }}>
-                          <p style={{ fontSize: "10px", fontWeight: 600, color: "#64748B", margin: "0 0 4px" }}>
-                            Note for {(() => { const [y, m, d] = noteEditing.date.split("-"); return `${parseInt(d)}/${parseInt(m)}/${y}`; })()}
+                    {noteEditing && (() => {
+                      const existingNotes = chartNotes
+                        .filter((n) => n.date === noteEditing.date)
+                        .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
+                      return (
+                        <div style={{ background: "#FAFAFA", border: "1px solid #E2E8F0", borderRadius: "12px", padding: "12px", marginBottom: "8px" }}>
+                          <p style={{ fontSize: "10px", fontWeight: 600, color: "#64748B", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                            Notes for {(() => { const [y, m, d] = noteEditing.date.split("-"); return `${parseInt(d)}/${parseInt(m)}/${y}`; })()}
                           </p>
-                          <textarea
-                            value={noteEditing.text}
-                            onChange={(e) => setNoteEditing({ ...noteEditing, text: e.target.value })}
-                            placeholder="e.g. Paused Google Ads, changed landing page..."
-                            rows={2}
-                            style={{ width: "100%", fontSize: "12px", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "8px", resize: "vertical", fontFamily: "inherit" }}
-                          />
-                        </div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                          <button
-                            disabled={noteSaving || !noteEditing.text.trim()}
-                            onClick={async () => {
-                              setNoteSaving(true);
-                              const res = await fetch("/api/chart-notes", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ date: noteEditing.date, text: noteEditing.text }),
-                              });
-                              if (res.ok) {
-                                const data = await res.json();
-                                setChartNotes(data.notes);
-                              }
-                              setNoteSaving(false);
-                              setNoteEditing(null);
-                            }}
-                            style={{ fontSize: "11px", fontWeight: 600, background: "#0071E3", color: "#fff", border: "none", borderRadius: "8px", padding: "6px 12px", cursor: "pointer", opacity: noteSaving || !noteEditing.text.trim() ? 0.5 : 1 }}
-                          >
-                            {noteSaving ? "..." : "Save"}
-                          </button>
-                          {chartNotes.some((n) => n.date === noteEditing.date) && (
-                            <button
-                              disabled={noteSaving}
-                              onClick={async () => {
-                                setNoteSaving(true);
-                                const res = await fetch(`/api/chart-notes?date=${noteEditing.date}`, { method: "DELETE" });
-                                if (res.ok) {
-                                  const data = await res.json();
-                                  setChartNotes(data.notes);
-                                }
-                                setNoteSaving(false);
-                                setNoteEditing(null);
-                              }}
-                              style={{ fontSize: "11px", fontWeight: 600, background: "#FEF2F2", color: "#DC2626", border: "none", borderRadius: "8px", padding: "6px 12px", cursor: "pointer" }}
-                            >
-                              Delete
-                            </button>
+                          {existingNotes.length > 0 && (
+                            <ul style={{ listStyle: "none", margin: "0 0 10px", padding: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
+                              {existingNotes.map((n) => (
+                                <li key={n.id} style={{ display: "flex", gap: "8px", alignItems: "flex-start", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: "8px", padding: "6px 8px" }}>
+                                  <span style={{ flex: 1, fontSize: "12px", color: "#92400E", lineHeight: 1.4, whiteSpace: "pre-wrap" }}>{n.text}</span>
+                                  <button
+                                    disabled={noteSaving}
+                                    onClick={async () => {
+                                      setNoteSaving(true);
+                                      const res = await fetch(`/api/chart-notes?id=${encodeURIComponent(n.id)}`, { method: "DELETE" });
+                                      if (res.ok) {
+                                        const data = await res.json();
+                                        setChartNotes(data.notes);
+                                      }
+                                      setNoteSaving(false);
+                                    }}
+                                    title="Delete note"
+                                    style={{ fontSize: "11px", fontWeight: 600, background: "transparent", color: "#B91C1C", border: "none", borderRadius: "6px", padding: "2px 6px", cursor: "pointer", lineHeight: 1 }}
+                                  >
+                                    ×
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
                           )}
-                          <button
-                            onClick={() => setNoteEditing(null)}
-                            style={{ fontSize: "11px", color: "#94A3B8", background: "none", border: "none", cursor: "pointer", padding: "4px" }}
-                          >
-                            Cancel
-                          </button>
+                          <div style={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
+                            <textarea
+                              value={noteEditing.text}
+                              onChange={(e) => setNoteEditing({ ...noteEditing, text: e.target.value })}
+                              placeholder={existingNotes.length > 0 ? "Add another note..." : "e.g. Paused Google Ads, changed landing page..."}
+                              rows={2}
+                              style={{ flex: 1, fontSize: "12px", border: "1px solid #E2E8F0", borderRadius: "8px", padding: "8px", resize: "vertical", fontFamily: "inherit" }}
+                            />
+                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                              <button
+                                disabled={noteSaving || !noteEditing.text.trim()}
+                                onClick={async () => {
+                                  setNoteSaving(true);
+                                  const res = await fetch("/api/chart-notes", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ date: noteEditing.date, text: noteEditing.text }),
+                                  });
+                                  if (res.ok) {
+                                    const data = await res.json();
+                                    setChartNotes(data.notes);
+                                    setNoteEditing({ date: noteEditing.date, text: "" });
+                                  }
+                                  setNoteSaving(false);
+                                }}
+                                style={{ fontSize: "11px", fontWeight: 600, background: "#0071E3", color: "#fff", border: "none", borderRadius: "8px", padding: "6px 12px", cursor: "pointer", opacity: noteSaving || !noteEditing.text.trim() ? 0.5 : 1 }}
+                              >
+                                {noteSaving ? "..." : "Add"}
+                              </button>
+                              <button
+                                onClick={() => setNoteEditing(null)}
+                                style={{ fontSize: "11px", color: "#94A3B8", background: "none", border: "none", cursor: "pointer", padding: "4px" }}
+                              >
+                                Close
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                     {/* AI Insights — single line fader */}
                     {(aiSummary || aiSummaryLoading) && (
                       <div style={{ textAlign: "right", marginBottom: "4px", minHeight: "18px" }}>
@@ -3188,8 +3243,7 @@ function Dashboard() {
                             onClick={(state) => {
                               if (!state?.activeLabel || timelineGranularity !== "day") return;
                               const date = String(state.activeLabel);
-                              const existing = chartNotes.find((n) => n.date === date);
-                              setNoteEditing({ date, text: existing?.text ?? "" });
+                              setNoteEditing({ date, text: "" });
                             }}
                           >
                             <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#F1F5F9" />
@@ -3212,7 +3266,7 @@ function Dashboard() {
                               cursor={{ fill: "#F1F5F9" }}
                               content={({ active: isActive, payload, label }) => {
                                 if (!isActive || !payload?.length) return null;
-                                const note = chartNotes.find((n) => n.date === label);
+                                const dayNotes = chartNotes.filter((n) => n.date === label);
                                 const dayData = timelineGranularity === "day" ? dailyBreakdown[String(label)] : null;
                                 // Pick sources/actions based on active metric
                                 const metricKey = active.key;
@@ -3248,22 +3302,32 @@ function Dashboard() {
                                         ))}
                                       </div>
                                     )}
-                                    {note && (
-                                      <p style={{ margin: "6px 0 0", padding: "6px 8px", background: "#FFFBEB", borderRadius: "6px", border: "1px solid #FDE68A", color: "#92400E", fontSize: "11px", lineHeight: 1.4 }}>
-                                        {note.text}
-                                      </p>
+                                    {dayNotes.length > 0 && (
+                                      <div style={{ margin: "6px 0 0", display: "flex", flexDirection: "column", gap: "4px" }}>
+                                        {dayNotes.map((n) => (
+                                          <p key={n.id ?? n.createdAt} style={{ margin: 0, padding: "6px 8px", background: "#FFFBEB", borderRadius: "6px", border: "1px solid #FDE68A", color: "#92400E", fontSize: "11px", lineHeight: 1.4 }}>
+                                            {n.text}
+                                          </p>
+                                        ))}
+                                      </div>
                                     )}
-                                    {timelineGranularity === "day" && !note && (
+                                    {timelineGranularity === "day" && dayNotes.length === 0 && (
                                       <p style={{ margin: "4px 0 0", color: "#AEAEB2", fontSize: "10px" }}>Click to add a note</p>
+                                    )}
+                                    {timelineGranularity === "day" && dayNotes.length > 0 && (
+                                      <p style={{ margin: "4px 0 0", color: "#AEAEB2", fontSize: "10px" }}>Click to add another</p>
                                     )}
                                   </div>
                                 );
                               }}
                             />
-                            {/* Note indicators — vertical dashed lines for dates with notes */}
-                            {timelineGranularity === "day" && chartNotes.filter((n) => timelineData.some((d) => d.label === n.date)).map((n) => (
-                              <ReferenceLine key={n.date} x={n.date} stroke="#F59E0B" strokeDasharray="3 3" strokeWidth={1.5} label={{ value: "\u270E", position: "top", fill: "#F59E0B", fontSize: 12 }} />
-                            ))}
+                            {/* Note indicators — one marker per date, regardless of note count */}
+                            {timelineGranularity === "day" && Array.from(new Set(chartNotes.filter((n) => timelineData.some((d) => d.label === n.date)).map((n) => n.date))).map((date) => {
+                              const count = chartNotes.filter((n) => n.date === date).length;
+                              return (
+                                <ReferenceLine key={date} x={date} stroke="#F59E0B" strokeDasharray="3 3" strokeWidth={1.5} label={{ value: count > 1 ? `\u270E${count}` : "\u270E", position: "top", fill: "#F59E0B", fontSize: 12 }} />
+                              );
+                            })}
                             <Bar
                               dataKey="count"
                               radius={[4, 4, 0, 0]}

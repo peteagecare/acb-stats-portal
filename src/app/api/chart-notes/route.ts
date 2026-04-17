@@ -6,14 +6,26 @@ const KEY = "chart-notes.json";
 const FALLBACK = "./chart-notes.json";
 
 export interface ChartNote {
+  id: string;
   date: string; // YYYY-MM-DD
   text: string;
   author: string;
   createdAt: string;
 }
 
+// Older notes may not have an id — assign one so the client can target them individually.
+function withIds(notes: ChartNote[]): ChartNote[] {
+  let mutated = false;
+  const out = notes.map((n) => {
+    if (n.id) return n;
+    mutated = true;
+    return { ...n, id: `${n.date}-${n.createdAt || Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+  });
+  return mutated ? out : notes;
+}
+
 export async function GET() {
-  const notes = await loadJson<ChartNote[]>(KEY, FALLBACK, []);
+  const notes = withIds(await loadJson<ChartNote[]>(KEY, FALLBACK, []));
   return Response.json({ notes });
 }
 
@@ -31,22 +43,15 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "date and text are required" }, { status: 400 });
   }
 
-  const notes = await loadJson<ChartNote[]>(KEY, FALLBACK, []);
-
-  // Upsert — one note per date
-  const existing = notes.findIndex((n) => n.date === date);
+  const notes = withIds(await loadJson<ChartNote[]>(KEY, FALLBACK, []));
   const note: ChartNote = {
+    id: `${date}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     date,
     text: text.trim(),
     author: user.email,
     createdAt: new Date().toISOString(),
   };
-
-  if (existing >= 0) {
-    notes[existing] = note;
-  } else {
-    notes.push(note);
-  }
+  notes.push(note);
 
   await saveJson(KEY, FALLBACK, notes);
   return Response.json({ notes });
@@ -60,13 +65,16 @@ export async function DELETE(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
   const date = searchParams.get("date");
-  if (!date) {
-    return Response.json({ error: "date is required" }, { status: 400 });
+  if (!id && !date) {
+    return Response.json({ error: "id or date is required" }, { status: 400 });
   }
 
-  const notes = await loadJson<ChartNote[]>(KEY, FALLBACK, []);
-  const filtered = notes.filter((n) => n.date !== date);
+  const notes = withIds(await loadJson<ChartNote[]>(KEY, FALLBACK, []));
+  const filtered = id
+    ? notes.filter((n) => n.id !== id)
+    : notes.filter((n) => n.date !== date);
   await saveJson(KEY, FALLBACK, filtered);
   return Response.json({ notes: filtered });
 }
