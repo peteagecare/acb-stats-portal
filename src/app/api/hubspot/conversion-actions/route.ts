@@ -9,14 +9,18 @@ async function countContacts(
   toMs: number,
   actionFilter:
     | { operator: "EQ"; value: string }
-    | { operator: "NOT_HAS_PROPERTY" }
+    | { operator: "NOT_HAS_PROPERTY" },
+  sourceValues?: string[]
 ): Promise<number> {
-  const filters = [
+  const filters: object[] = [
     { propertyName: "createdate", operator: "GTE", value: fromMs.toString() },
     { propertyName: "createdate", operator: "LTE", value: toMs.toString() },
     { propertyName: "conversion_action", ...actionFilter },
     LIFECYCLE_EXCLUSION_FILTER,
   ];
+  if (sourceValues && sourceValues.length > 0) {
+    filters.push({ propertyName: "original_lead_source", operator: "IN", values: sourceValues });
+  }
 
   const data = await hubspotFetch("/crm/v3/objects/contacts/search", token, {
     method: "POST",
@@ -33,9 +37,13 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const from = searchParams.get("from");
   const to = searchParams.get("to");
+  const sourcesParam = searchParams.get("sources");
   if (!from || !to) return Response.json({ error: "Missing required params: from, to" }, { status: 400 });
 
-  const key = cacheKey("conversion-actions", { from, to });
+  const sourceValues = sourcesParam ? sourcesParam.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
+  const sourcesKey = sourceValues && sourceValues.length > 0 ? [...sourceValues].sort().join("|") : "";
+
+  const key = cacheKey("conversion-actions", { from, to, sources: sourcesKey });
   const data = await cached(key, TTL.MEDIUM, async () => {
     const fromMs = londonDateToUtcMs(from, "00:00:00");
     const toMs = londonDateToUtcMs(to, "23:59:59");
@@ -43,13 +51,12 @@ export async function GET(request: NextRequest) {
     const propData = await hubspotFetch("/crm/v3/properties/contacts/conversion_action", token);
     const options: { value: string; label: string }[] = (propData as { options?: { value: string; label: string }[] }).options ?? [];
 
-    // Batch queries 8 at a time to avoid HubSpot rate limits
     const BATCH = 4;
     const allCounts: number[] = [];
     for (let i = 0; i < options.length; i += BATCH) {
       if (i > 0) await new Promise((r) => setTimeout(r, 250));
       const results = await Promise.all(
-        options.slice(i, i + BATCH).map((opt) => countContacts(token, fromMs, toMs, { operator: "EQ", value: opt.value }))
+        options.slice(i, i + BATCH).map((opt) => countContacts(token, fromMs, toMs, { operator: "EQ", value: opt.value }, sourceValues))
       );
       allCounts.push(...results);
     }

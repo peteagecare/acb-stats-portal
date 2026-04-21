@@ -1448,8 +1448,8 @@ function NavMenu({ currentPage }: { currentPage: string }) {
 
   const items = [
     { key: "dashboard", label: "Dashboard", href: "/" },
-    { key: "journey", label: "Customer Journey", href: "/automations" },
-    { key: "automations", label: "Automation Journey", href: "/customer-automation-journey" },
+    { key: "customer-journey", label: "Customer Journey", href: "/customer-journey" },
+    { key: "financial-approvals", label: "Financial Approvals", href: "/financial-approvals" },
   ];
 
   return (
