@@ -636,7 +636,7 @@ function EmailsTable({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(260px, 1.6fr) minmax(140px, 1fr) repeat(4, 140px)",
+          gridTemplateColumns: "minmax(260px, 1.6fr) minmax(140px, 1fr) minmax(190px, 1.3fr) minmax(170px, 1.2fr) 140px 140px",
           padding: "10px 4px",
           borderBottom: "1px solid #F5F5F7",
           fontSize: "10px",
@@ -646,7 +646,7 @@ function EmailsTable({
           letterSpacing: "0.5px",
           gap: "12px",
           alignItems: "center",
-          minWidth: "1040px",
+          minWidth: "1120px",
         }}
       >
         <div>Email</div>
@@ -716,14 +716,14 @@ function EmailRow({
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "minmax(260px, 1.6fr) minmax(140px, 1fr) repeat(4, 140px)",
+        gridTemplateColumns: "minmax(260px, 1.6fr) minmax(140px, 1fr) minmax(190px, 1.3fr) minmax(170px, 1.2fr) 140px 140px",
         padding: "14px 4px",
         borderBottom: "1px solid #F5F5F7",
         fontSize: "13px",
         color: "#1D1D1F",
         gap: "12px",
         alignItems: "center",
-        minWidth: "1040px",
+        minWidth: "1120px",
         background: rowBg,
       }}
     >
@@ -815,18 +815,6 @@ function EmailRow({
             </div>
           )}
         </button>
-        <DnnaControls
-          emailId={email.id}
-          dnnaPete={dnnaPeteRec}
-          dnnaChris={dnnaChrisRec}
-          confirmed={dnnaConfirmed}
-          pending={dnnaPending}
-          canMark={petesDnnaMine && !dnnaPeteRec?.approved && !normalPathStarted}
-          canConfirm={chrisDnnaMine && dnnaPending}
-          canUnmark={(petesDnnaMine && !!dnnaPeteRec?.approved) || (chrisDnnaMine && !!dnnaChrisRec?.approved)}
-          saving={savingKey === `${email.id}:dnna_pete` || savingKey === `${email.id}:dnna_chris`}
-          onToggle={onToggle}
-        />
       </div>
       <div style={{ fontSize: "12px", color: "#86868B" }}>{formatDate(email.updatedAt ?? email.createdAt)}</div>
       {APPROVAL_ROLES.map((role) => {
@@ -835,8 +823,96 @@ function EmailRow({
         const allowed = canApprove(role.key, session?.email) && !dnnaConfirmed && !dnnaPending;
         const saving = savingKey === `${email.id}:${role.key}`;
         const isPending = pendingRoles.includes(role.key);
+        const savingDnnaPete = savingKey === `${email.id}:dnna_pete`;
+        const savingDnnaChris = savingKey === `${email.id}:dnna_chris`;
+
+        // PETE column — show DNNA pill when Pete has marked it (pending or confirmed)
+        if (role.key === "pete" && (dnnaPending || dnnaConfirmed) && !checked) {
+          return (
+            <div key={role.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "0 4px" }}>
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  color: dnnaConfirmed ? "#065F46" : "#92400E",
+                  background: dnnaConfirmed ? "#D1FAE5" : "#FEF3C7",
+                  borderRadius: "6px",
+                  padding: "5px 10px",
+                  textAlign: "center",
+                  lineHeight: 1.3,
+                }}
+                title={dnnaPeteRec ? `Marked by ${dnnaPeteRec.userLabel || dnnaPeteRec.userEmail} · ${formatDate(dnnaPeteRec.timestamp)}` : ""}
+              >
+                {dnnaConfirmed ? "✓" : "∅"} No financial approval needed
+              </span>
+              {petesDnnaMine && !savingDnnaPete && (
+                <button
+                  onClick={() => onToggle(email.id, "dnna_pete", false)}
+                  style={{ background: "transparent", border: "none", color: "#86868B", cursor: "pointer", fontSize: "10px", padding: 0, textDecoration: "underline" }}
+                  title="Remove this status"
+                >
+                  undo
+                </button>
+              )}
+            </div>
+          );
+        }
+
+        // CHRIS column — show DNNA confirmation state
+        if (role.key === "chris" && (dnnaPending || dnnaConfirmed) && !checked) {
+          if (dnnaConfirmed) {
+            return (
+              <div key={role.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "0 4px" }}>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    color: "#065F46",
+                    background: "#D1FAE5",
+                    borderRadius: "6px",
+                    padding: "5px 10px",
+                    textAlign: "center",
+                    lineHeight: 1.3,
+                  }}
+                  title={dnnaChrisRec ? `Approved to send by ${dnnaChrisRec.userLabel || dnnaChrisRec.userEmail} · ${formatDate(dnnaChrisRec.timestamp)}` : ""}
+                >
+                  ✓ Approved to send
+                </span>
+              </div>
+            );
+          }
+          // pending — Chris confirms
+          return (
+            <div key={role.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "0 4px" }}>
+              {chrisDnnaMine ? (
+                <button
+                  onClick={() => onToggle(email.id, "dnna_chris", true)}
+                  disabled={savingDnnaChris}
+                  style={{
+                    background: "#0071E3",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "5px 10px",
+                    cursor: savingDnnaChris ? "not-allowed" : "pointer",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    opacity: savingDnnaChris ? 0.5 : 1,
+                  }}
+                >
+                  Approve to send
+                </button>
+              ) : (
+                <span style={{ fontSize: "11px", color: "#86868B", textAlign: "center", lineHeight: 1.3 }}>
+                  Awaiting Chris<br />to approve to send
+                </span>
+              )}
+            </div>
+          );
+        }
+
         return (
-          <div key={role.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+          <div key={role.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
             <label
               style={{
                 display: "inline-flex",
@@ -881,94 +957,31 @@ function EmailRow({
                 {formatDate(rec.timestamp)}
               </div>
             )}
+            {role.key === "pete" && !checked && petesDnnaMine && !normalPathStarted && (
+              <button
+                onClick={() => onToggle(email.id, "dnna_pete", true)}
+                disabled={savingDnnaPete}
+                style={{
+                  background: "transparent",
+                  border: "1px dashed #C7C7CC",
+                  borderRadius: "6px",
+                  padding: "4px 8px",
+                  cursor: savingDnnaPete ? "not-allowed" : "pointer",
+                  fontSize: "10px",
+                  color: "#86868B",
+                  opacity: savingDnnaPete ? 0.5 : 1,
+                  whiteSpace: "nowrap",
+                }}
+                title="Mark this email as not needing financial approval — Chris will then confirm"
+              >
+                ∅ No financial approval needed
+              </button>
+            )}
           </div>
         );
       })}
     </div>
   );
-}
-
-function DnnaControls({
-  emailId,
-  dnnaPete,
-  dnnaChris,
-  confirmed,
-  pending,
-  canMark,
-  canConfirm,
-  canUnmark,
-  saving,
-  onToggle,
-}: {
-  emailId: string;
-  dnnaPete?: ApprovalRecord;
-  dnnaChris?: ApprovalRecord;
-  confirmed: boolean;
-  pending: boolean;
-  canMark: boolean;
-  canConfirm: boolean;
-  canUnmark: boolean;
-  saving: boolean;
-  onToggle: (emailId: string, role: AnyApprovalKey, next: boolean) => void;
-}) {
-  if (confirmed) {
-    return (
-      <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "#30A46C", fontWeight: 600 }}>
-        <span style={{ background: "#E8F7EF", borderRadius: "4px", padding: "2px 8px" }}>✓ No Financial Approval Needed</span>
-        <span style={{ fontWeight: 400, color: "#86868B" }}>— marked by {dnnaPete?.userLabel ?? dnnaPete?.userEmail}, approved to send by {dnnaChris?.userLabel ?? dnnaChris?.userEmail}</span>
-        {canUnmark && !saving && (
-          <button
-            onClick={() => onToggle(emailId, "dnna_pete", false)}
-            style={{ background: "transparent", border: "none", color: "#86868B", cursor: "pointer", fontSize: "11px", padding: 0, textDecoration: "underline" }}
-            title="Remove 'no financial approval needed' status"
-          >
-            undo
-          </button>
-        )}
-      </div>
-    );
-  }
-  if (pending) {
-    return (
-      <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "11px", flexWrap: "wrap" }}>
-        <span style={{ background: "#FEF3C7", color: "#92400E", borderRadius: "4px", padding: "2px 8px", fontWeight: 600 }}>
-          ∅ Pete: no financial approval needed
-        </span>
-        {canConfirm ? (
-          <button
-            onClick={() => onToggle(emailId, "dnna_chris", true)}
-            disabled={saving}
-            style={{ background: "#0071E3", color: "white", border: "none", borderRadius: "6px", padding: "4px 10px", cursor: saving ? "not-allowed" : "pointer", fontSize: "11px", fontWeight: 500, opacity: saving ? 0.5 : 1 }}
-          >
-            Approved to send
-          </button>
-        ) : (
-          <span style={{ color: "#86868B" }}>— awaiting Chris to approve to send</span>
-        )}
-        {canUnmark && !saving && (
-          <button
-            onClick={() => onToggle(emailId, "dnna_pete", false)}
-            style={{ background: "transparent", border: "none", color: "#86868B", cursor: "pointer", fontSize: "11px", padding: 0, textDecoration: "underline" }}
-          >
-            undo
-          </button>
-        )}
-      </div>
-    );
-  }
-  if (canMark) {
-    return (
-      <button
-        onClick={() => onToggle(emailId, "dnna_pete", true)}
-        disabled={saving}
-        style={{ alignSelf: "flex-start", background: "transparent", border: "1px dashed #C7C7CC", borderRadius: "6px", padding: "2px 8px", cursor: saving ? "not-allowed" : "pointer", fontSize: "11px", color: "#86868B", opacity: saving ? 0.5 : 1 }}
-        title="Pete marks — Chris just confirms it's approved to send"
-      >
-        ∅ No Financial Approval Needed
-      </button>
-    );
-  }
-  return null;
 }
 
 function ModalActionBar({
