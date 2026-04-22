@@ -683,7 +683,7 @@ function EmailRow({
   workflows,
 }: {
   email: HubSpotEmail;
-  approval: Partial<Record<AnyApprovalKey, ApprovalRecord>>;
+  approval: EmailApprovals;
   session: SessionInfo | null;
   savingKey: string | null;
   onToggle: (emailId: string, role: AnyApprovalKey, next: boolean) => void;
