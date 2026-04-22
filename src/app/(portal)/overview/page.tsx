@@ -2252,9 +2252,9 @@ function Dashboard() {
             <Image src="/acb-logo.png" alt="ACB" height={28} width={100} style={{ objectFit: "contain" }} />
             <div>
               <h1 style={{ fontSize: "14px", fontWeight: 600, margin: 0, color: "#1D1D1F", letterSpacing: "-0.3px" }}>
-                ACB Stats
+                Age Care Marketing Hub
               </h1>
-              <p style={{ fontSize: "10px", margin: 0, color: "#86868B" }}>Marketing Funnel</p>
+              <p style={{ fontSize: "10px", margin: 0, color: "#86868B" }}>Full Overview</p>
             </div>
             <button
               type="button"
@@ -2487,8 +2487,7 @@ function Dashboard() {
                 />
               </svg>
             </button>}
-            {/* Nav menu */}
-            <NavMenu currentPage="dashboard" />
+            {/* Nav menu moved to sidebar */}
           </div>
         </div>
       </header>

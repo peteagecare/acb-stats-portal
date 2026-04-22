@@ -163,7 +163,7 @@ function LoginForm() {
           style={{ width: "72px", height: "auto", margin: "0 auto 0" }}
         />
         <h1 style={{ fontSize: "24px", fontWeight: 600, color: "#1D1D1F", margin: 0, letterSpacing: "-0.3px" }}>
-          ACB Stats Portal
+          Age Care Marketing Hub
         </h1>
 
         {/* Tabs */}

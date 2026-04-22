@@ -8,8 +8,8 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "ACB Stats Portal",
-  description: "Marketing stats dashboard for Age Care Bathrooms",
+  title: "Age Care Marketing Hub",
+  description: "Marketing hub for Age Care Bathrooms",
   robots: { index: false, follow: false },
 };
 

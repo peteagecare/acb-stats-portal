@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 
 function pad(n: number) {
   return n.toString().padStart(2, "0");
@@ -48,27 +47,6 @@ interface Selection {
   label: string;
 }
 
-interface AutomationEmail {
-  id: string;
-  order: number;
-  name: string;
-  subject?: string;
-  sent?: number;
-  opens?: number;
-  clicks?: number;
-  openRate?: number;
-  clickRate?: number;
-  clickThroughRate?: number;
-}
-
-interface AutomationData {
-  workflow?: { id: string; name: string };
-  emails: AutomationEmail[];
-  error?: string;
-}
-
-const WELCOME_FUNNEL_ID = "2308647136";
-
 export default function CustomerJourneyPage() {
   const defaults = getDefaultRange();
   const [from, setFrom] = useState(defaults.from);
@@ -79,29 +57,6 @@ export default function CustomerJourneyPage() {
   const [loading, setLoading] = useState(false);
   const [actionsLoading, setActionsLoading] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(null);
-  const [automation, setAutomation] = useState<AutomationData | null>(null);
-  const [automationLoading, setAutomationLoading] = useState(false);
-  const [automationExpanded, setAutomationExpanded] = useState(false);
-
-  useEffect(() => {
-    if (!automationExpanded) return;
-    let cancelled = false;
-    setAutomationLoading(true);
-    fetch(`/api/hubspot/automation-emails?id=${WELCOME_FUNNEL_ID}&from=${from}&to=${to}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(r.statusText)))
-      .then((data) => {
-        if (!cancelled) setAutomation(data);
-      })
-      .catch(() => {
-        if (!cancelled) setAutomation({ emails: [], error: "Failed to load automation" });
-      })
-      .finally(() => {
-        if (!cancelled) setAutomationLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [automationExpanded, from, to]);
 
   useEffect(() => {
     let cancelled = false;
@@ -177,20 +132,16 @@ export default function CustomerJourneyPage() {
   return (
     <div
       style={{
-        position: "fixed",
-        inset: 0,
+        minHeight: "100vh",
         background: "#FFFFFF",
         backgroundImage: "radial-gradient(circle, #D1D1D6 1px, transparent 1px)",
         backgroundSize: "24px 24px",
-        overflow: "auto",
       }}
     >
       <header
         style={{
           position: "sticky",
           top: 0,
-          left: 0,
-          right: 0,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -202,20 +153,8 @@ export default function CustomerJourneyPage() {
           gap: "16px",
         }}
       >
-        <Link
-          href="/"
-          style={{
-            fontSize: "13px",
-            color: "#007AFF",
-            textDecoration: "none",
-            fontWeight: 500,
-            whiteSpace: "nowrap",
-          }}
-        >
-          ← Dashboard
-        </Link>
         <h1 style={{ fontSize: "15px", fontWeight: 600, color: "#1D1D1F", margin: 0, whiteSpace: "nowrap" }}>
-          Customer Journey
+          Customer Journeys
         </h1>
 
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -538,137 +477,6 @@ export default function CustomerJourneyPage() {
           >
             {loading ? "…" : (selection ? selection.count : count)?.toLocaleString() ?? "—"}
           </span>
-        </div>
-
-        <div style={{ width: "2px", height: "40px", background: "#C7C7CC" }} />
-
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", width: "100%", maxWidth: "720px" }}>
-          <button
-            onClick={() => {
-              if (automation?.error) setAutomation(null);
-              setAutomationExpanded((e) => !e);
-            }}
-            style={{
-              all: "unset",
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              background: "#6F4FC9",
-              color: "#FFFFFF",
-              padding: "14px 20px 14px 24px",
-              borderRadius: "6px",
-              fontSize: "14px",
-              fontWeight: 500,
-              boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-              cursor: "pointer",
-              userSelect: "none",
-            }}
-          >
-            <span
-              style={{
-                display: "inline-block",
-                transform: automationExpanded ? "rotate(90deg)" : "rotate(0deg)",
-                transition: "transform 0.15s",
-                fontSize: "10px",
-                opacity: 0.75,
-              }}
-            >
-              ▶
-            </span>
-            <span>Welcome Funnel 30 in 30 (2025)</span>
-            <span
-              style={{
-                background: "rgba(255,255,255,0.25)",
-                borderRadius: "12px",
-                padding: "2px 10px",
-                fontSize: "11px",
-                fontWeight: 600,
-              }}
-            >
-              {automationLoading ? "…" : automation?.emails?.length ? `${automation.emails.length} emails` : "30 emails"}
-            </span>
-          </button>
-
-          {automationExpanded && (
-            <div
-              style={{
-                width: "100%",
-                background: "#FFFFFF",
-                border: "1px solid #E5E5EA",
-                borderRadius: "8px",
-                padding: "8px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "4px",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-              }}
-            >
-              {automationLoading && !automation && (
-                <div style={{ padding: "20px", textAlign: "center", color: "#86868B", fontSize: "12px" }}>
-                  Loading emails…
-                </div>
-              )}
-              {automation?.error && (
-                <div style={{ padding: "20px", textAlign: "center", color: "#D93D42", fontSize: "12px" }}>
-                  {automation.error}
-                </div>
-              )}
-              {automation?.emails?.length === 0 && !automation.error && !automationLoading && (
-                <div style={{ padding: "20px", textAlign: "center", color: "#86868B", fontSize: "12px" }}>
-                  No emails found in this workflow.
-                </div>
-              )}
-              {automation?.emails?.map((em) => {
-                const openPct = em.openRate != null ? em.openRate.toFixed(1) : null;
-                const clickPct = em.clickRate != null ? em.clickRate.toFixed(1) : null;
-                return (
-                  <div
-                    key={em.id}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "32px 1fr auto auto",
-                      alignItems: "center",
-                      gap: "12px",
-                      padding: "8px 12px",
-                      borderRadius: "4px",
-                      fontSize: "12px",
-                      background: "#F9F9FB",
-                    }}
-                  >
-                    <span style={{ color: "#86868B", fontWeight: 600, fontSize: "11px" }}>
-                      #{em.order}
-                    </span>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 }}>
-                      <span style={{ color: "#1D1D1F", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {em.name}
-                      </span>
-                      {em.subject && (
-                        <span style={{ color: "#86868B", fontSize: "11px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {em.subject}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", minWidth: "64px" }}>
-                      <span style={{ color: "#86868B", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.4px" }}>
-                        Open
-                      </span>
-                      <span style={{ color: "#1D1D1F", fontWeight: 600 }}>
-                        {openPct != null ? `${openPct}%` : "—"}
-                      </span>
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", minWidth: "64px" }}>
-                      <span style={{ color: "#86868B", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.4px" }}>
-                        Click
-                      </span>
-                      <span style={{ color: "#1D1D1F", fontWeight: 600 }}>
-                        {clickPct != null ? `${clickPct}%` : "—"}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </div>
       </div>
     </div>

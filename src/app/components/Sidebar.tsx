@@ -1,0 +1,281 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
+
+type NavItem = { href: string; label: string; icon: React.ReactNode };
+
+const ICON_STYLE = { width: 18, height: 18, flexShrink: 0 } as const;
+
+const Icon = {
+  dashboard: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <rect x="3" y="3" width="7" height="9" rx="1.5" />
+      <rect x="14" y="3" width="7" height="5" rx="1.5" />
+      <rect x="14" y="12" width="7" height="9" rx="1.5" />
+      <rect x="3" y="16" width="7" height="5" rx="1.5" />
+    </svg>
+  ),
+  funnel: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <path d="M3 4h18l-7 9v7l-4-2v-5z" />
+    </svg>
+  ),
+  teams: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <circle cx="9" cy="8" r="3" />
+      <circle cx="17" cy="9" r="2.5" />
+      <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+      <path d="M15 20c0-2.2 1.8-4 4-4s2 1 2 2" />
+    </svg>
+  ),
+  trends: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <polyline points="3,17 9,11 13,15 21,7" />
+      <polyline points="15,7 21,7 21,13" />
+    </svg>
+  ),
+  visit: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <path d="M12 2C8.1 2 5 5.1 5 9c0 5.3 7 13 7 13s7-7.7 7-13c0-3.9-3.1-7-7-7z" />
+      <circle cx="12" cy="9" r="2.5" />
+    </svg>
+  ),
+  install: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <path d="M3 11l9-8 9 8" />
+      <path d="M5 10v10h14V10" />
+      <rect x="9" y="13" width="6" height="7" />
+    </svg>
+  ),
+  feedback: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <path d="M21 11.5a8.5 8.5 0 0 1-12.5 7.5L3 21l2-5.5A8.5 8.5 0 1 1 21 11.5z" />
+    </svg>
+  ),
+  journey: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <circle cx="5" cy="6" r="2" />
+      <circle cx="19" cy="18" r="2" />
+      <path d="M5 8c0 6 4 6 7 6s7 0 7 2" />
+    </svg>
+  ),
+  timeline: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <path d="M4 4v16" />
+      <circle cx="4" cy="8" r="1.5" fill="currentColor" />
+      <circle cx="4" cy="14" r="1.5" fill="currentColor" />
+      <path d="M6 8h14" />
+      <path d="M6 14h10" />
+    </svg>
+  ),
+  reviews: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <path d="M12 3l2.5 5.5 6 .6-4.5 4.2 1.3 6.1L12 16.8 6.7 19.4 8 13.3 3.5 9.1l6-.6z" />
+    </svg>
+  ),
+  automation: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <rect x="3" y="4" width="6" height="6" rx="1" />
+      <rect x="15" y="4" width="6" height="6" rx="1" />
+      <rect x="9" y="14" width="6" height="6" rx="1" />
+      <path d="M6 10v2h12v2" />
+    </svg>
+  ),
+  approvals: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <path d="M6 2h9l5 5v15H6z" />
+      <path d="M15 2v5h5" />
+      <path d="M9 14l2 2 4-4" />
+    </svg>
+  ),
+  overview: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 3v18M3 12h18" />
+    </svg>
+  ),
+  settings: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z" />
+    </svg>
+  ),
+  users: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 00-3-3.87M15 3.13a4 4 0 010 7.75" />
+    </svg>
+  ),
+  changes: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <path d="M12 8v4l3 2" />
+      <circle cx="12" cy="12" r="9" />
+      <path d="M21 12a9 9 0 10-4 7.5" />
+    </svg>
+  ),
+};
+
+const NAV: NavItem[] = [
+  { href: "/", label: "Dashboard", icon: Icon.dashboard },
+  { href: "/funnel", label: "Customer Funnel", icon: Icon.funnel },
+  { href: "/teams", label: "Contacts Per Team", icon: Icon.teams },
+  { href: "/trends", label: "Trends & Lifecycle", icon: Icon.trends },
+  { href: "/team-changes", label: "Team Changes", icon: Icon.changes },
+  { href: "/site-visits", label: "Site Visits", icon: Icon.visit },
+  { href: "/installs", label: "Installs", icon: Icon.install },
+  { href: "/feedback", label: "Outreach Feedback", icon: Icon.feedback },
+  { href: "/customer-journeys", label: "Customer Journeys", icon: Icon.journey },
+  { href: "/lead-timeline", label: "Lead Timeline", icon: Icon.timeline },
+  { href: "/reviews-social", label: "Reviews & Social", icon: Icon.reviews },
+  { href: "/automation-map", label: "Automation Map", icon: Icon.automation },
+  { href: "/financial-approvals", label: "Financial Approvals", icon: Icon.approvals },
+];
+
+const SECONDARY: NavItem[] = [
+  { href: "/settings", label: "Settings", icon: Icon.settings },
+  { href: "/users", label: "Users", icon: Icon.users },
+  { href: "/overview", label: "Full Overview", icon: Icon.overview },
+];
+
+export default function Sidebar() {
+  const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const isActive = (href: string) => {
+    if (href === "/") return pathname === "/";
+    return pathname === href || pathname.startsWith(href + "/");
+  };
+
+  return (
+    <>
+      {/* Mobile top bar */}
+      <div
+        style={{
+          display: "none",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "10px 14px",
+          background: "#FFFFFF",
+          borderBottom: "1px solid var(--color-border)",
+          position: "sticky",
+          top: 0,
+          zIndex: 40,
+        }}
+        className="portal-mobile-bar"
+      >
+        <Link href="/" style={{ fontWeight: 600, fontSize: 15, color: "var(--color-text-primary)", textDecoration: "none" }}>
+          Age Care Marketing Hub
+        </Link>
+        <button
+          onClick={() => setMobileOpen((v) => !v)}
+          style={{ background: "transparent", border: "none", padding: 6, cursor: "pointer", color: "var(--color-text-primary)" }}
+          aria-label="Toggle menu"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 6h18M3 12h18M3 18h18" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Sidebar */}
+      <aside
+        data-mobile-open={mobileOpen}
+        className="portal-sidebar"
+        style={{
+          width: 240,
+          flexShrink: 0,
+          background: "#FFFFFF",
+          borderRight: "1px solid var(--color-border)",
+          padding: "20px 12px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 4,
+          position: "sticky",
+          top: 0,
+          height: "100vh",
+          overflowY: "auto",
+        }}
+      >
+        <Link
+          href="/"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "4px 10px 14px",
+            textDecoration: "none",
+            color: "var(--color-text-primary)",
+          }}
+          onClick={() => setMobileOpen(false)}
+        >
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: "var(--color-accent)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700, fontSize: 13 }}>
+            A
+          </div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.1 }}>Age Care</div>
+            <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>Marketing Hub</div>
+          </div>
+        </Link>
+
+        <nav style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 4 }}>
+          {NAV.map((item) => (
+            <SidebarLink
+              key={item.href}
+              item={item}
+              active={isActive(item.href)}
+              onClick={() => setMobileOpen(false)}
+            />
+          ))}
+        </nav>
+
+        <div style={{ marginTop: 18, padding: "0 10px 6px", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", color: "var(--color-text-tertiary)", textTransform: "uppercase" }}>
+          More
+        </div>
+        <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          {SECONDARY.map((item) => (
+            <SidebarLink
+              key={item.href}
+              item={item}
+              active={isActive(item.href)}
+              onClick={() => setMobileOpen(false)}
+            />
+          ))}
+        </nav>
+      </aside>
+    </>
+  );
+}
+
+function SidebarLink({ item, active, onClick }: { item: NavItem; active: boolean; onClick: () => void }) {
+  return (
+    <Link
+      href={item.href}
+      onClick={onClick}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "9px 10px",
+        borderRadius: 10,
+        color: active ? "var(--color-accent)" : "var(--color-text-primary)",
+        background: active ? "rgba(0,113,227,0.08)" : "transparent",
+        fontWeight: active ? 600 : 500,
+        fontSize: 13,
+        textDecoration: "none",
+        transition: "background 120ms var(--ease-apple)",
+      }}
+      onMouseEnter={(e) => {
+        if (!active) e.currentTarget.style.background = "rgba(0,0,0,0.035)";
+      }}
+      onMouseLeave={(e) => {
+        if (!active) e.currentTarget.style.background = "transparent";
+      }}
+    >
+      {item.icon}
+      <span>{item.label}</span>
+    </Link>
+  );
+}

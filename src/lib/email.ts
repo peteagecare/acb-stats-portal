@@ -4,14 +4,14 @@
 
 export async function sendLoginLink(to: string, link: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.LOGIN_EMAIL_FROM ?? "ACB Stats <onboarding@resend.dev>";
+  const from = process.env.LOGIN_EMAIL_FROM ?? "Age Care Marketing Hub <onboarding@resend.dev>";
 
   if (!apiKey) throw new Error("RESEND_API_KEY is not set");
   if (!to) throw new Error("recipient email is required");
 
   const html = `
     <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#0F172A">
-      <h2 style="margin:0 0 12px;font-size:18px">Sign in to ACB Stats Portal</h2>
+      <h2 style="margin:0 0 12px;font-size:18px">Sign in to Age Care Marketing Hub</h2>
       <p style="margin:0 0 20px;font-size:14px;color:#475569">
         Click the button below to sign in. This link expires in 15 minutes.
       </p>
@@ -20,7 +20,7 @@ export async function sendLoginLink(to: string, link: string): Promise<void> {
            style="display:inline-block;background:#2563eb;color:#fff;
                   text-decoration:none;font-weight:600;padding:12px 24px;
                   border-radius:10px;font-size:15px">
-          Sign in to Stats Portal
+          Sign in to Marketing Hub
         </a>
       </p>
       <p style="margin:0;font-size:12px;color:#94A3B8">
@@ -42,7 +42,7 @@ export async function sendLoginLink(to: string, link: string): Promise<void> {
     body: JSON.stringify({
       from,
       to,
-      subject: "Sign in to ACB Stats Portal",
+      subject: "Sign in to Age Care Marketing Hub",
       html,
     }),
   });
