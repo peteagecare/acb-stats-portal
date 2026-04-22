@@ -32,8 +32,8 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
   const user = parseSessionToken(token);
-  if (!user || user.role !== "admin") {
-    return Response.json({ error: "Admin access required" }, { status: 403 });
+  if (!user) {
+    return Response.json({ error: "Sign in required" }, { status: 401 });
   }
 
   const body = await request.json();

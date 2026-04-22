@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 type NavItem = { href: string; label: string; icon: React.ReactNode };
 
@@ -116,6 +116,13 @@ const Icon = {
       <path d="M21 12a9 9 0 10-4 7.5" />
     </svg>
   ),
+  logout: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <path d="M15 17l5-5-5-5" />
+      <path d="M20 12H9" />
+      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+    </svg>
+  ),
 };
 
 const NAV: NavItem[] = [
@@ -142,12 +149,33 @@ const SECONDARY: NavItem[] = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [email, setEmail] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { email?: string } | null) => setEmail(data?.email ?? null))
+      .catch(() => {});
+  }, []);
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
     return pathname === href || pathname.startsWith(href + "/");
   };
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await fetch("/api/logout", { method: "POST" });
+    } catch {
+      // fall through and redirect anyway
+    }
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <>
@@ -244,6 +272,44 @@ export default function Sidebar() {
             />
           ))}
         </nav>
+
+        <div style={{ marginTop: "auto", paddingTop: 16, borderTop: "1px solid var(--color-border)" }}>
+          {email && (
+            <div style={{ padding: "6px 10px 8px", fontSize: 11, color: "var(--color-text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {email}
+            </div>
+          )}
+          <button
+            onClick={handleSignOut}
+            disabled={signingOut}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "9px 10px",
+              borderRadius: 10,
+              width: "100%",
+              background: "transparent",
+              border: "none",
+              color: "var(--color-text-primary)",
+              fontWeight: 500,
+              fontSize: 13,
+              cursor: signingOut ? "wait" : "pointer",
+              fontFamily: "inherit",
+              textAlign: "left",
+              opacity: signingOut ? 0.6 : 1,
+            }}
+            onMouseEnter={(e) => {
+              if (!signingOut) e.currentTarget.style.background = "rgba(0,0,0,0.035)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+            }}
+          >
+            {Icon.logout}
+            <span>{signingOut ? "Signing out…" : "Sign out"}</span>
+          </button>
+        </div>
       </aside>
     </>
   );
