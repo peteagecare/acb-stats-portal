@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -108,6 +108,8 @@ export default function FinancialApprovalsPage() {
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [previewEmailId, setPreviewEmailId] = useState<string | null>(null);
   const [advanceFromId, setAdvanceFromId] = useState<string | null>(null);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const [waitingFilter, setWaitingFilter] = useState<ApprovalRole | "all">("all");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -200,6 +202,7 @@ export default function FinancialApprovalsPage() {
   }
 
   async function rejectWithNote(emailId: string, role: AnyApprovalKey, note: string) {
+    if (!note.trim()) return; // Empty note = signal to open annotation panel (handled by modal)
     const saveKey = `${emailId}:reject`;
     setSavingKey(saveKey);
     const prev = approvals;
@@ -240,13 +243,33 @@ export default function FinancialApprovalsPage() {
     }
   }
 
+  /** Which roles is this email currently waiting on? (Sequential: Pete -> Chris -> Sam -> Outside) */
+  const waitingOnRoles = useCallback((emailId: string): ApprovalRole[] => {
+    const rec = approvals[emailId] ?? {};
+    if (rec.rejection) return [];
+    if (isDnnaConfirmed({ dnna_pete: !!rec.dnna_pete?.approved, dnna_chris: !!rec.dnna_chris?.approved })) return [];
+    if (rec.dnna_pete?.approved && !rec.dnna_chris?.approved) return ["chris"];
+
+    const sequence: ApprovalRole[] = ["pete", "chris", "sam", "outside"];
+    for (const role of sequence) {
+      if (!rec[role]?.approved) return [role];
+    }
+    return [];
+  }, [approvals]);
+
   const filtered = useMemo(() => {
-    if (!query.trim()) return emails;
-    const q = query.toLowerCase();
-    return emails.filter(
-      (e) => e.name.toLowerCase().includes(q) || e.subject.toLowerCase().includes(q)
-    );
-  }, [emails, query]);
+    let list = emails;
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      list = list.filter(
+        (e) => e.name.toLowerCase().includes(q) || e.subject.toLowerCase().includes(q)
+      );
+    }
+    if (waitingFilter !== "all") {
+      list = list.filter((e) => waitingOnRoles(e.id).includes(waitingFilter));
+    }
+    return list;
+  }, [emails, query, waitingFilter, waitingOnRoles]);
 
   const grouped = useMemo(() => {
     const out: Record<string, HubSpotEmail[]> = {};
@@ -386,6 +409,30 @@ export default function FinancialApprovalsPage() {
       </header>
 
       <main style={{ maxWidth: "1600px", margin: "0 auto", padding: "16px" }}>
+        {/* Waiting-on filter */}
+        {!loading && !error && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 6, marginBottom: 12, flexWrap: "wrap",
+          }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: "#86868B", textTransform: "uppercase", letterSpacing: "0.5px", marginRight: 4 }}>Filter:</span>
+            {([{ key: "all" as const, label: "All emails" }, ...APPROVAL_ROLES.map((r) => ({ key: r.key, label: `Waiting on ${r.label.split(" (")[0]}` }))] as const).map((f) => {
+              const active = waitingFilter === f.key;
+              return (
+                <button key={f.key} onClick={() => setWaitingFilter(active ? "all" : f.key)}
+                  style={{
+                    fontSize: 11, fontWeight: active ? 600 : 400, padding: "5px 12px", borderRadius: 999,
+                    border: active ? "1.5px solid #0071E3" : "1px solid #E5E5EA",
+                    background: active ? "rgba(0,113,227,0.08)" : "white",
+                    color: active ? "#0071E3" : "#1D1D1F",
+                    cursor: "pointer", fontFamily: "inherit",
+                  }}>
+                  {f.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* Signed-in banner */}
         {session?.email && (
           <div
@@ -482,93 +529,99 @@ export default function FinancialApprovalsPage() {
         ) : (
           <>
             {/* Awaiting your approval */}
-            {awaitingMe.length > 0 && (
-              <section
-                style={{
-                  background: "white",
-                  borderRadius: "20px",
-                  padding: "20px",
-                  marginBottom: "16px",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-                  border: "2px solid #F59E0B",
-                  overflow: "hidden",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
-                  <span
+            {awaitingMe.length > 0 && (() => {
+              const collapsed = collapsedSections.has("awaiting");
+              return (
+                <section
+                  style={{
+                    background: "white",
+                    borderRadius: "20px",
+                    padding: collapsed ? "0" : "20px",
+                    marginBottom: "16px",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+                    border: "2px solid #F59E0B",
+                    overflow: "hidden",
+                  }}
+                >
+                  <button
+                    onClick={() => setCollapsedSections((prev) => { const next = new Set(prev); next.has("awaiting") ? next.delete("awaiting") : next.add("awaiting"); return next; })}
                     style={{
-                      fontSize: "11px",
-                      fontWeight: 600,
-                      color: "white",
-                      background: "#F59E0B",
-                      borderRadius: "6px",
-                      padding: "4px 10px",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.5px",
+                      display: "flex", alignItems: "center", gap: "10px", width: "100%",
+                      padding: collapsed ? "16px 20px" : "0 0 16px 0",
+                      background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left",
                     }}
                   >
-                    Awaiting your approval
-                  </span>
-                  <span style={{ fontSize: "12px", color: "#86868B" }}>
-                    {awaitingMe.length} email{awaitingMe.length === 1 ? "" : "s"} need your sign-off
-                  </span>
-                </div>
-                <EmailsTable
-                  emails={awaitingMe}
-                  approvals={approvals}
-                  session={session}
-                  savingKey={savingKey}
-                  onToggle={toggleApproval}
-                  onPreview={setPreviewEmailId}
-                  pendingByEmail={pendingByEmail}
-                  workflowMap={workflowMap}
-                />
-              </section>
-            )}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#86868B" strokeWidth="2" style={{ transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)", transition: "transform 0.15s", flexShrink: 0 }}>
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
+                    <span style={{ fontSize: "11px", fontWeight: 600, color: "white", background: "#F59E0B", borderRadius: "6px", padding: "4px 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                      Awaiting your approval
+                    </span>
+                    <span style={{ fontSize: "12px", color: "#86868B" }}>
+                      {awaitingMe.length} email{awaitingMe.length === 1 ? "" : "s"}
+                    </span>
+                  </button>
+                  {!collapsed && (
+                    <EmailsTable
+                      emails={awaitingMe}
+                      approvals={approvals}
+                      session={session}
+                      savingKey={savingKey}
+                      onToggle={toggleApproval}
+                      onPreview={setPreviewEmailId}
+                      pendingByEmail={pendingByEmail}
+                      workflowMap={workflowMap}
+                    />
+                  )}
+                </section>
+              );
+            })()}
 
             {STATE_GROUPS.map((group) => {
             const groupEmails = grouped[group.key] ?? [];
             if (groupEmails.length === 0) return null;
+            const collapsed = collapsedSections.has(group.key);
             return (
               <section
                 key={group.key}
                 style={{
                   background: "white",
                   borderRadius: "20px",
-                  padding: "20px",
+                  padding: collapsed ? "0" : "20px",
                   marginBottom: "16px",
                   boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
                   border: "1px solid rgba(0,0,0,0.04)",
                   overflow: "hidden",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
-                  <span
-                    style={{
-                      fontSize: "11px",
-                      fontWeight: 600,
-                      color: group.color,
-                      background: group.bg,
-                      borderRadius: "6px",
-                      padding: "4px 10px",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.5px",
-                    }}
-                  >
+                <button
+                  onClick={() => setCollapsedSections((prev) => { const next = new Set(prev); next.has(group.key) ? next.delete(group.key) : next.add(group.key); return next; })}
+                  style={{
+                    display: "flex", alignItems: "center", gap: "10px", width: "100%",
+                    padding: collapsed ? "16px 20px" : "0 0 16px 0",
+                    background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left",
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#86868B" strokeWidth="2" style={{ transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)", transition: "transform 0.15s", flexShrink: 0 }}>
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                  <span style={{ fontSize: "11px", fontWeight: 600, color: group.color, background: group.bg, borderRadius: "6px", padding: "4px 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                     {group.label}
                   </span>
                   <span style={{ fontSize: "12px", color: "#86868B" }}>{groupEmails.length} email{groupEmails.length === 1 ? "" : "s"}</span>
-                </div>
-                <EmailsTable
-                  emails={groupEmails}
-                  approvals={approvals}
-                  session={session}
-                  savingKey={savingKey}
-                  onToggle={toggleApproval}
-                  onPreview={setPreviewEmailId}
-                  pendingByEmail={pendingByEmail}
-                  workflowMap={workflowMap}
-                />
+                </button>
+                {!collapsed && (
+                  <EmailsTable
+                    emails={groupEmails}
+                    approvals={approvals}
+                    session={session}
+                    savingKey={savingKey}
+                    onToggle={toggleApproval}
+                    onPreview={setPreviewEmailId}
+                    pendingByEmail={pendingByEmail}
+                    workflowMap={workflowMap}
+                  />
+                )}
               </section>
             );
           })}
@@ -631,43 +684,89 @@ function EmailsTable({
   pendingByEmail: Record<string, PendingAction[]>;
   workflowMap: WorkflowMap;
 }) {
+  // Group emails by automation/workflow name
+  const groups: { name: string; emails: HubSpotEmail[] }[] = [];
+  const byWf = new Map<string, HubSpotEmail[]>();
+  const noWf: HubSpotEmail[] = [];
+
+  for (const email of emails) {
+    const wfs = workflowMap[email.id] ?? [];
+    if (wfs.length > 0) {
+      // Use first workflow name as the group key
+      const wfName = wfs[0].name;
+      if (!byWf.has(wfName)) byWf.set(wfName, []);
+      byWf.get(wfName)!.push(email);
+    } else {
+      noWf.push(email);
+    }
+  }
+
+  // Sort workflow groups alphabetically
+  for (const [name, wfEmails] of [...byWf.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    groups.push({ name, emails: wfEmails });
+  }
+  if (noWf.length > 0) {
+    groups.push({ name: "", emails: noWf });
+  }
+
+  // If there's only one group (or no workflows at all), skip sub-headers
+  const showSubGroups = groups.length > 1 || (groups.length === 1 && groups[0].name !== "");
+  const [collapsedWf, setCollapsedWf] = useState<Set<string>>(new Set());
+
   return (
-    <div style={{ overflowX: "auto", margin: "0 -20px", padding: "0 20px" }}>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(260px, 1.6fr) minmax(140px, 1fr) minmax(190px, 1.3fr) minmax(170px, 1.2fr) 140px 140px",
-          padding: "10px 4px",
-          borderBottom: "1px solid #F5F5F7",
-          fontSize: "10px",
-          fontWeight: 600,
-          color: "#86868B",
-          textTransform: "uppercase",
-          letterSpacing: "0.5px",
-          gap: "12px",
-          alignItems: "center",
-          minWidth: "1120px",
-        }}
-      >
-        <div>Email</div>
-        <div>Last updated</div>
-        {APPROVAL_ROLES.map((r) => (
-          <div key={r.key} style={{ textAlign: "center" }}>{r.label}</div>
-        ))}
-      </div>
-      {emails.map((email) => (
-        <EmailRow
-          key={email.id}
-          email={email}
-          approval={approvals[email.id] ?? {}}
-          session={session}
-          savingKey={savingKey}
-          onToggle={onToggle}
-          onPreview={onPreview}
-          pendingActions={pendingByEmail[email.id] ?? []}
-          workflows={workflowMap[email.id] ?? []}
-        />
-      ))}
+    <div style={{ display: "flex", flexDirection: "column", gap: showSubGroups ? 4 : 10 }}>
+      {groups.map((g) => {
+        const gKey = g.name || "__none__";
+        const isCollapsed = collapsedWf.has(gKey);
+        return (
+        <div key={gKey}>
+          {showSubGroups && (
+            <button
+              onClick={() => setCollapsedWf((prev) => { const next = new Set(prev); next.has(gKey) ? next.delete(gKey) : next.add(gKey); return next; })}
+              style={{
+                display: "flex", alignItems: "center", gap: 8, width: "100%",
+                padding: "10px 0 6px", fontSize: 11, fontWeight: 600, color: "#86868B",
+                background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left",
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#AEAEB2" strokeWidth="2" style={{ transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)", transition: "transform 0.15s", flexShrink: 0 }}>
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+              {g.name ? (
+                <>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#8E4EC6", flexShrink: 0 }} />
+                  <span style={{ color: "#8E4EC6" }}>{g.name}</span>
+                  <span style={{ fontWeight: 400 }}>({g.emails.length})</span>
+                </>
+              ) : (
+                <>
+                  <span style={{ color: "#AEAEB2" }}>Standalone emails</span>
+                  <span style={{ fontWeight: 400, color: "#AEAEB2" }}>({g.emails.length})</span>
+                </>
+              )}
+              <div style={{ flex: 1, height: 1, background: "#F0F0F2" }} />
+            </button>
+          )}
+          {!isCollapsed && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {g.emails.map((email) => (
+              <EmailRow
+                key={email.id}
+                email={email}
+                approval={approvals[email.id] ?? {}}
+                session={session}
+                savingKey={savingKey}
+                onToggle={onToggle}
+                onPreview={onPreview}
+                pendingActions={pendingByEmail[email.id] ?? []}
+                workflows={workflowMap[email.id] ?? []}
+              />
+            ))}
+          </div>
+          )}
+        </div>
+        );
+      })}
     </div>
   );
 }
@@ -699,287 +798,198 @@ function EmailRow({
   const dnnaPending = !!dnnaPeteRec?.approved && !dnnaChrisRec?.approved;
   const petesDnnaMine = canApproveAny("dnna_pete", session?.email);
   const chrisDnnaMine = canApproveAny("dnna_chris", session?.email);
-  // Once Pete approves normally, DNNA stops being an option.
   const normalPathStarted = !!approval.pete?.approved;
-  // Did the signed-in user already contribute an action (approve or DNNA) to this email?
   const myApprovalKeys: AnyApprovalKey[] = [...APPROVAL_ROLES.map((r) => r.key), "dnna_pete", "dnna_chris"] as AnyApprovalKey[];
   const iHaveActed = myApprovalKeys.some((k) => canApproveAny(k, session?.email) && !!approval[k]?.approved);
   const rejection = approval.rejection;
-  const rowBg = rejection
-    ? "rgba(220,38,38,0.06)"           // sent back — red
-    : needsAction
-      ? "rgba(245,158,11,0.06)"        // awaiting me — orange
-      : iHaveActed
-        ? "rgba(48,164,108,0.06)"      // I've done my part — green
-        : "transparent";
+
+  const borderColor = rejection ? "#FCA5A5" : needsAction ? "#F59E0B" : iHaveActed ? "#86EFAC" : "rgba(0,0,0,0.06)";
+  const leftAccent = rejection ? "#DC2626" : needsAction ? "#F59E0B" : iHaveActed ? "#30A46C" : "#D1D1D6";
+  const k = kindBadge(email.type);
+  const savingDnnaPete = savingKey === `${email.id}:dnna_pete`;
+  const savingDnnaChris = savingKey === `${email.id}:dnna_chris`;
+
+  // Build the CTA buttons for the right side
+  const ctaButtons: { label: string; bg: string; key: AnyApprovalKey; saving: boolean }[] = [];
+  if (needsAction) {
+    for (const a of pendingActions.filter((a) => a.kind === "approve")) {
+      const cfg = APPROVAL_ROLES.find((r) => r.key === a.key);
+      if (cfg) ctaButtons.push({ label: `Approve as ${cfg.label.split(" (")[0]}`, bg: "#30A46C", key: a.key, saving: savingKey === `${email.id}:${a.key}` });
+    }
+    if (chrisDnnaMine && dnnaPending) {
+      ctaButtons.push({ label: "Approve to send", bg: "#0071E3", key: "dnna_chris", saving: savingDnnaChris });
+    }
+  }
+
   return (
     <div
       style={{
-        display: "grid",
-        gridTemplateColumns: "minmax(260px, 1.6fr) minmax(140px, 1fr) minmax(190px, 1.3fr) minmax(170px, 1.2fr) 140px 140px",
-        padding: "14px 4px",
-        borderBottom: "1px solid #F5F5F7",
-        fontSize: "13px",
-        color: "#1D1D1F",
-        gap: "12px",
-        alignItems: "center",
-        minWidth: "1120px",
-        background: rowBg,
+        background: "white",
+        borderRadius: 14,
+        border: `1px solid ${borderColor}`,
+        borderLeft: `4px solid ${leftAccent}`,
+        padding: 0,
+        cursor: "pointer",
+        transition: "box-shadow 0.15s, transform 0.1s",
+        boxShadow: needsAction ? "0 2px 8px rgba(245,158,11,0.12)" : "0 1px 3px rgba(0,0,0,0.04)",
+        display: "flex",
+        overflow: "hidden",
       }}
+      onClick={() => onPreview(email.id)}
+      onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.1)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.boxShadow = needsAction ? "0 2px 8px rgba(245,158,11,0.12)" : "0 1px 3px rgba(0,0,0,0.04)"; e.currentTarget.style.transform = "none"; }}
     >
-      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: "4px" }}>
-        <button
-          type="button"
-          onClick={() => onPreview(email.id)}
-          style={{
-            minWidth: 0,
-            textAlign: "left",
-            background: "transparent",
-            border: "none",
-            padding: 0,
-            cursor: "pointer",
-            fontFamily: "inherit",
-            color: "inherit",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
-            {(() => {
-              const k = kindBadge(email.type);
-              return (
-                <span
-                  style={{
-                    fontSize: "10px",
-                    fontWeight: 600,
-                    color: k.color,
-                    background: k.bg,
-                    borderRadius: "4px",
-                    padding: "2px 6px",
-                    flexShrink: 0,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.3px",
-                  }}
-                >
-                  {k.label}
-                </span>
-              );
-            })()}
-            <span style={{ fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "#0071E3" }}>{email.name}</span>
-          </div>
-          {email.subject && (
-            <div style={{ fontSize: "11px", color: "#86868B", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: "2px" }}>
-              {email.subject}
+      {/* Left: content */}
+      <div style={{ flex: 1, minWidth: 0, padding: "16px 18px" }}>
+        {/* Title */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "#1D1D1F", lineHeight: 1.3, marginBottom: 4 }}>
+              {email.name}
             </div>
-          )}
-          {rejection && (
-            <div
-              title={`"${rejection.note}"`}
-              style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginTop: "4px", fontSize: "11px", color: "#991B1B", background: "#FEE2E2", borderRadius: "4px", padding: "3px 8px", fontWeight: 600, maxWidth: "520px" }}
-            >
-              ⨯ Sent back by {rejection.userLabel || rejection.userEmail}:
-              <span style={{ fontWeight: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rejection.note}</span>
-            </div>
-          )}
-          {workflows.length > 0 && (
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "4px", flexWrap: "wrap" }}>
-              {workflows.map((wf) => (
-                <span
-                  key={wf.id}
-                  title={wf.enabled ? "Workflow is ON" : "Workflow is OFF"}
-                  style={{
-                    fontSize: "10px",
-                    color: wf.enabled ? "#065F46" : "#6B7280",
-                    background: wf.enabled ? "#D1FAE5" : "#F3F4F6",
-                    borderRadius: "4px",
-                    padding: "2px 6px",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "4px",
-                    maxWidth: "360px",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  <span
-                    style={{
-                      width: "6px",
-                      height: "6px",
-                      borderRadius: "50%",
-                      background: wf.enabled ? "#10B981" : "#9CA3AF",
-                      flexShrink: 0,
-                    }}
-                  />
-                  {wf.name} <span style={{ opacity: 0.7 }}>· {wf.enabled ? "ON" : "OFF"}</span>
-                </span>
-              ))}
-            </div>
-          )}
-        </button>
-      </div>
-      <div style={{ fontSize: "12px", color: "#86868B" }}>{formatDate(email.updatedAt ?? email.createdAt)}</div>
-      {APPROVAL_ROLES.map((role) => {
-        const rec = approval[role.key];
-        const checked = !!rec?.approved;
-        const allowed = canApprove(role.key, session?.email) && !dnnaConfirmed && !dnnaPending;
-        const saving = savingKey === `${email.id}:${role.key}`;
-        const isPending = pendingRoles.includes(role.key);
-        const savingDnnaPete = savingKey === `${email.id}:dnna_pete`;
-        const savingDnnaChris = savingKey === `${email.id}:dnna_chris`;
-
-        // PETE column — show DNNA pill when Pete has marked it (pending or confirmed)
-        if (role.key === "pete" && (dnnaPending || dnnaConfirmed) && !checked) {
-          return (
-            <div key={role.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "0 4px" }}>
-              <span
-                style={{
-                  fontSize: "11px",
-                  fontWeight: 600,
-                  color: dnnaConfirmed ? "#065F46" : "#92400E",
-                  background: dnnaConfirmed ? "#D1FAE5" : "#FEF3C7",
-                  borderRadius: "6px",
-                  padding: "5px 10px",
-                  textAlign: "center",
-                  lineHeight: 1.3,
-                }}
-                title={dnnaPeteRec ? `Marked by ${dnnaPeteRec.userLabel || dnnaPeteRec.userEmail} · ${formatDate(dnnaPeteRec.timestamp)}` : ""}
-              >
-                {dnnaConfirmed ? "✓" : "∅"} No financial approval needed
-              </span>
-              {petesDnnaMine && !savingDnnaPete && (
-                <button
-                  onClick={() => onToggle(email.id, "dnna_pete", false)}
-                  style={{ background: "transparent", border: "none", color: "#86868B", cursor: "pointer", fontSize: "10px", padding: 0, textDecoration: "underline" }}
-                  title="Remove this status"
-                >
-                  undo
-                </button>
-              )}
-            </div>
-          );
-        }
-
-        // CHRIS column — show DNNA confirmation state
-        if (role.key === "chris" && (dnnaPending || dnnaConfirmed) && !checked) {
-          if (dnnaConfirmed) {
-            return (
-              <div key={role.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "0 4px" }}>
-                <span
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    color: "#065F46",
-                    background: "#D1FAE5",
-                    borderRadius: "6px",
-                    padding: "5px 10px",
-                    textAlign: "center",
-                    lineHeight: 1.3,
-                  }}
-                  title={dnnaChrisRec ? `Approved to send by ${dnnaChrisRec.userLabel || dnnaChrisRec.userEmail} · ${formatDate(dnnaChrisRec.timestamp)}` : ""}
-                >
-                  ✓ Approved to send
-                </span>
+            {email.subject && (
+              <div style={{ fontSize: 12, color: "#86868B", marginBottom: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {email.subject}
               </div>
+            )}
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C7C7CC" strokeWidth="2" style={{ flexShrink: 0, marginTop: 3 }}>
+            <path d="M9 18l6-6-6-6" />
+          </svg>
+        </div>
+
+      {/* Info pills */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
+        <span style={{ fontSize: 10, fontWeight: 600, color: k.color, background: k.bg, borderRadius: 999, padding: "3px 9px", textTransform: "uppercase", letterSpacing: "0.3px" }}>
+          {k.label}
+        </span>
+        <span style={{ fontSize: 10, color: "#86868B", background: "#F5F5F7", borderRadius: 999, padding: "3px 9px" }}>
+          {formatDate(email.updatedAt ?? email.createdAt)}
+        </span>
+        {workflows.map((wf) => (
+          <span key={wf.id} style={{
+            fontSize: 10, color: wf.enabled ? "#065F46" : "#6B7280",
+            background: wf.enabled ? "#D1FAE5" : "#F3F4F6",
+            borderRadius: 999, padding: "3px 9px",
+            display: "inline-flex", alignItems: "center", gap: 4,
+          }}>
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: wf.enabled ? "#10B981" : "#9CA3AF" }} />
+            {wf.name}
+          </span>
+        ))}
+        {rejection && (
+          <span style={{ fontSize: 10, fontWeight: 600, color: "#991B1B", background: "#FEE2E2", borderRadius: 999, padding: "3px 9px", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            Sent back: {rejection.note}
+          </span>
+        )}
+      </div>
+
+      {/* Approvals row — visually separated */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 10, borderTop: "1px solid #F0F0F2", flexWrap: "wrap" }} onClick={(e) => e.stopPropagation()}>
+        <span style={{ fontSize: 9, fontWeight: 700, color: "#86868B", textTransform: "uppercase", letterSpacing: "0.6px", marginRight: 4 }}>Sign-off</span>
+        {APPROVAL_ROLES.map((role) => {
+          const rec = approval[role.key];
+          const checked = !!rec?.approved;
+
+          if (role.key === "pete" && (dnnaPending || dnnaConfirmed) && !checked) {
+            return (
+              <span key={role.key} style={{
+                fontSize: 11, fontWeight: 600, color: dnnaConfirmed ? "#065F46" : "#92400E",
+                background: dnnaConfirmed ? "#D1FAE5" : "#FEF3C7",
+                borderRadius: 8, padding: "5px 10px",
+              }}>
+                {dnnaConfirmed ? "\u2713 " : ""}No financial approval needed
+                {petesDnnaMine && !savingDnnaPete && (
+                  <button onClick={() => onToggle(email.id, "dnna_pete", false)}
+                    style={{ background: "none", border: "none", color: "#86868B", cursor: "pointer", fontSize: 9, padding: "0 0 0 4px", textDecoration: "underline" }}>
+                    undo
+                  </button>
+                )}
+              </span>
             );
           }
-          // pending — Chris confirms
-          return (
-            <div key={role.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "0 4px" }}>
-              {chrisDnnaMine ? (
-                <button
-                  onClick={() => onToggle(email.id, "dnna_chris", true)}
-                  disabled={savingDnnaChris}
-                  style={{
-                    background: "#0071E3",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "6px",
-                    padding: "5px 10px",
-                    cursor: savingDnnaChris ? "not-allowed" : "pointer",
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    opacity: savingDnnaChris ? 0.5 : 1,
-                  }}
-                >
+          if (role.key === "chris" && (dnnaPending || dnnaConfirmed) && !checked) {
+            if (dnnaConfirmed) {
+              return <span key={role.key} style={{ fontSize: 11, fontWeight: 600, color: "#065F46", background: "#D1FAE5", borderRadius: 8, padding: "5px 10px" }}>{"\u2713"} Approved to send</span>;
+            }
+            if (chrisDnnaMine) {
+              return (
+                <button key={role.key} onClick={() => onToggle(email.id, "dnna_chris", true)} disabled={savingDnnaChris}
+                  style={{ fontSize: 11, fontWeight: 600, color: "white", background: "#0071E3", borderRadius: 8, padding: "5px 12px", border: "none", cursor: savingDnnaChris ? "not-allowed" : "pointer", opacity: savingDnnaChris ? 0.5 : 1 }}>
                   Approve to send
                 </button>
-              ) : (
-                <span style={{ fontSize: "11px", color: "#86868B", textAlign: "center", lineHeight: 1.3 }}>
-                  Awaiting Chris<br />to approve to send
-                </span>
-              )}
-            </div>
-          );
-        }
+              );
+            }
+            return <span key={role.key} style={{ fontSize: 11, color: "#86868B", background: "#F5F5F7", borderRadius: 8, padding: "5px 10px" }}>Awaiting Chris</span>;
+          }
 
-        return (
-          <div key={role.key} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
-            <label
+          if (checked) {
+            return (
+              <span key={role.key} style={{
+                fontSize: 11, fontWeight: 600, color: "#065F46", background: "#D1FAE5",
+                borderRadius: 8, padding: "5px 10px",
+                display: "inline-flex", alignItems: "center", gap: 4,
+              }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#065F46" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
+                {role.label}
+              </span>
+            );
+          }
+
+          const isPending = pendingRoles.includes(role.key);
+          return (
+            <span key={role.key} style={{
+              fontSize: 11, fontWeight: isPending ? 600 : 400,
+              color: isPending ? "#92400E" : "#AEAEB2",
+              background: isPending ? "#FFF8E7" : "#FAFAFA",
+              borderRadius: 8, padding: "5px 10px",
+              border: isPending ? "1.5px solid #F59E0B" : "1px solid #E5E5EA",
+            }}>
+              {isPending ? `Needs ${role.label}` : role.label}
+            </span>
+          );
+        })}
+      </div>
+
+      </div>
+
+      {/* Right: CTA panel */}
+      {ctaButtons.length > 0 ? (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            gap: 8, padding: "16px 20px", minWidth: 180,
+            background: "rgba(48,164,108,0.06)", borderLeft: "1px solid #E5E5EA",
+          }}
+        >
+          <span style={{ fontSize: 9, fontWeight: 700, color: "#92400E", textTransform: "uppercase", letterSpacing: "0.6px" }}>Next step</span>
+          {ctaButtons.map((btn) => (
+            <button key={btn.key} onClick={() => onToggle(email.id, btn.key, true)} disabled={btn.saving}
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "28px",
-                height: "28px",
-                borderRadius: "8px",
-                border: checked ? "none" : "1.5px solid " + (isPending ? "#F59E0B" : allowed ? "#D2D2D7" : "#E5E5EA"),
-                background: checked ? "#30A46C" : isPending ? "#FFF8E7" : "white",
-                cursor: allowed && !saving ? "pointer" : "not-allowed",
-                opacity: saving ? 0.5 : 1,
-                transition: "all 0.15s",
-                position: "relative",
-                boxShadow: isPending ? "0 0 0 3px rgba(245,158,11,0.2)" : "none",
-              }}
-              title={
-                !allowed
-                  ? `Only ${role.label} can tick this`
-                  : checked
-                    ? `Approved by ${rec?.userLabel ?? rec?.userEmail ?? ""} · ${formatDate(rec?.timestamp ?? null)} — click to remove`
-                    : "Click to approve"
-              }
-            >
-              <input
-                type="checkbox"
-                checked={checked}
-                disabled={!allowed || saving}
-                onChange={(e) => onToggle(email.id, role.key, e.target.checked)}
-                style={{ position: "absolute", opacity: 0, width: 0, height: 0, pointerEvents: "none" }}
-              />
-              {checked && (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              )}
-            </label>
-            {checked && rec && (
-              <div style={{ fontSize: "10px", color: "#86868B", textAlign: "center", lineHeight: 1.3 }}>
-                {rec.userLabel || rec.userEmail}
-                <br />
-                {formatDate(rec.timestamp)}
-              </div>
-            )}
-            {role.key === "pete" && !checked && petesDnnaMine && !normalPathStarted && (
-              <button
-                onClick={() => onToggle(email.id, "dnna_pete", true)}
-                disabled={savingDnnaPete}
-                style={{
-                  background: "transparent",
-                  border: "1px dashed #C7C7CC",
-                  borderRadius: "6px",
-                  padding: "4px 8px",
-                  cursor: savingDnnaPete ? "not-allowed" : "pointer",
-                  fontSize: "10px",
-                  color: "#86868B",
-                  opacity: savingDnnaPete ? 0.5 : 1,
-                  whiteSpace: "nowrap",
-                }}
-                title="Mark this email as not needing financial approval — Chris will then confirm"
-              >
-                ∅ No financial approval needed
-              </button>
-            )}
-          </div>
-        );
-      })}
+                background: btn.bg, color: "white", border: "none", borderRadius: 10, padding: "10px 18px",
+                fontSize: 13, fontWeight: 600, cursor: btn.saving ? "not-allowed" : "pointer",
+                opacity: btn.saving ? 0.6 : 1, width: "100%", textAlign: "center",
+              }}>
+              {btn.saving ? "Saving\u2026" : btn.label}
+            </button>
+          ))}
+          {petesDnnaMine && !dnnaPeteRec?.approved && !normalPathStarted && pendingRoles.includes("pete") && (
+            <button onClick={() => onToggle(email.id, "dnna_pete", true)} disabled={savingDnnaPete}
+              style={{
+                background: "white", color: "#1D1D1F", border: "1px solid #E5E5EA", borderRadius: 10,
+                padding: "8px 14px", fontSize: 11, fontWeight: 500, cursor: savingDnnaPete ? "not-allowed" : "pointer",
+                opacity: savingDnnaPete ? 0.5 : 1, width: "100%", textAlign: "center",
+              }}>
+              No financial approval needed
+            </button>
+          )}
+        </div>
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "16px 12px", minWidth: 40 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C7C7CC" strokeWidth="2"><path d="M9 18l6-6-6-6" /></svg>
+        </div>
+      )}
     </div>
   );
 }
@@ -1023,9 +1033,8 @@ function ModalActionBar({
 
   const handleReject = () => {
     if (!rejectRole) return;
-    const note = window.prompt("Why are you sending this back to Pete for changes?\n(Your note will be shown to Pete.)");
-    if (!note || !note.trim()) return;
-    onReject(emailId, rejectRole, note.trim());
+    // Signal to parent modal to open the annotation/reject panel
+    onReject(emailId, rejectRole, "");
   };
 
   // Sent back for changes — Pete sees the rejection and re-approves to restart.
@@ -1140,9 +1149,9 @@ function ModalActionBar({
           onClick={() => onToggle(emailId, "dnna_pete", true)}
           disabled={saving("dnna_pete")}
           style={{
-            background: "transparent",
-            color: "#92400E",
-            border: "1px dashed #D97706",
+            background: "white",
+            color: "#1D1D1F",
+            border: "1px solid #E5E5EA",
             borderRadius: "8px",
             padding: "7px 13px",
             fontSize: "12px",
@@ -1152,7 +1161,7 @@ function ModalActionBar({
           }}
           title="Chris will then need to approve to send"
         >
-          ∅ No Financial Approval Needed
+          No Financial Approval Needed
         </button>
       )}
 
@@ -1242,13 +1251,53 @@ function EmailPreviewModal({
     onToggle(eid, role, next);
     if (next) onActionTaken(eid);
   };
-  const wrappedReject = (eid: string, role: AnyApprovalKey, note: string) => {
-    onReject(eid, role, note);
-    onActionTaken(eid);
-  };
   const [detail, setDetail] = useState<EmailDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [annotating, setAnnotating] = useState(false);
+  const [rejectNote, setRejectNote] = useState("");
+  const [showRejectPanel, setShowRejectPanel] = useState(false);
+  const [rejectRoleStored, setRejectRoleStored] = useState<AnyApprovalKey | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawState = useRef({ drawing: false, lastX: 0, lastY: 0 });
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+
+  const wrappedReject = (_eid: string, role: AnyApprovalKey, _note: string) => {
+    // Instead of window.prompt, open the annotation panel
+    setRejectRoleStored(role);
+    setRejectNote("");
+    setShowRejectPanel(true);
+    setAnnotating(true);
+  };
+
+  function submitReject() {
+    if (!rejectRoleStored || !rejectNote.trim()) return;
+    // Get annotation image if any drawing was done
+    const canvas = canvasRef.current;
+    let annotationData: string | undefined;
+    if (canvas) {
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const hasDrawing = imageData.data.some((v, i) => i % 4 === 3 && v > 0); // any non-transparent pixel
+        if (hasDrawing) annotationData = canvas.toDataURL("image/png");
+      }
+    }
+    const fullNote = annotationData
+      ? `${rejectNote.trim()}\n\n[Annotated screenshot attached]`
+      : rejectNote.trim();
+    onReject(emailId, rejectRoleStored, fullNote);
+    onActionTaken(emailId);
+    setShowRejectPanel(false);
+    setAnnotating(false);
+  }
+
+  function clearCanvas() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -1297,7 +1346,7 @@ function EmailPreviewModal({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: "24px",
+        padding: "12px",
       }}
     >
       <div
@@ -1306,8 +1355,8 @@ function EmailPreviewModal({
           background: "white",
           borderRadius: "20px",
           width: "100%",
-          maxWidth: "900px",
-          maxHeight: "90vh",
+          maxWidth: "1200px",
+          maxHeight: "95vh",
           display: "flex",
           flexDirection: "column",
           boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
@@ -1397,6 +1446,61 @@ function EmailPreviewModal({
           onReject={wrappedReject}
         />
 
+        {/* Approval history timeline */}
+        {(() => {
+          const events: { time: string; label: string; color: string; icon: string }[] = [];
+          for (const role of APPROVAL_ROLES) {
+            const rec = approval[role.key];
+            if (rec?.approved) {
+              events.push({
+                time: rec.timestamp,
+                label: `${rec.userLabel || rec.userEmail} approved as ${role.label}`,
+                color: "#30A46C",
+                icon: "\u2713",
+              });
+            }
+          }
+          if (approval.dnna_pete?.approved) {
+            const rec = approval.dnna_pete;
+            events.push({ time: rec.timestamp, label: `${rec.userLabel || rec.userEmail} marked as no financial approval needed`, color: "#F59E0B", icon: "\u2205" });
+          }
+          if (approval.dnna_chris?.approved) {
+            const rec = approval.dnna_chris;
+            events.push({ time: rec.timestamp, label: `${rec.userLabel || rec.userEmail} confirmed approved to send`, color: "#0071E3", icon: "\u2713" });
+          }
+          if (approval.rejection) {
+            const rej = approval.rejection;
+            events.push({ time: rej.timestamp, label: `${rej.userLabel || rej.userEmail} sent back: "${rej.note}"`, color: "#DC2626", icon: "\u2717" });
+          }
+          events.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+          if (events.length === 0) return null;
+          return (
+            <div style={{ padding: "14px 24px", borderBottom: "1px solid rgba(0,0,0,0.06)", background: "white" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#86868B", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 10 }}>Approval history</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 0, position: "relative", paddingLeft: 18 }}>
+                <div style={{ position: "absolute", left: 5, top: 6, bottom: 6, width: 2, background: "#E5E5EA" }} />
+                {events.map((ev, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "6px 0", position: "relative" }}>
+                    <div style={{
+                      width: 12, height: 12, borderRadius: "50%", background: ev.color,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 8, color: "white", fontWeight: 700, flexShrink: 0,
+                      position: "absolute", left: -18, top: 8,
+                      zIndex: 1,
+                    }}>
+                      {ev.icon}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 12, color: "#1D1D1F", lineHeight: 1.4 }}>{ev.label}</div>
+                      <div style={{ fontSize: 10, color: "#86868B" }}>{formatDate(ev.time)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         {detail && detail.html && (
           <div style={{ padding: "8px 24px", background: "#FFFBEA", borderBottom: "1px solid rgba(0,0,0,0.06)", fontSize: "11px", color: "#86868B" }}>
             Approximate preview — layout and styling may differ from the final sent email.
@@ -1407,33 +1511,133 @@ function EmailPreviewModal({
             ) : null}
           </div>
         )}
-        <div style={{ flex: 1, overflow: "auto", background: "#F5F5F7" }}>
-          {loading && (
-            <div style={{ padding: "60px", textAlign: "center", color: "#86868B", fontSize: "14px" }}>Loading email…</div>
-          )}
-          {error && (
-            <div style={{ padding: "30px", color: "#DC2626", fontSize: "13px" }}>{error}</div>
-          )}
-          {detail && !error && (
-            detail.html ? (
-              <iframe
-                srcDoc={detail.html}
-                title="Email preview"
-                sandbox="allow-same-origin"
-                style={{ width: "100%", height: "60vh", border: "none", background: "white" }}
+        {/* Annotation toolbar */}
+        {annotating && (
+          <div style={{ padding: "8px 24px", borderBottom: "1px solid rgba(0,0,0,0.06)", background: "#FEF2F2", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#991B1B", textTransform: "uppercase", letterSpacing: "0.5px" }}>Draw on email</span>
+            <span style={{ fontSize: 11, color: "#991B1B" }}>Click and drag to mark up the email below</span>
+            <button onClick={clearCanvas} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "1px solid #FCA5A5", background: "white", color: "#991B1B", cursor: "pointer", fontWeight: 600, marginLeft: "auto" }}>
+              Clear drawing
+            </button>
+            <button onClick={() => { setAnnotating(false); setShowRejectPanel(false); clearCanvas(); }}
+              style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "1px solid #E5E5EA", background: "white", color: "#86868B", cursor: "pointer", fontWeight: 600 }}>
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {/* Email preview + drawing canvas */}
+        <div style={{ flex: 1, overflow: "auto", background: "#F5F5F7", display: "flex" }}>
+          <div ref={previewContainerRef} style={{ flex: 1, position: "relative", minHeight: 0 }}>
+            {loading && (
+              <div style={{ padding: "60px", textAlign: "center", color: "#86868B", fontSize: "14px" }}>Loading email...</div>
+            )}
+            {error && (
+              <div style={{ padding: "30px", color: "#DC2626", fontSize: "13px" }}>{error}</div>
+            )}
+            {detail && !error && (
+              detail.html ? (
+                <iframe
+                  srcDoc={detail.html}
+                  title="Email preview"
+                  sandbox="allow-same-origin"
+                  style={{ width: "100%", height: "100%", minHeight: "60vh", border: "none", background: "white" }}
+                />
+              ) : (
+                <div style={{ padding: "40px", textAlign: "center", color: "#86868B", fontSize: "13px" }}>
+                  No renderable content in this email{detail.widgetCount > 0 ? ` (${detail.widgetCount} widget${detail.widgetCount === 1 ? "" : "s"} with no HTML body)` : ""}.
+                  {hubspotEditUrl && (
+                    <div style={{ marginTop: "12px" }}>
+                      <a href={hubspotEditUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#0071E3", textDecoration: "none", fontWeight: 500 }}>
+                        Open in HubSpot ↗
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )
+            )}
+            {/* Drawing canvas overlay */}
+            {annotating && (
+              <canvas
+                ref={canvasRef}
+                width={previewContainerRef.current?.offsetWidth ?? 800}
+                height={previewContainerRef.current?.scrollHeight ?? 600}
+                style={{
+                  position: "absolute", inset: 0, width: "100%", height: "100%",
+                  cursor: "crosshair", zIndex: 10,
+                }}
+                onPointerDown={(e) => {
+                  const canvas = canvasRef.current;
+                  if (!canvas) return;
+                  const rect = canvas.getBoundingClientRect();
+                  const scaleX = canvas.width / rect.width;
+                  const scaleY = canvas.height / rect.height;
+                  drawState.current = { drawing: true, lastX: (e.clientX - rect.left) * scaleX, lastY: (e.clientY - rect.top) * scaleY };
+                  canvas.setPointerCapture(e.pointerId);
+                }}
+                onPointerMove={(e) => {
+                  if (!drawState.current.drawing) return;
+                  const canvas = canvasRef.current;
+                  if (!canvas) return;
+                  const ctx = canvas.getContext("2d");
+                  if (!ctx) return;
+                  const rect = canvas.getBoundingClientRect();
+                  const scaleX = canvas.width / rect.width;
+                  const scaleY = canvas.height / rect.height;
+                  const x = (e.clientX - rect.left) * scaleX;
+                  const y = (e.clientY - rect.top) * scaleY;
+                  ctx.beginPath();
+                  ctx.moveTo(drawState.current.lastX, drawState.current.lastY);
+                  ctx.lineTo(x, y);
+                  ctx.strokeStyle = "#DC2626";
+                  ctx.lineWidth = 3;
+                  ctx.lineCap = "round";
+                  ctx.lineJoin = "round";
+                  ctx.stroke();
+                  drawState.current.lastX = x;
+                  drawState.current.lastY = y;
+                }}
+                onPointerUp={() => { drawState.current.drawing = false; }}
               />
-            ) : (
-              <div style={{ padding: "40px", textAlign: "center", color: "#86868B", fontSize: "13px" }}>
-                No renderable content in this email{detail.widgetCount > 0 ? ` (${detail.widgetCount} widget${detail.widgetCount === 1 ? "" : "s"} with no HTML body)` : ""}.
-                {hubspotEditUrl && (
-                  <div style={{ marginTop: "12px" }}>
-                    <a href={hubspotEditUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#0071E3", textDecoration: "none", fontWeight: 500 }}>
-                      Open in HubSpot ↗
-                    </a>
-                  </div>
-                )}
+            )}
+          </div>
+
+          {/* Reject panel — slides in from right */}
+          {showRejectPanel && (
+            <div style={{
+              width: 320, flexShrink: 0, background: "white", borderLeft: "1px solid #E5E5EA",
+              display: "flex", flexDirection: "column", padding: 20,
+            }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#991B1B", marginBottom: 4 }}>Send back for changes</div>
+              <p style={{ fontSize: 12, color: "#86868B", margin: "0 0 14px" }}>
+                Draw on the email to highlight issues, then add a note for Pete.
+              </p>
+              <textarea
+                autoFocus
+                value={rejectNote}
+                onChange={(e) => setRejectNote(e.target.value)}
+                placeholder="What needs changing?"
+                style={{
+                  flex: 1, minHeight: 100, border: "1px solid #E5E5EA", borderRadius: 10, padding: 12,
+                  fontSize: 13, color: "#1D1D1F", outline: "none", fontFamily: "inherit", resize: "none",
+                }}
+              />
+              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                <button onClick={() => { setShowRejectPanel(false); setAnnotating(false); clearCanvas(); }}
+                  style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "1px solid #E5E5EA", background: "white", fontSize: 13, fontWeight: 600, cursor: "pointer", color: "#1D1D1F" }}>
+                  Cancel
+                </button>
+                <button onClick={submitReject} disabled={!rejectNote.trim()}
+                  style={{
+                    flex: 1, padding: "10px 0", borderRadius: 10, border: "none",
+                    background: rejectNote.trim() ? "#DC2626" : "#E5E5EA",
+                    color: rejectNote.trim() ? "white" : "#86868B",
+                    fontSize: 13, fontWeight: 600, cursor: rejectNote.trim() ? "pointer" : "not-allowed",
+                  }}>
+                  Send back
+                </button>
               </div>
-            )
+            </div>
           )}
         </div>
       </div>

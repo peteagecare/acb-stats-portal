@@ -167,9 +167,8 @@ export default function DashboardPage() {
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {[
-            { href: "/customer-journeys", label: "Customer Journeys" },
+            { href: "/automation-map", label: "Journeys & Automations" },
             { href: "/lead-timeline", label: "Lead Timeline" },
-            { href: "/automation-map", label: "Automation Map" },
             { href: "/trends", label: "Trends & Lifecycle" },
             { href: "/teams", label: "Contacts Per Team" },
             { href: "/feedback", label: "Outreach Feedback" },

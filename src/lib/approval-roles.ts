@@ -21,14 +21,14 @@ export const APPROVAL_ROLES: ApprovalRoleConfig[] = [
     allowedEmails: ["chris@agecare-bathrooms.co.uk"],
   },
   {
-    key: "outside",
-    label: "Outside Approval (Finance Institution)",
-    allowedEmails: ["chris@agecare-bathrooms.co.uk"],
-  },
-  {
     key: "sam",
     label: "Sam (Director)",
     allowedEmails: ["sam@agecare-bathrooms.co.uk"],
+  },
+  {
+    key: "outside",
+    label: "Outside Approval (Finance Institution)",
+    allowedEmails: ["chris@agecare-bathrooms.co.uk"],
   },
 ];
 
@@ -69,11 +69,12 @@ export function canApprove(role: ApprovalRole, userEmail: string | null | undefi
   return cfg.allowedEmails.includes(userEmail.toLowerCase());
 }
 
-/** Sequential workflow: Pete -> Chris + Outside -> Sam. */
+/** Sequential workflow: Pete -> Chris -> Sam -> Outside. */
 export const APPROVAL_SEQUENCE: ApprovalRole[][] = [
   ["pete"],
-  ["chris", "outside"],
+  ["chris"],
   ["sam"],
+  ["outside"],
 ];
 
 export type ApprovalState = Partial<Record<AnyApprovalKey, boolean>> & { rejected?: boolean };
@@ -121,15 +122,18 @@ export function pendingActionsForUser(
     return out;
   }
 
-  // Normal path: Chris + Outside, then Sam.
-  for (const role of ["chris", "outside"] as ApprovalRole[]) {
-    if (!state[role] && canApproveAny(role, userEmail)) {
-      out.push({ key: role, kind: "approve" });
+  // Normal path: Pete -> Chris -> Sam -> Outside (strictly sequential).
+  for (const step of APPROVAL_SEQUENCE) {
+    const allDone = step.every((r) => !!state[r]);
+    if (!allDone) {
+      // This step has pending roles — offer them if the user can act
+      for (const role of step) {
+        if (!state[role] && canApproveAny(role, userEmail)) {
+          out.push({ key: role, kind: "approve" });
+        }
+      }
+      return out; // Don't look at later steps
     }
-  }
-  const chrisOutsideDone = !!state.chris && !!state.outside;
-  if (chrisOutsideDone && !state.sam && canApproveAny("sam", userEmail)) {
-    out.push({ key: "sam", kind: "approve" });
   }
   return out;
 }

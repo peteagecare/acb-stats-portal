@@ -90,6 +90,13 @@ const Icon = {
       <path d="M9 14l2 2 4-4" />
     </svg>
   ),
+  subscriptions: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M3 10h18" />
+      <path d="M7 15h4" />
+    </svg>
+  ),
   overview: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
       <circle cx="12" cy="12" r="9" />
@@ -134,11 +141,11 @@ const NAV: NavItem[] = [
   { href: "/site-visits", label: "Site Visits", icon: Icon.visit },
   { href: "/installs", label: "Installs", icon: Icon.install },
   { href: "/feedback", label: "Outreach Feedback", icon: Icon.feedback },
-  { href: "/customer-journeys", label: "Customer Journeys", icon: Icon.journey },
   { href: "/lead-timeline", label: "Lead Timeline", icon: Icon.timeline },
   { href: "/reviews-social", label: "Reviews & Social", icon: Icon.reviews },
-  { href: "/automation-map", label: "Automation Map", icon: Icon.automation },
+  { href: "/automation-map", label: "Journeys & Automations", icon: Icon.automation },
   { href: "/financial-approvals", label: "Financial Approvals", icon: Icon.approvals },
+  { href: "/subscriptions", label: "Subscriptions", icon: Icon.subscriptions },
 ];
 
 const SECONDARY: NavItem[] = [
@@ -147,19 +154,50 @@ const SECONDARY: NavItem[] = [
   { href: "/overview", label: "Full Overview", icon: Icon.overview },
 ];
 
+const KNOWN_USERS = [
+  { email: "pete@agecare-bathrooms.co.uk", label: "Pete" },
+  { email: "chris@agecare-bathrooms.co.uk", label: "Chris" },
+  { email: "sam@agecare-bathrooms.co.uk", label: "Sam" },
+];
+
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [viewAs, setViewAs] = useState<string | null>(null);
+  const [showViewAs, setShowViewAs] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { email?: string } | null) => setEmail(data?.email ?? null))
+      .then((data: { email?: string; role?: string; realEmail?: string; realRole?: string; impersonating?: boolean } | null) => {
+        if (data?.impersonating && data.realEmail) {
+          setEmail(data.realEmail);
+          setRole(data.realRole ?? null);
+          setViewAs(data.email ?? null);
+        } else {
+          setEmail(data?.email ?? null);
+          setRole(data?.role ?? null);
+        }
+      })
       .catch(() => {});
   }, []);
+
+  function handleViewAs(targetEmail: string | null) {
+    setShowViewAs(false);
+    fetch("/api/auth/view-as", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: targetEmail }),
+    }).then(() => {
+      setViewAs(targetEmail);
+      // Reload so all pages pick up the new session
+      window.location.reload();
+    }).catch(() => {});
+  }
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
@@ -279,6 +317,88 @@ export default function Sidebar() {
               {email}
             </div>
           )}
+
+          {/* View Hub As — admin only */}
+          {role === "admin" && (
+            <div style={{ padding: "0 10px 8px", position: "relative" }}>
+              {viewAs && (
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "5px 8px", marginBottom: 4,
+                  background: "#FFF8E7", border: "1px solid #F59E0B", borderRadius: 8,
+                  fontSize: 11, color: "#92400E",
+                }}>
+                  <span style={{ fontWeight: 600 }}>Viewing as {KNOWN_USERS.find((u) => u.email === viewAs)?.label ?? viewAs}</span>
+                  <button onClick={() => handleViewAs(null)}
+                    style={{ marginLeft: "auto", background: "none", border: "none", color: "#92400E", cursor: "pointer", fontSize: 11, fontWeight: 600, padding: 0, textDecoration: "underline" }}>
+                    Stop
+                  </button>
+                </div>
+              )}
+              <button
+                onClick={() => setShowViewAs(!showViewAs)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 8, width: "100%",
+                  padding: "7px 8px", borderRadius: 8,
+                  background: "transparent", border: "1px dashed var(--color-border)",
+                  color: "var(--color-text-secondary)", fontSize: 11, fontWeight: 500,
+                  cursor: "pointer", fontFamily: "inherit", textAlign: "left",
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                View Hub As...
+              </button>
+              {showViewAs && (
+                <div style={{
+                  position: "absolute", bottom: "100%", left: 10, right: 10, marginBottom: 4,
+                  background: "white", borderRadius: 10, border: "1px solid var(--color-border)",
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 50, overflow: "hidden",
+                }}>
+                  <div style={{ padding: "8px 10px 4px", fontSize: 10, fontWeight: 600, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    View as another user
+                  </div>
+                  {KNOWN_USERS.map((u) => (
+                    <button key={u.email} onClick={() => handleViewAs(u.email)}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 10px",
+                        background: viewAs === u.email ? "rgba(0,113,227,0.08)" : "transparent",
+                        border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left",
+                        fontSize: 12, color: viewAs === u.email ? "#0071E3" : "var(--color-text-primary)", fontWeight: viewAs === u.email ? 600 : 400,
+                      }}
+                      onMouseEnter={(e) => { if (viewAs !== u.email) e.currentTarget.style.background = "rgba(0,0,0,0.035)"; }}
+                      onMouseLeave={(e) => { if (viewAs !== u.email) e.currentTarget.style.background = "transparent"; }}
+                    >
+                      <span style={{ width: 24, height: 24, borderRadius: "50%", background: "var(--color-accent)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+                        {u.label[0]}
+                      </span>
+                      <div>
+                        <div style={{ fontWeight: 500 }}>{u.label}</div>
+                        <div style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>{u.email}</div>
+                      </div>
+                      {viewAs === u.email && <span style={{ marginLeft: "auto", fontSize: 10, color: "#0071E3", fontWeight: 600 }}>Active</span>}
+                    </button>
+                  ))}
+                  {viewAs && (
+                    <button onClick={() => handleViewAs(null)}
+                      style={{
+                        width: "100%", padding: "8px 10px", background: "transparent",
+                        border: "none", borderTop: "1px solid var(--color-border)", cursor: "pointer",
+                        fontFamily: "inherit", fontSize: 11, color: "var(--color-text-secondary)", textAlign: "left",
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = "rgba(0,0,0,0.035)"}
+                      onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                    >
+                      Back to my view
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             onClick={handleSignOut}
             disabled={signingOut}
