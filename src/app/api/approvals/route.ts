@@ -49,14 +49,14 @@ export async function POST(request: NextRequest) {
   const user = parseSessionToken(token);
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
-  let body: { emailId?: string; role?: string; approved?: boolean; label?: string };
+  let body: { emailId?: string; role?: string; approved?: boolean; label?: string; override?: boolean };
   try {
     body = await request.json();
   } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { emailId, role, approved } = body;
+  const { emailId, role, approved, override } = body;
   if (!emailId || typeof emailId !== "string") {
     return Response.json({ error: "emailId required" }, { status: 400 });
   }
@@ -75,11 +75,18 @@ export async function POST(request: NextRequest) {
   const emailRecord = store[emailId] ?? {};
 
   const typedRole = role as AnyApprovalKey;
-  if (approved) {
+  const userLabel = body.label?.trim() || user.email;
+  if (approved && override === true && typedRole === "dnna_chris") {
+    // Chris overrides when Pete went down the financial-approval path by mistake:
+    // declare no approval was needed AND confirm, in one atomic write.
+    const now = new Date().toISOString();
+    emailRecord.dnna_pete = { approved: true, userEmail: user.email, userLabel: `${userLabel} (override)`, timestamp: now };
+    emailRecord.dnna_chris = { approved: true, userEmail: user.email, userLabel, timestamp: now };
+  } else if (approved) {
     emailRecord[typedRole] = {
       approved: true,
       userEmail: user.email,
-      userLabel: body.label?.trim() || user.email,
+      userLabel,
       timestamp: new Date().toISOString(),
     };
     // Pete re-approving after a rejection means the concerns have been addressed — clear it.
@@ -100,7 +107,13 @@ export async function POST(request: NextRequest) {
 
   await writeStore(store);
 
-  return Response.json({ ok: true, emailId, role: typedRole, record: emailRecord[typedRole] ?? null });
+  return Response.json({
+    ok: true,
+    emailId,
+    role: typedRole,
+    record: emailRecord[typedRole] ?? null,
+    emailRecord: store[emailId] ?? null,
+  });
 }
 
 /** DELETE /api/approvals — send an email back to Pete with a rejection note.

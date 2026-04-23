@@ -147,14 +147,20 @@ export default function FinancialApprovalsPage() {
     loadData();
   }, [loadData]);
 
-  async function toggleApproval(emailId: string, role: AnyApprovalKey, next: boolean) {
+  async function toggleApproval(emailId: string, role: AnyApprovalKey, next: boolean, override?: boolean) {
     const saveKey = `${emailId}:${role}`;
     setSavingKey(saveKey);
     const prev = approvals;
+    const isOverride = override === true && role === "dnna_chris" && next;
     setApprovals((cur) => {
       const copy = { ...cur };
       const rec = { ...(copy[emailId] ?? {}) };
-      if (next) {
+      if (isOverride) {
+        const now = new Date().toISOString();
+        const me = session?.email ?? "";
+        rec.dnna_pete = { approved: true, userEmail: me, userLabel: `${me} (override)`, timestamp: now };
+        rec.dnna_chris = { approved: true, userEmail: me, userLabel: me, timestamp: now };
+      } else if (next) {
         rec[role] = {
           approved: true,
           userEmail: session?.email ?? "",
@@ -174,7 +180,7 @@ export default function FinancialApprovalsPage() {
       const res = await fetch("/api/approvals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emailId, role, approved: next }),
+        body: JSON.stringify({ emailId, role, approved: next, override: isOverride || undefined }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -183,14 +189,11 @@ export default function FinancialApprovalsPage() {
       const body = await res.json();
       setApprovals((cur) => {
         const copy = { ...cur };
-        const rec = { ...(copy[emailId] ?? {}) };
-        if (body.record) rec[role] = body.record;
-        else {
-          delete rec[role];
-          if (role === "dnna_pete") delete rec.dnna_chris;
+        if (body.emailRecord) {
+          copy[emailId] = body.emailRecord;
+        } else {
+          delete copy[emailId];
         }
-        if (Object.keys(rec).length === 0) delete copy[emailId];
-        else copy[emailId] = rec;
         return copy;
       });
     } catch (e) {
@@ -742,7 +745,7 @@ function EmailsTable({
   approvals: ApprovalsMap;
   session: SessionInfo | null;
   savingKey: string | null;
-  onToggle: (emailId: string, role: AnyApprovalKey, next: boolean) => void;
+  onToggle: (emailId: string, role: AnyApprovalKey, next: boolean, override?: boolean) => void;
   onPreview: (emailId: string) => void;
   pendingByEmail: Record<string, PendingAction[]>;
   workflowMap: WorkflowMap;
@@ -848,7 +851,7 @@ function EmailRow({
   approval: EmailApprovals;
   session: SessionInfo | null;
   savingKey: string | null;
-  onToggle: (emailId: string, role: AnyApprovalKey, next: boolean) => void;
+  onToggle: (emailId: string, role: AnyApprovalKey, next: boolean, override?: boolean) => void;
   onPreview: (emailId: string) => void;
   pendingActions: PendingAction[];
   workflows: WorkflowRef[];
@@ -1047,6 +1050,17 @@ function EmailRow({
               No financial approval needed
             </button>
           )}
+          {chrisDnnaMine && !dnnaPeteRec?.approved && !dnnaConfirmed && normalPathStarted && !rejection && (
+            <button onClick={() => onToggle(email.id, "dnna_chris", true, true)} disabled={savingDnnaChris}
+              style={{
+                background: "white", color: "#0071E3", border: "1px solid #93C5FD", borderRadius: 10,
+                padding: "8px 14px", fontSize: 11, fontWeight: 600, cursor: savingDnnaChris ? "not-allowed" : "pointer",
+                opacity: savingDnnaChris ? 0.5 : 1, width: "100%", textAlign: "center", lineHeight: 1.3,
+              }}
+              title="Override: no financial approval needed, approved to send">
+              Financial Approval Not Required — Approved to Send
+            </button>
+          )}
         </div>
       ) : (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "16px 12px", minWidth: 40 }}>
@@ -1071,7 +1085,7 @@ function ModalActionBar({
   session: SessionInfo | null;
   savingKey: string | null;
   pendingActions: PendingAction[];
-  onToggle: (emailId: string, role: AnyApprovalKey, next: boolean) => void;
+  onToggle: (emailId: string, role: AnyApprovalKey, next: boolean, override?: boolean) => void;
   onReject: (emailId: string, role: AnyApprovalKey, note: string) => void;
 }) {
   if (!session?.email) return null;
@@ -1228,6 +1242,27 @@ function ModalActionBar({
         </button>
       )}
 
+      {chrisDnnaMine && !dnnaPete && !dnnaConfirmed && !!approval.pete?.approved && (
+        <button
+          onClick={() => onToggle(emailId, "dnna_chris", true, true)}
+          disabled={saving("dnna_chris")}
+          style={{
+            background: "white",
+            color: "#0071E3",
+            border: "1px solid #93C5FD",
+            borderRadius: "8px",
+            padding: "7px 13px",
+            fontSize: "12px",
+            fontWeight: 600,
+            cursor: saving("dnna_chris") ? "not-allowed" : "pointer",
+            opacity: saving("dnna_chris") ? 0.6 : 1,
+          }}
+          title="Override: declare this didn't need financial approval and mark as approved to send"
+        >
+          {saving("dnna_chris") ? "Saving…" : "Financial Approval Not Required — Approved to Send"}
+        </button>
+      )}
+
       {rejectRole && (
         <button
           onClick={handleReject}
@@ -1306,12 +1341,12 @@ function EmailPreviewModal({
   session: SessionInfo | null;
   savingKey: string | null;
   pendingActions: PendingAction[];
-  onToggle: (emailId: string, role: AnyApprovalKey, next: boolean) => void;
+  onToggle: (emailId: string, role: AnyApprovalKey, next: boolean, override?: boolean) => void;
   onReject: (emailId: string, role: AnyApprovalKey, note: string) => void;
   onActionTaken: (emailId: string) => void;
 }) {
-  const wrappedToggle = (eid: string, role: AnyApprovalKey, next: boolean) => {
-    onToggle(eid, role, next);
+  const wrappedToggle = (eid: string, role: AnyApprovalKey, next: boolean, override?: boolean) => {
+    onToggle(eid, role, next, override);
     if (next) onActionTaken(eid);
   };
   const [detail, setDetail] = useState<EmailDetail | null>(null);
