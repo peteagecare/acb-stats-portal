@@ -25,7 +25,7 @@ function hasBlob(): boolean {
 export async function loadJson<T>(key: string, fallbackFile: string, defaults: T): Promise<T> {
   if (hasBlob()) {
     try {
-      const result = await get(key, { access: "private" }).catch(() => null);
+      const result = await get(key, { access: "private", useCache: false }).catch(() => null);
       if (result?.stream) {
         const reader = result.stream.getReader();
         const chunks: Uint8Array[] = [];
