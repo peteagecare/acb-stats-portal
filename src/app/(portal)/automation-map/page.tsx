@@ -28,7 +28,6 @@ const AUTOMATIONS: Automation[] = [
   { id: "purchased-forevercare", name: "Purchased ForeverCare", emails: 1, color: "#30A46C", category: "Post-Sale" },
   { id: "completed-review", name: "Completed Review Emails", emails: 4, color: "#30A46C", category: "Post-Sale" },
   { id: "referral-campaign", name: "Referral Campaign", emails: 4, color: "#30A46C", category: "Post-Sale" },
-  { id: "forevercare-sales", name: "ForeverCare Sales", emails: 6, color: "#8E4EC6", category: "Sales" },
   { id: "physical-brochure", name: "Physical Brochure Request", emails: 3, color: "#E8833A", category: "Prospect" },
   { id: "lost-sends-survey", name: "Lost Sends Survey", emails: 1, color: "#D93D42", category: "Recovery" },
   { id: "lead-source-hi-value", name: "Lead Source, Hi Value Users", emails: 1, color: "#0071E3", category: "Lead" },
