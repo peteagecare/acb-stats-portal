@@ -26,6 +26,35 @@ interface HubSpotEmail {
   isPublished: boolean;
 }
 
+type ContentItemType = "facebook" | "instagram" | "blog";
+
+interface ContentItem {
+  id: string;
+  type: ContentItemType;
+  title: string;
+  url: string;
+  notes?: string;
+  submittedBy: string;
+  submittedByLabel: string;
+  submittedAt: string;
+  updatedAt?: string;
+}
+
+type ActiveTab = "emails" | ContentItemType;
+
+const CONTENT_TYPE_META: Record<ContentItemType, { label: string; color: string; bg: string }> = {
+  facebook: { label: "Facebook", color: "#1877F2", bg: "#E7F0FE" },
+  instagram: { label: "Instagram", color: "#C13584", bg: "#FCE7F3" },
+  blog: { label: "Blog", color: "#F59E0B", bg: "#FEF7E7" },
+};
+
+const TABS: { key: ActiveTab; label: string }[] = [
+  { key: "emails", label: "Emails" },
+  { key: "facebook", label: "Facebook" },
+  { key: "instagram", label: "Instagram" },
+  { key: "blog", label: "Blog" },
+];
+
 interface ApprovalRecord {
   approved: boolean;
   userEmail: string;
@@ -97,8 +126,13 @@ function kindBadge(type: string): { label: string; color: string; bg: string } {
   return { label: type || "Other", color: "#86868B", bg: "#F5F5F7" };
 }
 
+type ContentModalState =
+  | { mode: "create"; defaultType: ContentItemType }
+  | { mode: "edit"; item: ContentItem };
+
 export default function FinancialApprovalsPage() {
   const [emails, setEmails] = useState<HubSpotEmail[]>([]);
+  const [contentItems, setContentItems] = useState<ContentItem[]>([]);
   const [approvals, setApprovals] = useState<ApprovalsMap>({});
   const [workflowMap, setWorkflowMap] = useState<WorkflowMap>({});
   const [session, setSession] = useState<SessionInfo | null>(null);
@@ -110,16 +144,19 @@ export default function FinancialApprovalsPage() {
   const [advanceFromId, setAdvanceFromId] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set(["approved-by-me"]));
   const [waitingFilter, setWaitingFilter] = useState<ApprovalRole | "all">("all");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("emails");
+  const [contentModal, setContentModal] = useState<ContentModalState | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [emailsRes, approvalsRes, meRes, wfMapRes] = await Promise.all([
+      const [emailsRes, approvalsRes, meRes, wfMapRes, contentRes] = await Promise.all([
         fetch("/api/hubspot/emails-list", { cache: "no-store" }),
         fetch("/api/approvals"),
         fetch("/api/auth/me"),
         fetch("/api/hubspot/email-workflow-map"),
+        fetch("/api/content-items", { cache: "no-store" }),
       ]);
       if (!emailsRes.ok) throw new Error(`emails: ${emailsRes.status}`);
       if (!approvalsRes.ok) throw new Error(`approvals: ${approvalsRes.status}`);
@@ -129,10 +166,12 @@ export default function FinancialApprovalsPage() {
       const approvalsData = await approvalsRes.json();
       const meData = await meRes.json();
       const wfMapData = wfMapRes.ok ? await wfMapRes.json() : { byEmailId: {} };
+      const contentData = contentRes.ok ? await contentRes.json() : { items: [] };
 
       if (emailsData.error) throw new Error(emailsData.error);
 
       setEmails(emailsData.emails ?? []);
+      setContentItems(contentData.items ?? []);
       setApprovals(approvalsData.approvals ?? {});
       setWorkflowMap(wfMapData.byEmailId ?? {});
       setSession({ email: meData.email, role: meData.role });
@@ -246,6 +285,62 @@ export default function FinancialApprovalsPage() {
     }
   }
 
+  async function submitContentItem(payload: {
+    type: ContentItemType;
+    title: string;
+    url: string;
+    notes?: string;
+  }): Promise<{ ok: true } | { ok: false; error: string }> {
+    try {
+      const res = await fetch("/api/content-items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: body.error ?? `HTTP ${res.status}` };
+      setContentItems(body.items ?? []);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "unknown error" };
+    }
+  }
+
+  async function updateContentItem(
+    id: string,
+    patch: Partial<Pick<ContentItem, "title" | "url" | "notes" | "type">>
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    try {
+      const res = await fetch("/api/content-items", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, ...patch }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: body.error ?? `HTTP ${res.status}` };
+      setContentItems(body.items ?? []);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "unknown error" };
+    }
+  }
+
+  async function deleteContentItem(id: string) {
+    try {
+      const res = await fetch(`/api/content-items?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(`Delete failed: ${body.error ?? `HTTP ${res.status}`}`);
+        return;
+      }
+      setContentItems(body.items ?? []);
+    } catch (e) {
+      alert(`Delete failed: ${e instanceof Error ? e.message : "unknown error"}`);
+    }
+  }
+
   /** Which roles is this email currently waiting on? (Sequential: Pete -> Chris -> Sam -> Outside) */
   const waitingOnRoles = useCallback((emailId: string): ApprovalRole[] => {
     const rec = approvals[emailId] ?? {};
@@ -260,7 +355,21 @@ export default function FinancialApprovalsPage() {
     return [];
   }, [approvals]);
 
+  // Items in scope for the active tab (emails or one content-item type)
+  const activeContentItems = useMemo(
+    () => (activeTab === "emails" ? [] : contentItems.filter((c) => c.type === activeTab)),
+    [activeTab, contentItems]
+  );
+  const activeIdSet = useMemo(
+    () =>
+      activeTab === "emails"
+        ? new Set(emails.map((e) => e.id))
+        : new Set(activeContentItems.map((c) => c.id)),
+    [activeTab, emails, activeContentItems]
+  );
+
   const filtered = useMemo(() => {
+    if (activeTab !== "emails") return [] as HubSpotEmail[];
     let list = emails;
     if (query.trim()) {
       const q = query.toLowerCase();
@@ -272,7 +381,22 @@ export default function FinancialApprovalsPage() {
       list = list.filter((e) => waitingOnRoles(e.id).includes(waitingFilter));
     }
     return list;
-  }, [emails, query, waitingFilter, waitingOnRoles]);
+  }, [activeTab, emails, query, waitingFilter, waitingOnRoles]);
+
+  const filteredContent = useMemo(() => {
+    if (activeTab === "emails") return [] as ContentItem[];
+    let list = activeContentItems;
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      list = list.filter(
+        (c) => c.title.toLowerCase().includes(q) || (c.notes ?? "").toLowerCase().includes(q)
+      );
+    }
+    if (waitingFilter !== "all") {
+      list = list.filter((c) => waitingOnRoles(c.id).includes(waitingFilter));
+    }
+    return list;
+  }, [activeTab, activeContentItems, query, waitingFilter, waitingOnRoles]);
 
   const grouped = useMemo(() => {
     const out: Record<string, HubSpotEmail[]> = {};
@@ -286,46 +410,57 @@ export default function FinancialApprovalsPage() {
 
   const totals = useMemo(() => {
     const counts: Record<ApprovalRole, number> = { pete: 0, chris: 0, sam: 0, outside: 0 };
-    for (const emailId of Object.keys(approvals)) {
+    for (const id of Object.keys(approvals)) {
+      if (!activeIdSet.has(id)) continue;
       for (const role of APPROVAL_ROLES) {
-        if (approvals[emailId]?.[role.key]?.approved) counts[role.key] += 1;
+        if (approvals[id]?.[role.key]?.approved) counts[role.key] += 1;
       }
     }
     return counts;
-  }, [approvals]);
+  }, [approvals, activeIdSet]);
 
   const dnnaCounts = useMemo(() => {
     let pending = 0;
     let confirmed = 0;
-    for (const emailId of Object.keys(approvals)) {
-      const rec = approvals[emailId];
+    for (const id of Object.keys(approvals)) {
+      if (!activeIdSet.has(id)) continue;
+      const rec = approvals[id];
       const pete = !!rec?.dnna_pete?.approved;
       const chris = !!rec?.dnna_chris?.approved;
       if (pete && chris) confirmed += 1;
       else if (pete) pending += 1;
     }
     return { pending, confirmed };
-  }, [approvals]);
+  }, [approvals, activeIdSet]);
 
-  const totalEmails = emails.length;
+  const totalItems = activeTab === "emails" ? emails.length : activeContentItems.length;
+  const totalLabel = activeTab === "emails" ? "Total emails" : `Total ${CONTENT_TYPE_META[activeTab].label}`;
 
   const pendingByEmail = useMemo(() => {
     const out: Record<string, PendingAction[]> = {};
-    for (const e of filtered) {
-      const rec = approvals[e.id];
+    const ids: string[] =
+      activeTab === "emails"
+        ? filtered.map((e) => e.id)
+        : filteredContent.map((c) => c.id);
+    for (const id of ids) {
+      const rec = approvals[id];
       const state: Partial<Record<AnyApprovalKey, boolean>> & { rejected?: boolean } = {};
       for (const r of APPROVAL_ROLES) state[r.key] = !!rec?.[r.key]?.approved;
       state.dnna_pete = !!rec?.dnna_pete?.approved;
       state.dnna_chris = !!rec?.dnna_chris?.approved;
       state.rejected = !!rec?.rejection;
-      out[e.id] = pendingActionsForUser(session?.email, state);
+      out[id] = pendingActionsForUser(session?.email, state);
     }
     return out;
-  }, [filtered, approvals, session?.email]);
+  }, [activeTab, filtered, filteredContent, approvals, session?.email]);
 
   const awaitingMe = useMemo(
     () => filtered.filter((e) => (pendingByEmail[e.id]?.length ?? 0) > 0),
     [filtered, pendingByEmail]
+  );
+  const awaitingMeContent = useMemo(
+    () => filteredContent.filter((c) => (pendingByEmail[c.id]?.length ?? 0) > 0),
+    [filteredContent, pendingByEmail]
   );
 
   const approvedByMe = useMemo(() => {
@@ -341,7 +476,27 @@ export default function FinancialApprovalsPage() {
     });
   }, [filtered, approvals, awaitingMe, session?.email]);
 
-  const approvalDenominator = Math.max(0, emails.length - dnnaCounts.confirmed - dnnaCounts.pending);
+  const approvedByMeContent = useMemo(() => {
+    const me = session?.email?.toLowerCase();
+    if (!me) return [] as ContentItem[];
+    const awaitingIds = new Set(awaitingMeContent.map((c) => c.id));
+    const keys: AnyApprovalKey[] = ["pete", "chris", "sam", "outside", "dnna_pete", "dnna_chris"];
+    return filteredContent.filter((c) => {
+      if (awaitingIds.has(c.id)) return false;
+      const rec = approvals[c.id];
+      if (!rec) return false;
+      return keys.some((k) => rec[k]?.approved && rec[k]?.userEmail?.toLowerCase() === me);
+    });
+  }, [filteredContent, approvals, awaitingMeContent, session?.email]);
+
+  const otherContent = useMemo(() => {
+    if (activeTab === "emails") return [] as ContentItem[];
+    const awaitingIds = new Set(awaitingMeContent.map((c) => c.id));
+    const approvedIds = new Set(approvedByMeContent.map((c) => c.id));
+    return filteredContent.filter((c) => !awaitingIds.has(c.id) && !approvedIds.has(c.id));
+  }, [activeTab, filteredContent, awaitingMeContent, approvedByMeContent]);
+
+  const approvalDenominator = Math.max(0, totalItems - dnnaCounts.confirmed - dnnaCounts.pending);
 
   useEffect(() => {
     if (!advanceFromId) return;
@@ -383,7 +538,9 @@ export default function FinancialApprovalsPage() {
               <h1 style={{ fontSize: "14px", fontWeight: 600, margin: 0, color: "#1D1D1F", letterSpacing: "-0.3px" }}>
                 Financial Approvals
               </h1>
-              <p style={{ fontSize: "10px", margin: 0, color: "#86868B" }}>Email sign-off trail</p>
+              <p style={{ fontSize: "10px", margin: 0, color: "#86868B" }}>
+                {activeTab === "emails" ? "Email sign-off trail" : `${CONTENT_TYPE_META[activeTab].label} sign-off trail`}
+              </p>
             </div>
           </div>
 
@@ -395,12 +552,35 @@ export default function FinancialApprovalsPage() {
               </svg>
               <input
                 type="text"
-                placeholder="Search name or subject…"
+                placeholder={activeTab === "emails" ? "Search name or subject…" : "Search title or notes…"}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 style={{ flex: 1, border: "none", background: "transparent", fontSize: "13px", color: "#1D1D1F", padding: "10px 0", outline: "none" }}
               />
             </div>
+            <button
+              onClick={() =>
+                setContentModal({
+                  mode: "create",
+                  defaultType: activeTab === "emails" ? "facebook" : activeTab,
+                })
+              }
+              disabled={!session?.email}
+              title={session?.email ? "Submit new content for approval" : "Sign in to submit content"}
+              style={{
+                fontSize: "12px",
+                padding: "8px 14px",
+                borderRadius: "12px",
+                border: "none",
+                background: "#0071E3",
+                color: "white",
+                cursor: session?.email ? "pointer" : "not-allowed",
+                fontWeight: 600,
+                opacity: session?.email ? 1 : 0.5,
+              }}
+            >
+              + New content
+            </button>
             <button
               onClick={loadData}
               style={{
@@ -427,13 +607,71 @@ export default function FinancialApprovalsPage() {
       </header>
 
       <main style={{ maxWidth: "1600px", margin: "0 auto", padding: "16px" }}>
+        {/* Type tabs */}
+        {!loading && !error && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              marginBottom: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            {TABS.map((t) => {
+              const active = activeTab === t.key;
+              const count =
+                t.key === "emails"
+                  ? emails.length
+                  : contentItems.filter((c) => c.type === t.key).length;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => {
+                    setActiveTab(t.key);
+                    setWaitingFilter("all");
+                  }}
+                  style={{
+                    fontSize: 12,
+                    fontWeight: active ? 600 : 500,
+                    padding: "7px 14px",
+                    borderRadius: 10,
+                    border: active ? "1.5px solid #0071E3" : "1px solid #E5E5EA",
+                    background: active ? "rgba(0,113,227,0.08)" : "white",
+                    color: active ? "#0071E3" : "#1D1D1F",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  {t.label}
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: active ? "#0071E3" : "#86868B",
+                      background: active ? "rgba(0,113,227,0.12)" : "#F5F5F7",
+                      borderRadius: 999,
+                      padding: "1px 7px",
+                    }}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* Waiting-on filter */}
         {!loading && !error && (
           <div style={{
             display: "flex", alignItems: "center", gap: 6, marginBottom: 12, flexWrap: "wrap",
           }}>
             <span style={{ fontSize: 10, fontWeight: 700, color: "#86868B", textTransform: "uppercase", letterSpacing: "0.5px", marginRight: 4 }}>Filter:</span>
-            {([{ key: "all" as const, label: "All emails" }, ...APPROVAL_ROLES.map((r) => ({ key: r.key, label: `Waiting on ${r.label.split(" (")[0]}` }))] as const).map((f) => {
+            {([{ key: "all" as const, label: activeTab === "emails" ? "All emails" : "All items" }, ...APPROVAL_ROLES.map((r) => ({ key: r.key, label: `Waiting on ${r.label.split(" (")[0]}` }))] as const).map((f) => {
               const active = waitingFilter === f.key;
               return (
                 <button key={f.key} onClick={() => setWaitingFilter(active ? "all" : f.key)}
@@ -490,7 +728,7 @@ export default function FinancialApprovalsPage() {
               marginBottom: "16px",
             }}
           >
-            <StatCard label="Total emails" value={totalEmails} tone="#1D1D1F" bg="white" />
+            <StatCard label={totalLabel} value={totalItems} tone="#1D1D1F" bg="white" />
             {APPROVAL_ROLES.map((r) => (
               <StatCard
                 key={r.key}
@@ -542,7 +780,7 @@ export default function FinancialApprovalsPage() {
               border: "1px solid rgba(0,0,0,0.04)",
             }}
           >
-            Loading emails…
+            Loading…
           </div>
         ) : (
           <>
@@ -643,7 +881,7 @@ export default function FinancialApprovalsPage() {
               );
             })()}
 
-            {STATE_GROUPS.map((group) => {
+            {activeTab === "emails" && STATE_GROUPS.map((group) => {
             const groupEmails = grouped[group.key] ?? [];
             if (groupEmails.length === 0) return null;
             const collapsed = collapsedSections.has(group.key);
@@ -691,6 +929,205 @@ export default function FinancialApprovalsPage() {
               </section>
             );
           })}
+
+          {/* Content tabs — awaiting / approved / other */}
+          {activeTab !== "emails" && (
+            <>
+              {awaitingMeContent.length > 0 && (() => {
+                const collapsed = collapsedSections.has("content-awaiting");
+                return (
+                  <section
+                    style={{
+                      background: "white",
+                      borderRadius: "20px",
+                      padding: collapsed ? "0" : "20px",
+                      marginBottom: "16px",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+                      border: "2px solid #F59E0B",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <button
+                      onClick={() => setCollapsedSections((prev) => { const next = new Set(prev); next.has("content-awaiting") ? next.delete("content-awaiting") : next.add("content-awaiting"); return next; })}
+                      style={{
+                        display: "flex", alignItems: "center", gap: "10px", width: "100%",
+                        padding: collapsed ? "16px 20px" : "0 0 16px 0",
+                        background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left",
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#86868B" strokeWidth="2" style={{ transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)", transition: "transform 0.15s", flexShrink: 0 }}>
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: "white", background: "#F59E0B", borderRadius: "6px", padding: "4px 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        Awaiting your approval
+                      </span>
+                      <span style={{ fontSize: "12px", color: "#86868B" }}>
+                        {awaitingMeContent.length} item{awaitingMeContent.length === 1 ? "" : "s"}
+                      </span>
+                    </button>
+                    {!collapsed && (
+                      <ContentItemsTable
+                        items={awaitingMeContent}
+                        approvals={approvals}
+                        session={session}
+                        savingKey={savingKey}
+                        onToggle={toggleApproval}
+                        pendingByEmail={pendingByEmail}
+                        onEdit={(item) => setContentModal({ mode: "edit", item })}
+                        onDelete={(item) => {
+                          if (confirm(`Delete "${item.title}"? This cannot be undone.`)) {
+                            deleteContentItem(item.id);
+                          }
+                        }}
+                      />
+                    )}
+                  </section>
+                );
+              })()}
+
+              {approvedByMeContent.length > 0 && (() => {
+                const collapsed = collapsedSections.has("content-approved-by-me");
+                return (
+                  <section
+                    style={{
+                      background: "white",
+                      borderRadius: "20px",
+                      padding: collapsed ? "0" : "20px",
+                      marginBottom: "16px",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+                      border: "2px solid #30A46C",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <button
+                      onClick={() => setCollapsedSections((prev) => { const next = new Set(prev); next.has("content-approved-by-me") ? next.delete("content-approved-by-me") : next.add("content-approved-by-me"); return next; })}
+                      style={{
+                        display: "flex", alignItems: "center", gap: "10px", width: "100%",
+                        padding: collapsed ? "16px 20px" : "0 0 16px 0",
+                        background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left",
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#86868B" strokeWidth="2" style={{ transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)", transition: "transform 0.15s", flexShrink: 0 }}>
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: "white", background: "#30A46C", borderRadius: "6px", padding: "4px 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        You&apos;ve approved
+                      </span>
+                      <span style={{ fontSize: "12px", color: "#86868B" }}>
+                        {approvedByMeContent.length} item{approvedByMeContent.length === 1 ? "" : "s"}
+                      </span>
+                    </button>
+                    {!collapsed && (
+                      <ContentItemsTable
+                        items={approvedByMeContent}
+                        approvals={approvals}
+                        session={session}
+                        savingKey={savingKey}
+                        onToggle={toggleApproval}
+                        pendingByEmail={pendingByEmail}
+                        onEdit={(item) => setContentModal({ mode: "edit", item })}
+                        onDelete={(item) => {
+                          if (confirm(`Delete "${item.title}"? This cannot be undone.`)) {
+                            deleteContentItem(item.id);
+                          }
+                        }}
+                      />
+                    )}
+                  </section>
+                );
+              })()}
+
+              {otherContent.length > 0 && (() => {
+                const collapsed = collapsedSections.has("content-other");
+                const typeMeta = CONTENT_TYPE_META[activeTab];
+                return (
+                  <section
+                    style={{
+                      background: "white",
+                      borderRadius: "20px",
+                      padding: collapsed ? "0" : "20px",
+                      marginBottom: "16px",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+                      border: "1px solid rgba(0,0,0,0.04)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <button
+                      onClick={() => setCollapsedSections((prev) => { const next = new Set(prev); next.has("content-other") ? next.delete("content-other") : next.add("content-other"); return next; })}
+                      style={{
+                        display: "flex", alignItems: "center", gap: "10px", width: "100%",
+                        padding: collapsed ? "16px 20px" : "0 0 16px 0",
+                        background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left",
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#86868B" strokeWidth="2" style={{ transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)", transition: "transform 0.15s", flexShrink: 0 }}>
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: typeMeta.color, background: typeMeta.bg, borderRadius: "6px", padding: "4px 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        All {typeMeta.label}
+                      </span>
+                      <span style={{ fontSize: "12px", color: "#86868B" }}>
+                        {otherContent.length} item{otherContent.length === 1 ? "" : "s"}
+                      </span>
+                    </button>
+                    {!collapsed && (
+                      <ContentItemsTable
+                        items={otherContent}
+                        approvals={approvals}
+                        session={session}
+                        savingKey={savingKey}
+                        onToggle={toggleApproval}
+                        pendingByEmail={pendingByEmail}
+                        onEdit={(item) => setContentModal({ mode: "edit", item })}
+                        onDelete={(item) => {
+                          if (confirm(`Delete "${item.title}"? This cannot be undone.`)) {
+                            deleteContentItem(item.id);
+                          }
+                        }}
+                      />
+                    )}
+                  </section>
+                );
+              })()}
+
+              {activeContentItems.length === 0 && (
+                <div
+                  style={{
+                    background: "white",
+                    borderRadius: "20px",
+                    padding: "48px 24px",
+                    textAlign: "center",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+                    border: "1px dashed rgba(0,0,0,0.08)",
+                  }}
+                >
+                  <p style={{ fontSize: "14px", color: "#1D1D1F", margin: "0 0 6px", fontWeight: 600 }}>
+                    No {CONTENT_TYPE_META[activeTab].label} content submitted yet
+                  </p>
+                  <p style={{ fontSize: "12px", color: "#86868B", margin: "0 0 16px" }}>
+                    Paste a link to your {CONTENT_TYPE_META[activeTab].label} post and send it for sign-off.
+                  </p>
+                  <button
+                    onClick={() => setContentModal({ mode: "create", defaultType: activeTab })}
+                    disabled={!session?.email}
+                    style={{
+                      fontSize: "13px",
+                      padding: "10px 18px",
+                      borderRadius: "12px",
+                      border: "none",
+                      background: "#0071E3",
+                      color: "white",
+                      fontWeight: 600,
+                      cursor: session?.email ? "pointer" : "not-allowed",
+                      opacity: session?.email ? 1 : 0.5,
+                    }}
+                  >
+                    + Submit {CONTENT_TYPE_META[activeTab].label}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
           </>
         )}
       </main>
@@ -706,6 +1143,39 @@ export default function FinancialApprovalsPage() {
           onToggle={toggleApproval}
           onReject={rejectWithNote}
           onActionTaken={(id) => setAdvanceFromId(id)}
+        />
+      )}
+
+      {contentModal && (
+        <ContentFormModal
+          mode={contentModal.mode}
+          initial={
+            contentModal.mode === "create"
+              ? { type: contentModal.defaultType, title: "", url: "", notes: "" }
+              : {
+                  type: contentModal.item.type,
+                  title: contentModal.item.title,
+                  url: contentModal.item.url,
+                  notes: contentModal.item.notes ?? "",
+                }
+          }
+          approvalCount={(() => {
+            if (contentModal.mode !== "edit") return 0;
+            const rec = approvals[contentModal.item.id];
+            if (!rec) return 0;
+            const keys: AnyApprovalKey[] = ["pete", "chris", "sam", "outside", "dnna_pete", "dnna_chris"];
+            return keys.reduce((n, k) => n + (rec[k]?.approved ? 1 : 0), 0);
+          })()}
+          onClose={() => setContentModal(null)}
+          onSubmit={async (payload) => {
+            if (contentModal.mode === "create") {
+              const res = await submitContentItem(payload);
+              if (res.ok) setActiveTab(payload.type);
+              return res;
+            } else {
+              return updateContentItem(contentModal.item.id, payload);
+            }
+          }}
         />
       )}
     </div>
@@ -1067,6 +1537,533 @@ function EmailRow({
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C7C7CC" strokeWidth="2"><path d="M9 18l6-6-6-6" /></svg>
         </div>
       )}
+    </div>
+  );
+}
+
+function ContentItemsTable({
+  items,
+  approvals,
+  session,
+  savingKey,
+  onToggle,
+  pendingByEmail,
+  onEdit,
+  onDelete,
+}: {
+  items: ContentItem[];
+  approvals: ApprovalsMap;
+  session: SessionInfo | null;
+  savingKey: string | null;
+  onToggle: (emailId: string, role: AnyApprovalKey, next: boolean, override?: boolean) => void;
+  pendingByEmail: Record<string, PendingAction[]>;
+  onEdit: (item: ContentItem) => void;
+  onDelete: (item: ContentItem) => void;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {items.map((item) => (
+        <ContentItemRow
+          key={item.id}
+          item={item}
+          approval={approvals[item.id] ?? {}}
+          session={session}
+          savingKey={savingKey}
+          onToggle={onToggle}
+          pendingActions={pendingByEmail[item.id] ?? []}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ContentItemRow({
+  item,
+  approval,
+  session,
+  savingKey,
+  onToggle,
+  pendingActions,
+  onEdit,
+  onDelete,
+}: {
+  item: ContentItem;
+  approval: EmailApprovals;
+  session: SessionInfo | null;
+  savingKey: string | null;
+  onToggle: (emailId: string, role: AnyApprovalKey, next: boolean, override?: boolean) => void;
+  pendingActions: PendingAction[];
+  onEdit: (item: ContentItem) => void;
+  onDelete: (item: ContentItem) => void;
+}) {
+  const needsAction = pendingActions.length > 0;
+  const pendingRoles: ApprovalRole[] = pendingActions.filter((a) => a.kind === "approve").map((a) => a.key as ApprovalRole);
+  const dnnaPeteRec = approval.dnna_pete;
+  const dnnaChrisRec = approval.dnna_chris;
+  const dnnaConfirmed = isDnnaConfirmed({ dnna_pete: !!dnnaPeteRec?.approved, dnna_chris: !!dnnaChrisRec?.approved });
+  const dnnaPending = !!dnnaPeteRec?.approved && !dnnaChrisRec?.approved;
+  const petesDnnaMine = canApproveAny("dnna_pete", session?.email);
+  const chrisDnnaMine = canApproveAny("dnna_chris", session?.email);
+  const normalPathStarted = !!approval.pete?.approved;
+  const myApprovalKeys: AnyApprovalKey[] = [...APPROVAL_ROLES.map((r) => r.key), "dnna_pete", "dnna_chris"] as AnyApprovalKey[];
+  const iHaveActed = myApprovalKeys.some((k) => canApproveAny(k, session?.email) && !!approval[k]?.approved);
+  const rejection = approval.rejection;
+
+  const borderColor = rejection ? "#FCA5A5" : needsAction ? "#F59E0B" : iHaveActed ? "#86EFAC" : "rgba(0,0,0,0.06)";
+  const leftAccent = rejection ? "#DC2626" : needsAction ? "#F59E0B" : iHaveActed ? "#30A46C" : "#D1D1D6";
+  const typeMeta = CONTENT_TYPE_META[item.type];
+  const savingDnnaPete = savingKey === `${item.id}:dnna_pete`;
+  const savingDnnaChris = savingKey === `${item.id}:dnna_chris`;
+  const isOwner = session?.email?.toLowerCase() === item.submittedBy.toLowerCase();
+
+  const ctaButtons: { label: string; bg: string; key: AnyApprovalKey; saving: boolean }[] = [];
+  if (needsAction) {
+    for (const a of pendingActions.filter((a) => a.kind === "approve")) {
+      const cfg = APPROVAL_ROLES.find((r) => r.key === a.key);
+      if (cfg) ctaButtons.push({ label: `Approve as ${cfg.label.split(" (")[0]}`, bg: "#30A46C", key: a.key, saving: savingKey === `${item.id}:${a.key}` });
+    }
+    if (chrisDnnaMine && dnnaPending) {
+      ctaButtons.push({ label: "Approve to send", bg: "#0071E3", key: "dnna_chris", saving: savingDnnaChris });
+    }
+  }
+
+  return (
+    <div
+      style={{
+        background: "white",
+        borderRadius: 14,
+        border: `1px solid ${borderColor}`,
+        borderLeft: `4px solid ${leftAccent}`,
+        padding: 0,
+        transition: "box-shadow 0.15s, transform 0.1s",
+        boxShadow: needsAction ? "0 2px 8px rgba(245,158,11,0.12)" : "0 1px 3px rgba(0,0,0,0.04)",
+        display: "flex",
+        overflow: "hidden",
+      }}
+    >
+      {/* Left: content */}
+      <div style={{ flex: 1, minWidth: 0, padding: "16px 18px" }}>
+        {/* Title + open-link icon + owner controls */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "#1D1D1F", lineHeight: 1.3, marginBottom: 4 }}>
+              {item.title}
+            </div>
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                fontSize: 12,
+                color: "#0071E3",
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                marginBottom: 8,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                maxWidth: "100%",
+              }}
+            >
+              {item.url}
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+            </a>
+            {item.notes && (
+              <div style={{ fontSize: 12, color: "#3A3A3C", marginBottom: 8, whiteSpace: "pre-wrap", lineHeight: 1.4 }}>
+                {item.notes}
+              </div>
+            )}
+          </div>
+          {isOwner && (
+            <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+              <button
+                onClick={() => onEdit(item)}
+                title="Edit"
+                style={{ background: "transparent", border: "none", padding: 6, cursor: "pointer", color: "#86868B", borderRadius: 6 }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "#1D1D1F")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "#86868B")}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+                </svg>
+              </button>
+              <button
+                onClick={() => onDelete(item)}
+                title="Delete"
+                style={{ background: "transparent", border: "none", padding: 6, cursor: "pointer", color: "#86868B", borderRadius: 6 }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "#DC2626")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "#86868B")}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Info pills */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+          <span style={{ fontSize: 10, fontWeight: 600, color: typeMeta.color, background: typeMeta.bg, borderRadius: 999, padding: "3px 9px", textTransform: "uppercase", letterSpacing: "0.3px" }}>
+            {typeMeta.label}
+          </span>
+          <span style={{ fontSize: 10, color: "#86868B", background: "#F5F5F7", borderRadius: 999, padding: "3px 9px" }}>
+            Submitted {formatDate(item.submittedAt)}
+          </span>
+          <span style={{ fontSize: 10, color: "#86868B", background: "#F5F5F7", borderRadius: 999, padding: "3px 9px" }}>
+            by {item.submittedByLabel}
+          </span>
+          {item.updatedAt && (
+            <span style={{ fontSize: 10, color: "#86868B", background: "#F5F5F7", borderRadius: 999, padding: "3px 9px" }}>
+              edited {formatDate(item.updatedAt)}
+            </span>
+          )}
+          {rejection && (
+            <span style={{ fontSize: 10, fontWeight: 600, color: "#991B1B", background: "#FEE2E2", borderRadius: 999, padding: "3px 9px", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              Sent back: {rejection.note}
+            </span>
+          )}
+        </div>
+
+        {/* Approvals row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 10, borderTop: "1px solid #F0F0F2", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 9, fontWeight: 700, color: "#86868B", textTransform: "uppercase", letterSpacing: "0.6px", marginRight: 4 }}>Sign-off</span>
+          {APPROVAL_ROLES.map((role) => {
+            const rec = approval[role.key];
+            const checked = !!rec?.approved;
+
+            if (role.key === "pete" && (dnnaPending || dnnaConfirmed) && !checked) {
+              return (
+                <span key={role.key} style={{
+                  fontSize: 11, fontWeight: 600, color: dnnaConfirmed ? "#065F46" : "#92400E",
+                  background: dnnaConfirmed ? "#D1FAE5" : "#FEF3C7",
+                  borderRadius: 8, padding: "5px 10px",
+                }}>
+                  {dnnaConfirmed ? "✓ " : ""}No financial approval needed
+                  {petesDnnaMine && !savingDnnaPete && (
+                    <button onClick={() => onToggle(item.id, "dnna_pete", false)}
+                      style={{ background: "none", border: "none", color: "#86868B", cursor: "pointer", fontSize: 9, padding: "0 0 0 4px", textDecoration: "underline" }}>
+                      undo
+                    </button>
+                  )}
+                </span>
+              );
+            }
+            if (role.key === "chris" && (dnnaPending || dnnaConfirmed) && !checked) {
+              if (dnnaConfirmed) {
+                return <span key={role.key} style={{ fontSize: 11, fontWeight: 600, color: "#065F46", background: "#D1FAE5", borderRadius: 8, padding: "5px 10px" }}>{"✓"} Approved to send</span>;
+              }
+              if (chrisDnnaMine) {
+                return (
+                  <button key={role.key} onClick={() => onToggle(item.id, "dnna_chris", true)} disabled={savingDnnaChris}
+                    style={{ fontSize: 11, fontWeight: 600, color: "white", background: "#0071E3", borderRadius: 8, padding: "5px 12px", border: "none", cursor: savingDnnaChris ? "not-allowed" : "pointer", opacity: savingDnnaChris ? 0.5 : 1 }}>
+                    Approve to send
+                  </button>
+                );
+              }
+              return <span key={role.key} style={{ fontSize: 11, color: "#86868B", background: "#F5F5F7", borderRadius: 8, padding: "5px 10px" }}>Awaiting Chris</span>;
+            }
+
+            if (checked) {
+              return (
+                <span key={role.key} style={{
+                  fontSize: 11, fontWeight: 600, color: "#065F46", background: "#D1FAE5",
+                  borderRadius: 8, padding: "5px 10px",
+                  display: "inline-flex", alignItems: "center", gap: 4,
+                }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#065F46" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
+                  {role.label}
+                </span>
+              );
+            }
+
+            const isPending = pendingRoles.includes(role.key);
+            return (
+              <span key={role.key} style={{
+                fontSize: 11, fontWeight: isPending ? 600 : 400,
+                color: isPending ? "#92400E" : "#AEAEB2",
+                background: isPending ? "#FFF8E7" : "#FAFAFA",
+                borderRadius: 8, padding: "5px 10px",
+                border: isPending ? "1.5px solid #F59E0B" : "1px solid #E5E5EA",
+              }}>
+                {isPending ? `Needs ${role.label}` : role.label}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Right: CTA panel */}
+      {ctaButtons.length > 0 ? (
+        <div
+          style={{
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            gap: 8, padding: "16px 20px", minWidth: 180,
+            background: "rgba(48,164,108,0.06)", borderLeft: "1px solid #E5E5EA",
+          }}
+        >
+          <span style={{ fontSize: 9, fontWeight: 700, color: "#92400E", textTransform: "uppercase", letterSpacing: "0.6px" }}>Next step</span>
+          {ctaButtons.map((btn) => (
+            <button key={btn.key} onClick={() => onToggle(item.id, btn.key, true)} disabled={btn.saving}
+              style={{
+                background: btn.bg, color: "white", border: "none", borderRadius: 10, padding: "10px 18px",
+                fontSize: 13, fontWeight: 600, cursor: btn.saving ? "not-allowed" : "pointer",
+                opacity: btn.saving ? 0.6 : 1, width: "100%", textAlign: "center",
+              }}>
+              {btn.saving ? "Saving…" : btn.label}
+            </button>
+          ))}
+          {petesDnnaMine && !dnnaPeteRec?.approved && !normalPathStarted && pendingRoles.includes("pete") && (
+            <button onClick={() => onToggle(item.id, "dnna_pete", true)} disabled={savingDnnaPete}
+              style={{
+                background: "white", color: "#1D1D1F", border: "1px solid #E5E5EA", borderRadius: 10,
+                padding: "8px 14px", fontSize: 11, fontWeight: 500, cursor: savingDnnaPete ? "not-allowed" : "pointer",
+                opacity: savingDnnaPete ? 0.5 : 1, width: "100%", textAlign: "center",
+              }}>
+              No financial approval needed
+            </button>
+          )}
+          {chrisDnnaMine && !dnnaPeteRec?.approved && !dnnaConfirmed && normalPathStarted && !rejection && (
+            <button onClick={() => onToggle(item.id, "dnna_chris", true, true)} disabled={savingDnnaChris}
+              style={{
+                background: "white", color: "#0071E3", border: "1px solid #93C5FD", borderRadius: 10,
+                padding: "8px 14px", fontSize: 11, fontWeight: 600, cursor: savingDnnaChris ? "not-allowed" : "pointer",
+                opacity: savingDnnaChris ? 0.5 : 1, width: "100%", textAlign: "center", lineHeight: 1.3,
+              }}
+              title="Override: no financial approval needed, approved to send">
+              Financial Approval Not Required — Approved to Send
+            </button>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ContentFormModal({
+  mode,
+  initial,
+  approvalCount,
+  onClose,
+  onSubmit,
+}: {
+  mode: "create" | "edit";
+  initial: { type: ContentItemType; title: string; url: string; notes: string };
+  approvalCount: number;
+  onClose: () => void;
+  onSubmit: (payload: {
+    type: ContentItemType;
+    title: string;
+    url: string;
+    notes: string;
+  }) => Promise<{ ok: true } | { ok: false; error: string }>;
+}) {
+  const [type, setType] = useState<ContentItemType>(initial.type);
+  const [title, setTitle] = useState(initial.title);
+  const [url, setUrl] = useState(initial.url);
+  const [notes, setNotes] = useState(initial.notes);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!title.trim() || !url.trim()) {
+      setError("Title and URL are required.");
+      return;
+    }
+    try {
+      new URL(url.trim());
+    } catch {
+      setError("URL must be a valid link (starting with http:// or https://).");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    const res = await onSubmit({ type, title: title.trim(), url: url.trim(), notes: notes.trim() });
+    setSubmitting(false);
+    if (res.ok) onClose();
+    else setError(res.error);
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.4)",
+        zIndex: 300,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+      }}
+    >
+      <form
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={handleSubmit}
+        style={{
+          background: "white",
+          borderRadius: 20,
+          padding: 24,
+          width: "100%",
+          maxWidth: 500,
+          display: "flex",
+          flexDirection: "column",
+          gap: 14,
+          boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+        }}
+      >
+        <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0, color: "#1D1D1F" }}>
+          {mode === "create" ? "Submit content for approval" : "Edit content"}
+        </h2>
+        <p style={{ fontSize: 12, color: "#86868B", margin: 0 }}>
+          {mode === "create"
+            ? "Paste a link to the Facebook, Instagram or blog post. It'll move through the same approval flow as emails (Pete first, then Chris or Sam)."
+            : "Fix typos or update the link. Editing doesn't clear existing approvals."}
+        </p>
+
+        {mode === "edit" && approvalCount > 0 && (
+          <div style={{ fontSize: 11, color: "#92400E", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 8, padding: "6px 10px" }}>
+            Heads up: this item already has {approvalCount} approval{approvalCount === 1 ? "" : "s"}. They&apos;re preserved on edit.
+          </div>
+        )}
+
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#86868B", textTransform: "uppercase", letterSpacing: "0.5px" }}>Type</span>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value as ContentItemType)}
+            style={{
+              fontSize: 14,
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid #E5E5EA",
+              background: "white",
+              color: "#1D1D1F",
+              fontFamily: "inherit",
+            }}
+          >
+            <option value="facebook">Facebook</option>
+            <option value="instagram">Instagram</option>
+            <option value="blog">Blog</option>
+          </select>
+        </label>
+
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#86868B", textTransform: "uppercase", letterSpacing: "0.5px" }}>Title</span>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. March sale teaser carousel"
+            required
+            style={{
+              fontSize: 14,
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid #E5E5EA",
+              background: "white",
+              color: "#1D1D1F",
+              fontFamily: "inherit",
+            }}
+          />
+        </label>
+
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#86868B", textTransform: "uppercase", letterSpacing: "0.5px" }}>URL</span>
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://…"
+            required
+            style={{
+              fontSize: 14,
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid #E5E5EA",
+              background: "white",
+              color: "#1D1D1F",
+              fontFamily: "inherit",
+            }}
+          />
+        </label>
+
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#86868B", textTransform: "uppercase", letterSpacing: "0.5px" }}>Notes (optional)</span>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={3}
+            placeholder="Anything the approvers should know"
+            style={{
+              fontSize: 14,
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid #E5E5EA",
+              background: "white",
+              color: "#1D1D1F",
+              fontFamily: "inherit",
+              resize: "vertical",
+            }}
+          />
+        </label>
+
+        {error && (
+          <div style={{ fontSize: 12, color: "#DC2626", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "6px 10px" }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            style={{
+              fontSize: 13,
+              padding: "10px 18px",
+              borderRadius: 10,
+              border: "1px solid #E5E5EA",
+              background: "white",
+              color: "#1D1D1F",
+              cursor: submitting ? "not-allowed" : "pointer",
+              fontWeight: 500,
+              opacity: submitting ? 0.5 : 1,
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            style={{
+              fontSize: 13,
+              padding: "10px 18px",
+              borderRadius: 10,
+              border: "none",
+              background: "#0071E3",
+              color: "white",
+              cursor: submitting ? "not-allowed" : "pointer",
+              fontWeight: 600,
+              opacity: submitting ? 0.6 : 1,
+            }}
+          >
+            {submitting ? "Saving…" : mode === "create" ? "Submit for approval" : "Save changes"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
