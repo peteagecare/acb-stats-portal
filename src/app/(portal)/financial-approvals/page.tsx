@@ -108,7 +108,7 @@ export default function FinancialApprovalsPage() {
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [previewEmailId, setPreviewEmailId] = useState<string | null>(null);
   const [advanceFromId, setAdvanceFromId] = useState<string | null>(null);
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set(["approved-by-me"]));
   const [waitingFilter, setWaitingFilter] = useState<ApprovalRole | "all">("all");
 
   const loadData = useCallback(async () => {
@@ -325,6 +325,21 @@ export default function FinancialApprovalsPage() {
     [filtered, pendingByEmail]
   );
 
+  const approvedByMe = useMemo(() => {
+    const me = session?.email?.toLowerCase();
+    if (!me) return [];
+    const awaitingIds = new Set(awaitingMe.map((e) => e.id));
+    const keys: AnyApprovalKey[] = ["pete", "chris", "sam", "outside", "dnna_pete", "dnna_chris"];
+    return filtered.filter((e) => {
+      if (awaitingIds.has(e.id)) return false;
+      const rec = approvals[e.id];
+      if (!rec) return false;
+      return keys.some((k) => rec[k]?.approved && rec[k]?.userEmail?.toLowerCase() === me);
+    });
+  }, [filtered, approvals, awaitingMe, session?.email]);
+
+  const approvalDenominator = Math.max(0, emails.length - dnnaCounts.confirmed - dnnaCounts.pending);
+
   useEffect(() => {
     if (!advanceFromId) return;
     const next = awaitingMe.find((e) => e.id !== advanceFromId);
@@ -477,7 +492,7 @@ export default function FinancialApprovalsPage() {
               <StatCard
                 key={r.key}
                 label={r.label}
-                value={`${totals[r.key]} / ${totalEmails}`}
+                value={`${totals[r.key]} / ${approvalDenominator}`}
                 tone="#30A46C"
                 bg="white"
               />
@@ -564,6 +579,54 @@ export default function FinancialApprovalsPage() {
                   {!collapsed && (
                     <EmailsTable
                       emails={awaitingMe}
+                      approvals={approvals}
+                      session={session}
+                      savingKey={savingKey}
+                      onToggle={toggleApproval}
+                      onPreview={setPreviewEmailId}
+                      pendingByEmail={pendingByEmail}
+                      workflowMap={workflowMap}
+                    />
+                  )}
+                </section>
+              );
+            })()}
+
+            {approvedByMe.length > 0 && (() => {
+              const collapsed = collapsedSections.has("approved-by-me");
+              return (
+                <section
+                  style={{
+                    background: "white",
+                    borderRadius: "20px",
+                    padding: collapsed ? "0" : "20px",
+                    marginBottom: "16px",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+                    border: "2px solid #30A46C",
+                    overflow: "hidden",
+                  }}
+                >
+                  <button
+                    onClick={() => setCollapsedSections((prev) => { const next = new Set(prev); next.has("approved-by-me") ? next.delete("approved-by-me") : next.add("approved-by-me"); return next; })}
+                    style={{
+                      display: "flex", alignItems: "center", gap: "10px", width: "100%",
+                      padding: collapsed ? "16px 20px" : "0 0 16px 0",
+                      background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left",
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#86868B" strokeWidth="2" style={{ transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)", transition: "transform 0.15s", flexShrink: 0 }}>
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
+                    <span style={{ fontSize: "11px", fontWeight: 600, color: "white", background: "#30A46C", borderRadius: "6px", padding: "4px 10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                      You&apos;ve approved
+                    </span>
+                    <span style={{ fontSize: "12px", color: "#86868B" }}>
+                      {approvedByMe.length} email{approvedByMe.length === 1 ? "" : "s"}
+                    </span>
+                  </button>
+                  {!collapsed && (
+                    <EmailsTable
+                      emails={approvedByMe}
                       approvals={approvals}
                       session={session}
                       savingKey={savingKey}
