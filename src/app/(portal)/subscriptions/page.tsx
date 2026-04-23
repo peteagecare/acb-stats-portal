@@ -168,17 +168,19 @@ export default function SubscriptionsPage() {
     return sortAsc ? cmp : -cmp;
   });
 
-  const totalMonthly = items.reduce((s, i) => s + monthlyGbp(i), 0);
-  const totalAnnual = items.reduce((s, i) => s + annualGbp(i), 0);
-  const monthlyCount = items.filter((i) => i.frequency === "monthly").length;
-  const annualCount = items.filter((i) => i.frequency === "annual").length;
-  const usdCount = items.filter((i) => i.currency === "USD").length;
-  const eurCount = items.filter((i) => i.currency === "EUR").length;
+  // Active = no end date. Cancelled subs still render in the table but don't count toward current spend.
+  const activeItems = items.filter((i) => !i.endDate);
+  const totalMonthly = activeItems.reduce((s, i) => s + monthlyGbp(i), 0);
+  const totalAnnual = activeItems.reduce((s, i) => s + annualGbp(i), 0);
+  const monthlyCount = activeItems.filter((i) => i.frequency === "monthly").length;
+  const annualCount = activeItems.filter((i) => i.frequency === "annual").length;
+  const usdCount = activeItems.filter((i) => i.currency === "USD").length;
+  const eurCount = activeItems.filter((i) => i.currency === "EUR").length;
   const foreignCount = usdCount + eurCount;
 
-  // Category breakdown in GBP
+  // Category breakdown in GBP (active only)
   const byCat: Record<string, number> = {};
-  items.forEach((i) => {
+  activeItems.forEach((i) => {
     const cat = i.category || "Other";
     byCat[cat] = (byCat[cat] || 0) + monthlyGbp(i);
   });
@@ -324,10 +326,10 @@ export default function SubscriptionsPage() {
 
       {/* Summary cards — all in GBP */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12, marginBottom: 20 }}>
-        <SummaryCard label="Total monthly (GBP)" value={gbp(totalMonthly)} sub={`${items.length} subscription${items.length !== 1 ? "s" : ""}`} accent="#0071E3" />
+        <SummaryCard label="Total monthly (GBP)" value={gbp(totalMonthly)} sub={`${activeItems.length} active subscription${activeItems.length !== 1 ? "s" : ""}`} accent="#0071E3" />
         <SummaryCard label="Total annual (GBP)" value={gbp(totalAnnual)} sub={`${monthlyCount} monthly, ${annualCount} annual`} accent="#8E4EC6" />
-        <SummaryCard label="Monthly subs (GBP)" value={gbp(items.filter((i) => i.frequency === "monthly").reduce((s, i) => s + toGbp(i.cost, i.currency, usdToGbp, eurToGbp), 0))} sub={`${monthlyCount} subscription${monthlyCount !== 1 ? "s" : ""}`} accent="#30A46C" />
-        <SummaryCard label="Annual subs (GBP)" value={gbp(items.filter((i) => i.frequency === "annual").reduce((s, i) => s + toGbp(i.cost, i.currency, usdToGbp, eurToGbp), 0))} sub={`${annualCount} subscription${annualCount !== 1 ? "s" : ""} (total annual cost)`} accent="#E8833A" />
+        <SummaryCard label="Monthly subs (GBP)" value={gbp(activeItems.filter((i) => i.frequency === "monthly").reduce((s, i) => s + toGbp(i.cost, i.currency, usdToGbp, eurToGbp), 0))} sub={`${monthlyCount} subscription${monthlyCount !== 1 ? "s" : ""}`} accent="#30A46C" />
+        <SummaryCard label="Annual subs (GBP)" value={gbp(activeItems.filter((i) => i.frequency === "annual").reduce((s, i) => s + toGbp(i.cost, i.currency, usdToGbp, eurToGbp), 0))} sub={`${annualCount} subscription${annualCount !== 1 ? "s" : ""} (total annual cost)`} accent="#E8833A" />
       </div>
 
       {/* Category breakdown in GBP */}
@@ -347,17 +349,31 @@ export default function SubscriptionsPage() {
 
       {/* Claude AI savings + settings */}
       {items.some((s) => s.replaceableByAI) && (() => {
-        const replaceable = items.filter((s) => s.replaceableByAI && !s.endDate);
-        const savingsAnnual = replaceable.reduce((s, i) => s + annualGbp(i), 0);
-        const netSaving = savingsAnnual - claudeAnnualGbp;
+        const activeReplaceable = items.filter((s) => s.replaceableByAI && !s.endDate);
+        const alreadyReplaced = items.filter((s) => s.replaceableByAI && s.endDate);
+        const activeAnnual = activeReplaceable.reduce((s, i) => s + annualGbp(i), 0);
+        const replacedAnnual = alreadyReplaced.reduce((s, i) => s + annualGbp(i), 0);
+        const combinedAnnual = activeAnnual + replacedAnnual;
+        const netSaving = combinedAnnual - claudeAnnualGbp;
         return (
           <div style={{ background: "#FFFBEB", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-card)", padding: "16px 20px", marginBottom: 20, border: "1px solid #FDE68A" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
               <div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#92400E", marginBottom: 4 }}>Replaceable by Claude AI</div>
-                <div style={{ fontSize: 13, color: "#1D1D1F" }}>
-                  <strong>{replaceable.length}</strong> active subscription{replaceable.length !== 1 ? "s" : ""} worth <strong>{gbp(savingsAnnual)}/yr</strong> could be replaced.
-                  {" "}Claude at <strong>{gbp(claudeAnnualGbp)}/yr</strong> = net saving of <strong style={{ color: netSaving > 0 ? "#107A3E" : "#9E1A1E" }}>{gbp(netSaving)}/yr</strong>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#92400E", marginBottom: 4 }}>Claude AI savings</div>
+                <div style={{ fontSize: 13, color: "#1D1D1F", lineHeight: 1.55 }}>
+                  {activeReplaceable.length > 0 && (
+                    <div>
+                      <strong>{activeReplaceable.length}</strong> active subscription{activeReplaceable.length !== 1 ? "s" : ""} worth <strong>{gbp(activeAnnual)}/yr</strong> could be replaced.
+                    </div>
+                  )}
+                  {alreadyReplaced.length > 0 && (
+                    <div>
+                      <strong>{alreadyReplaced.length}</strong> past subscription{alreadyReplaced.length !== 1 ? "s" : ""} worth <strong>{gbp(replacedAnnual)}/yr</strong> already replaced by Claude.
+                    </div>
+                  )}
+                  <div style={{ marginTop: 4 }}>
+                    Claude at <strong>{gbp(claudeAnnualGbp)}/yr</strong> vs <strong>{gbp(combinedAnnual)}/yr</strong> combined = net saving of <strong style={{ color: netSaving > 0 ? "#107A3E" : "#9E1A1E" }}>{gbp(netSaving)}/yr</strong>
+                  </div>
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -540,7 +556,9 @@ export default function SubscriptionsPage() {
                     </td>
                     <td style={{ padding: "10px 16px", textAlign: "center" }}>
                       {s.replaceableByAI ? (
-                        <span style={{ fontSize: 10, fontWeight: 600, color: "#92400E", background: "#FFFBEB", padding: "2px 7px", borderRadius: 999, border: "1px solid #FDE68A" }}>AI</span>
+                        <span style={{ fontSize: 10, fontWeight: 600, color: "#92400E", background: "#FFFBEB", padding: "2px 7px", borderRadius: 999, border: "1px solid #FDE68A", whiteSpace: "nowrap" }}>
+                          {s.endDate ? "Replaced" : "Replaceable"}
+                        </span>
                       ) : (
                         <span style={{ color: "var(--color-text-tertiary)", fontSize: 11 }}>{"\u2014"}</span>
                       )}
@@ -564,20 +582,20 @@ export default function SubscriptionsPage() {
               </tbody>
               <tfoot>
                 <tr style={{ background: "rgba(0,0,0,0.02)" }}>
-                  <td colSpan={2} style={{ padding: "10px 16px", fontWeight: 700, fontSize: 13, color: "var(--color-text-primary)" }}>Totals (GBP)</td>
+                  <td colSpan={2} style={{ padding: "10px 16px", fontWeight: 700, fontSize: 13, color: "var(--color-text-primary)" }}>Active totals (GBP)</td>
                   <td style={{ padding: "10px 16px" }} />
                   <td style={{ padding: "10px 16px" }} />
                   <td style={{ padding: "10px 16px" }} />
                   <td style={{ padding: "10px 16px", textAlign: "right", fontWeight: 700, color: "var(--color-text-primary)" }}>
                     {spreadView
                       ? gbp(totalMonthly)
-                      : gbp(items.filter((i) => i.frequency === "monthly").reduce((s, i) => s + monthlyGbp(i), 0))
+                      : gbp(activeItems.filter((i) => i.frequency === "monthly").reduce((s, i) => s + monthlyGbp(i), 0))
                     }
                   </td>
                   <td style={{ padding: "10px 16px", textAlign: "right", fontWeight: 700, color: "var(--color-text-primary)" }}>
                     {spreadView
                       ? gbp(totalAnnual)
-                      : gbp(items.filter((i) => i.frequency === "annual").reduce((s, i) => s + annualGbp(i), 0))
+                      : gbp(activeItems.filter((i) => i.frequency === "annual").reduce((s, i) => s + annualGbp(i), 0))
                     }
                   </td>
                   <td style={{ padding: "10px 16px" }} />
@@ -727,11 +745,16 @@ function SubForm({ initial, onSave, onCancel }: { initial: Subscription; onSave:
             <input style={inputStyle} value={draft.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Optional notes" />
           </label>
 
-          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-            <input type="checkbox" checked={draft.replaceableByAI ?? false} onChange={(e) => set("replaceableByAI", e.target.checked)}
-              style={{ width: 16, height: 16, accentColor: "#0071E3", cursor: "pointer" }} />
-            <span style={{ fontSize: 12, fontWeight: 600 }}>Could be replaced by Claude AI</span>
-          </label>
+          <div>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={draft.replaceableByAI ?? false} onChange={(e) => set("replaceableByAI", e.target.checked)}
+                style={{ width: 16, height: 16, accentColor: "#0071E3", cursor: "pointer" }} />
+              <span style={{ fontSize: 12, fontWeight: 600 }}>Replaced or replaceable by Claude AI</span>
+            </label>
+            <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 4, marginLeft: 24, lineHeight: 1.4 }}>
+              Tick for subscriptions Claude could do the job of. Set an end date to mark it as already replaced — its cost still counts toward the Claude savings total.
+            </div>
+          </div>
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>
