@@ -110,7 +110,7 @@ export default function WorkspacePage() {
   }, [companies]);
 
   return (
-    <div style={{ padding: "32px 36px 64px", maxWidth: 1100, margin: "0 auto" }}>
+    <div className="wsp-page" style={{ padding: "32px 36px 64px", maxWidth: 1100, margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "flex-end", marginBottom: 22, gap: 16 }}>
         <div>
           <h1 style={{ fontSize: 28, fontWeight: 600, margin: 0 }}>Task Dashboard</h1>
