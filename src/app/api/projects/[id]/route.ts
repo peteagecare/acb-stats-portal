@@ -76,6 +76,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     startDate?: string | null;
     endDate?: string | null;
     status?: "planning" | "active" | "on_hold" | "done" | "archived";
+    type?: "quarterly" | "initiative" | "ongoing";
+    department?: "ppc" | "seo" | "content" | "web" | null;
     accessMode?: "everyone" | "restricted";
     setCollaborators?: string[];
     setAccessUsers?: string[];
@@ -99,6 +101,19 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (body.startDate !== undefined) updates.startDate = body.startDate || null;
   if (body.endDate !== undefined) updates.endDate = body.endDate || null;
   if (body.status) updates.status = body.status;
+  if (body.type === "quarterly" || body.type === "initiative" || body.type === "ongoing") {
+    updates.type = body.type;
+  }
+  if (body.department === null) {
+    updates.department = null;
+  } else if (
+    body.department === "ppc" ||
+    body.department === "seo" ||
+    body.department === "content" ||
+    body.department === "web"
+  ) {
+    updates.department = body.department;
+  }
   if (body.accessMode === "everyone" || body.accessMode === "restricted") {
     updates.accessMode = body.accessMode;
   }

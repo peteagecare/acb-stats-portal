@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Avatar,
@@ -8,17 +8,32 @@ import {
   DirectoryUser,
   Modal,
   MultiUserPicker,
+  PRIORITY_META,
   PROJECT_STATUS_META,
+  colorForEmail,
   fmtDate,
   inputStyle,
   primaryButtonStyle,
+  quarterFromDate,
   secondaryButtonStyle,
+  upcomingQuarters,
   useUsers,
   userMeta,
 } from "../_shared";
+import { useRouter } from "next/navigation";
 import { TRACKER_STYLE, computeTracker } from "@/lib/tracker";
 
 type ProjectStatus = "planning" | "active" | "on_hold" | "done" | "archived";
+type ProjectType = "quarterly" | "initiative" | "ongoing";
+type Department = "ppc" | "seo" | "content" | "web";
+
+const DEPARTMENT_META: Record<Department, { label: string; bg: string; color: string }> = {
+  ppc: { label: "PPC", bg: "#FEF3C7", color: "#92400E" },
+  seo: { label: "SEO", bg: "#DBEAFE", color: "#1E40AF" },
+  content: { label: "Content", bg: "#FCE7F3", color: "#9D174D" },
+  web: { label: "Web", bg: "#E0E7FF", color: "#3730A3" },
+};
+
 
 interface ProjectRow {
   id: string;
@@ -29,6 +44,8 @@ interface ProjectRow {
   startDate: string | null;
   endDate: string | null;
   status: ProjectStatus;
+  type: ProjectType;
+  department: Department | null;
   accessMode: "everyone" | "restricted";
   createdAt: string;
   createdByEmail: string;
@@ -46,27 +63,47 @@ interface CompanyDetail {
   projectCount: number;
 }
 
+interface CompanyTask {
+  id: string;
+  title: string;
+  ownerEmail: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  priority: "low" | "medium" | "high" | null;
+  status: "todo" | "doing" | "blocked" | "done";
+  completed: boolean;
+  completedAt: string | null;
+  createdAt: string;
+  parentTaskId: string | null;
+  projectId: string;
+  projectName: string;
+}
+
 export default function CompanyPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = use(params);
   const users = useUsers();
   const [company, setCompany] = useState<CompanyDetail | null>(null);
   const [projects, setProjects] = useState<ProjectRow[] | null>(null);
+  const [tasks, setTasks] = useState<CompanyTask[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [editingCompany, setEditingCompany] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const [cRes, pRes] = await Promise.all([
+      const [cRes, pRes, tRes] = await Promise.all([
         fetch(`/api/companies/${companyId}`, { cache: "no-store" }),
         fetch(`/api/projects?companyId=${companyId}`, { cache: "no-store" }),
+        fetch(`/api/companies/${companyId}/tasks`, { cache: "no-store" }),
       ]);
       if (!cRes.ok) throw new Error(`HTTP ${cRes.status}`);
       if (!pRes.ok) throw new Error(`HTTP ${pRes.status}`);
       const cJson = (await cRes.json()) as CompanyDetail;
       const pJson = (await pRes.json()) as { projects: ProjectRow[] };
+      const tJson = tRes.ok ? ((await tRes.json()) as { tasks: CompanyTask[] }) : { tasks: [] };
       setCompany(cJson);
       setProjects(pJson.projects);
+      setTasks(tJson.tasks);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
@@ -136,7 +173,11 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
         </div>
       )}
 
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 14 }}>
+      {tasks.length > 0 && (
+        <CompanyTasks tasks={tasks} projects={projects ?? []} users={users} companyId={companyId} />
+      )}
+
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 14, marginTop: tasks.length > 0 ? 28 : 0 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Projects</h2>
         <button onClick={() => setCreating(true)} style={{ ...primaryButtonStyle, marginLeft: "auto" }}>
           + New project
@@ -150,11 +191,7 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
       )}
 
       {projects && projects.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {projects.map((p) => (
-            <ProjectCard key={p.id} project={p} users={users} />
-          ))}
-        </div>
+        <GroupedProjects projects={projects} users={users} />
       )}
 
       {creating && company && (
@@ -174,6 +211,316 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
           onSaved={() => { setEditingCompany(false); refresh(); }}
         />
       )}
+    </div>
+  );
+}
+
+type CompanyTaskSort = "deadline" | "priority" | "recent";
+
+function CompanyTasks({
+  tasks, projects, users, companyId,
+}: {
+  tasks: CompanyTask[];
+  projects: ProjectRow[];
+  users: DirectoryUser[];
+  companyId: string;
+}) {
+  const [sort, setSort] = useState<CompanyTaskSort>("deadline");
+  const [filterAssignee, setFilterAssignee] = useState<string>("");
+  const [filterProject, setFilterProject] = useState<string>("");
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+
+  // Unique assignees actually present in this company's tasks
+  const assigneeOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of tasks) if (t.ownerEmail) set.add(t.ownerEmail);
+    return [...set];
+  }, [tasks]);
+
+  const filteredSorted = useMemo(() => {
+    let list = tasks.filter((t) => !t.parentTaskId);
+    if (!showCompleted) list = list.filter((t) => !t.completed);
+    if (filterAssignee === "__none") list = list.filter((t) => !t.ownerEmail);
+    else if (filterAssignee) list = list.filter((t) => t.ownerEmail === filterAssignee);
+    if (filterProject) list = list.filter((t) => t.projectId === filterProject);
+
+    const byDeadline = (a: CompanyTask, b: CompanyTask) => {
+      const da = a.endDate ? new Date(a.endDate).getTime() : Number.POSITIVE_INFINITY;
+      const db = b.endDate ? new Date(b.endDate).getTime() : Number.POSITIVE_INFINITY;
+      return da - db;
+    };
+    const priorityRank: Record<string, number> = { high: 0, medium: 1, low: 2 };
+    const byPriority = (a: CompanyTask, b: CompanyTask) => {
+      const ra = a.priority ? priorityRank[a.priority] : 3;
+      const rb = b.priority ? priorityRank[b.priority] : 3;
+      if (ra !== rb) return ra - rb;
+      return byDeadline(a, b);
+    };
+    const byRecent = (a: CompanyTask, b: CompanyTask) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+
+    const sorter = sort === "priority" ? byPriority : sort === "recent" ? byRecent : byDeadline;
+    return [...list].sort(sorter);
+  }, [tasks, sort, filterAssignee, filterProject, showCompleted]);
+
+  const visible = showAll ? filteredSorted : filteredSorted.slice(0, 8);
+
+  return (
+    <section style={{
+      background: "var(--bg-card)", borderRadius: 18,
+      padding: "16px 20px",
+      boxShadow: "var(--shadow-card)",
+      marginBottom: 22,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Tasks</h2>
+        <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", background: "rgba(0,0,0,0.04)", padding: "2px 8px", borderRadius: 999 }}>
+          {filteredSorted.length}
+        </span>
+        <div style={{ flex: 1 }} />
+        <FilterSelect value={sort} onChange={(v) => setSort(v as CompanyTaskSort)} ariaLabel="Sort">
+          <option value="deadline">Sort: Deadline</option>
+          <option value="priority">Sort: Priority</option>
+          <option value="recent">Sort: Recently added</option>
+        </FilterSelect>
+        <FilterSelect value={filterAssignee} onChange={setFilterAssignee} ariaLabel="Assignee filter">
+          <option value="">All assignees</option>
+          <option value="__none">Unassigned</option>
+          {assigneeOptions.map((email) => {
+            const u = userMeta(email, users);
+            return <option key={email} value={email}>{u?.label ?? email}</option>;
+          })}
+        </FilterSelect>
+        <FilterSelect value={filterProject} onChange={setFilterProject} ariaLabel="Project filter">
+          <option value="">All projects</option>
+          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </FilterSelect>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--color-text-secondary)", cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={showCompleted}
+            onChange={(e) => setShowCompleted(e.target.checked)}
+            style={{ margin: 0 }}
+          />
+          Show done
+        </label>
+      </div>
+
+      {visible.length === 0 ? (
+        <div style={{ padding: "16px 4px", fontSize: 13, color: "var(--color-text-tertiary)", fontStyle: "italic" }}>
+          No tasks match this view.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {visible.map((t) => (
+            <CompanyTaskRow key={t.id} task={t} users={users} companyId={companyId} />
+          ))}
+        </div>
+      )}
+
+      {filteredSorted.length > 8 && (
+        <div style={{ marginTop: 10, textAlign: "center" }}>
+          <button
+            onClick={() => setShowAll((v) => !v)}
+            style={{
+              background: "transparent", border: "none",
+              color: "var(--color-accent)", fontSize: 12, fontWeight: 500,
+              cursor: "pointer", fontFamily: "inherit",
+            }}
+          >
+            {showAll ? "Show top 8" : `Show all ${filteredSorted.length}`}
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function FilterSelect({
+  value, onChange, ariaLabel, children,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  ariaLabel: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label={ariaLabel}
+      style={{
+        padding: "5px 9px",
+        border: "1px solid var(--color-border)",
+        borderRadius: 8,
+        fontSize: 12, fontFamily: "inherit",
+        background: "var(--bg-card)",
+        color: "var(--color-text-secondary)",
+        cursor: "pointer",
+        outline: "none",
+      }}
+    >
+      {children}
+    </select>
+  );
+}
+
+function CompanyTaskRow({ task, users, companyId }: { task: CompanyTask; users: DirectoryUser[]; companyId: string }) {
+  const router = useRouter();
+  const owner = userMeta(task.ownerEmail, users);
+  const projectColor = colorForEmail(task.projectId);
+  const todayMs = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
+  const dueMs = task.endDate ? new Date(task.endDate).getTime() : null;
+  const overdue = dueMs != null && dueMs < todayMs && !task.completed;
+
+  return (
+    <div
+      onClick={() => router.push(`/workspace/${companyId}/${task.projectId}?task=${task.id}`)}
+      style={{
+        display: "flex", alignItems: "center", gap: 10,
+        padding: "10px 4px", borderTop: "1px solid var(--color-border)",
+        cursor: "pointer", transition: "background 100ms var(--ease-apple)",
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.02)")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+    >
+      <span style={{
+        width: 16, height: 16, borderRadius: "50%",
+        border: `1.5px solid ${task.completed ? "#10B981" : "var(--color-text-tertiary)"}`,
+        background: task.completed ? "#10B981" : "transparent",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        flexShrink: 0,
+      }}>
+        {task.completed && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="5,12 10,17 19,7" /></svg>}
+      </span>
+      <span style={{
+        flex: 1, fontSize: 14, minWidth: 0,
+        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+        color: task.completed ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
+        textDecoration: task.completed ? "line-through" : "none",
+      }}>
+        {task.title}
+      </span>
+      {task.priority && (
+        <span style={{
+          fontSize: 11, fontWeight: 600,
+          color: PRIORITY_META[task.priority].color, background: PRIORITY_META[task.priority].bg,
+          padding: "3px 8px", borderRadius: 999, flexShrink: 0,
+        }}>
+          {PRIORITY_META[task.priority].label}
+        </span>
+      )}
+      <span
+        title={task.projectName}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 6,
+          fontSize: 11, fontWeight: 500,
+          padding: "3px 9px", borderRadius: 999,
+          background: `${projectColor}1A`, color: projectColor,
+          flexShrink: 0, maxWidth: 200,
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+        }}
+      >
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: projectColor, flexShrink: 0 }} />
+        {task.projectName}
+      </span>
+      {task.endDate && (
+        <span style={{
+          fontSize: 11, fontWeight: 500,
+          padding: "3px 8px", borderRadius: 999,
+          color: overdue ? "#B91C1C" : "var(--color-text-secondary)",
+          background: overdue ? "#FEE2E2" : "transparent",
+          flexShrink: 0,
+        }}>
+          {fmtDate(task.endDate)}
+        </span>
+      )}
+      {owner && <Avatar user={owner} size={22} />}
+    </div>
+  );
+}
+
+function GroupedProjects({ projects, users }: { projects: ProjectRow[]; users: DirectoryUser[] }) {
+  const quarterly = projects.filter((p) => p.type === "quarterly");
+  const initiatives = projects.filter((p) => p.type === "initiative");
+  const ongoing = projects.filter((p) => p.type === "ongoing");
+
+  const quarterGroups = new Map<string, { label: string; sortKey: string; items: ProjectRow[] }>();
+  const undatedQuarterly: ProjectRow[] = [];
+  for (const p of quarterly) {
+    const q = quarterFromDate(p.startDate);
+    if (!q) {
+      undatedQuarterly.push(p);
+      continue;
+    }
+    const g = quarterGroups.get(q.key) ?? { label: q.label, sortKey: q.key, items: [] };
+    g.items.push(p);
+    quarterGroups.set(q.key, g);
+  }
+  const sortedQuarters = [...quarterGroups.values()].sort((a, b) => b.sortKey.localeCompare(a.sortKey));
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+      {(quarterly.length > 0) && (
+        <Section title="Quarterly">
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            {sortedQuarters.map((g) => (
+              <div key={g.sortKey}>
+                <SubHeader>{g.label}</SubHeader>
+                <ProjectList projects={g.items} users={users} />
+              </div>
+            ))}
+            {undatedQuarterly.length > 0 && (
+              <div>
+                <SubHeader>No quarter set</SubHeader>
+                <ProjectList projects={undatedQuarterly} users={users} />
+              </div>
+            )}
+          </div>
+        </Section>
+      )}
+
+      {initiatives.length > 0 && (
+        <Section title="Big projects">
+          <ProjectList projects={initiatives} users={users} />
+        </Section>
+      )}
+
+      {ongoing.length > 0 && (
+        <Section title="Ongoing">
+          <ProjectList projects={ongoing} users={users} />
+        </Section>
+      )}
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h3 style={{ fontSize: 13, fontWeight: 600, margin: "0 0 10px", textTransform: "uppercase", letterSpacing: 0.5, color: "var(--color-text-secondary)" }}>
+        {title}
+      </h3>
+      {children}
+    </div>
+  );
+}
+
+function SubHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)", margin: "0 0 8px 2px" }}>
+      {children}
+    </div>
+  );
+}
+
+function ProjectList({ projects, users }: { projects: ProjectRow[]; users: DirectoryUser[] }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {projects.map((p) => (
+        <ProjectCard key={p.id} project={p} users={users} />
+      ))}
     </div>
   );
 }
@@ -212,6 +559,14 @@ function ProjectCard({ project, users }: { project: ProjectRow; users: Directory
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
             <span style={{ fontSize: 15, fontWeight: 600 }}>{project.name}</span>
+            {project.department && (
+              <span style={{
+                fontSize: 11, fontWeight: 600,
+                padding: "2px 8px", borderRadius: 999,
+                color: DEPARTMENT_META[project.department].color,
+                background: DEPARTMENT_META[project.department].bg,
+              }}>{DEPARTMENT_META[project.department].label}</span>
+            )}
             <span style={{
               fontSize: 11, fontWeight: 600,
               padding: "2px 8px", borderRadius: 999,
@@ -279,6 +634,8 @@ function NewProjectModal({
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [type, setType] = useState<ProjectType>("quarterly");
+  const [department, setDepartment] = useState<Department | "">("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -298,9 +655,11 @@ function NewProjectModal({
           companyId,
           name: name.trim(),
           description: description.trim(),
+          type,
+          department: department || null,
           ownerEmail: ownerEmail || null,
           startDate: startDate || null,
-          endDate: endDate || null,
+          endDate: type === "ongoing" ? null : (endDate || null),
           collaborators,
         }),
       });
@@ -325,20 +684,79 @@ function NewProjectModal({
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} style={{ ...inputStyle, resize: "vertical" }} disabled={saving} />
         </Field>
 
+        <Field label="Type">
+          <div style={{ display: "flex", gap: 8 }}>
+            {([
+              { v: "quarterly" as const, label: "Quarterly" },
+              { v: "initiative" as const, label: "Big project" },
+              { v: "ongoing" as const, label: "Ongoing" },
+            ]).map((t) => (
+              <button
+                key={t.v}
+                type="button"
+                onClick={() => setType(t.v)}
+                style={{
+                  ...secondaryButtonStyle,
+                  borderColor: type === t.v ? "var(--color-accent)" : "var(--color-border)",
+                  color: type === t.v ? "#0071E3" : "var(--color-text-primary)",
+                  background: type === t.v ? "rgba(0,113,227,0.08)" : "transparent",
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </Field>
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Department">
+            <select value={department} onChange={(e) => setDepartment(e.target.value as Department | "")} style={inputStyle}>
+              <option value="">None</option>
+              <option value="ppc">PPC</option>
+              <option value="seo">SEO</option>
+              <option value="content">Content</option>
+              <option value="web">Web</option>
+            </select>
+          </Field>
           <Field label="Primary owner">
             <select value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} style={inputStyle}>
               <option value="">Unassigned</option>
               {users.map((u) => <option key={u.email} value={u.email}>{u.label}</option>)}
             </select>
           </Field>
-          <div />
+        </div>
+
+        {type === "quarterly" && (
+          <Field label="Quarter">
+            <select
+              value=""
+              onChange={(e) => {
+                const q = upcomingQuarters(5).find((x) => x.key === e.target.value);
+                if (q) {
+                  setStartDate(q.startDate);
+                  setEndDate(q.endDate);
+                }
+                e.currentTarget.value = "";
+              }}
+              style={inputStyle}
+            >
+              <option value="">Pick a quarter to fill dates…</option>
+              {upcomingQuarters(5).map((q) => (
+                <option key={q.key} value={q.key}>{q.label}</option>
+              ))}
+            </select>
+          </Field>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: type === "ongoing" ? "1fr" : "1fr 1fr", gap: 12 }}>
           <Field label="Start date">
             <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={inputStyle} />
           </Field>
-          <Field label="End date">
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={inputStyle} />
-          </Field>
+          {type !== "ongoing" && (
+            <Field label="End date">
+              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={inputStyle} />
+            </Field>
+          )}
         </div>
 
         <Field label="Collaborators">

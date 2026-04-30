@@ -21,6 +21,8 @@ export const projectStatusEnum = pgEnum("project_status", [
   "done",
   "archived",
 ]);
+export const projectTypeEnum = pgEnum("project_type", ["quarterly", "initiative", "ongoing"]);
+export const departmentEnum = pgEnum("department", ["ppc", "seo", "content", "web"]);
 export const taskStatusEnum = pgEnum("task_status", ["todo", "doing", "blocked", "done"]);
 export const priorityEnum = pgEnum("priority", ["low", "medium", "high"]);
 
@@ -45,6 +47,8 @@ export const projects = pgTable("projects", {
   startDate: date("start_date"),
   endDate: date("end_date"),
   status: projectStatusEnum("status").notNull().default("active"),
+  type: projectTypeEnum("type").notNull().default("quarterly"),
+  department: departmentEnum("department"),
   accessMode: accessModeEnum("access_mode").notNull().default("everyone"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   createdByEmail: text("created_by_email").notNull(),
@@ -158,6 +162,31 @@ export const attachments = pgTable("attachments", {
   uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const meetingNotes = pgTable("meeting_notes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  title: text("title").notNull().default(""),
+  body: text("body").notNull().default(""),
+  meetingDate: date("meeting_date"),
+  authorEmail: text("author_email").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const meetingNoteTasks = pgTable("meeting_note_tasks", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  noteId: uuid("note_id")
+    .notNull()
+    .references(() => meetingNotes.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  completed: boolean("completed").notNull().default(false),
+  ownerEmail: text("owner_email"),
+  endDate: date("end_date"),
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: "set null" }),
+  promotedTaskId: uuid("promoted_task_id"),
+  order: integer("order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const projectLinks = pgTable("project_links", {
   id: uuid("id").defaultRandom().primaryKey(),
   projectId: uuid("project_id")
@@ -177,3 +206,5 @@ export type Section = typeof sections.$inferSelect;
 export type NewSection = typeof sections.$inferInsert;
 export type Task = typeof tasks.$inferSelect;
 export type NewTask = typeof tasks.$inferInsert;
+export type MeetingNote = typeof meetingNotes.$inferSelect;
+export type NewMeetingNote = typeof meetingNotes.$inferInsert;

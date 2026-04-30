@@ -130,6 +130,23 @@ const Icon = {
       <path d="M3 17l9 4 9-4" />
     </svg>
   ),
+  building: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <rect x="4" y="3" width="16" height="18" rx="1.5" />
+      <path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2" />
+    </svg>
+  ),
+  chevron: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 12, height: 12, flexShrink: 0 }}>
+      <polyline points="9,6 15,12 9,18" />
+    </svg>
+  ),
+  notes: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <path d="M5 4h11l3 3v13H5z" />
+      <path d="M8 9h7M8 13h7M8 17h4" />
+    </svg>
+  ),
   logout: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
       <path d="M15 17l5-5-5-5" />
@@ -142,6 +159,7 @@ const Icon = {
 const NAV: NavItem[] = [
   { href: "/", label: "Dashboard", icon: Icon.dashboard },
   { href: "/workspace", label: "Workspace", icon: Icon.workspace },
+  { href: "/notes", label: "Meeting Notes", icon: Icon.notes },
   { href: "/funnel", label: "Customer Funnel", icon: Icon.funnel },
   { href: "/teams", label: "Contacts Per Team", icon: Icon.teams },
   { href: "/trends", label: "Trends & Lifecycle", icon: Icon.trends },
@@ -177,6 +195,51 @@ export default function Sidebar() {
   const [signingOut, setSigningOut] = useState(false);
   const [viewAs, setViewAs] = useState<string | null>(null);
   const [showViewAs, setShowViewAs] = useState(false);
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [projectsByCompany, setProjectsByCompany] = useState<Record<string, { id: string; name: string }[]>>({});
+
+  useEffect(() => {
+    fetch("/api/companies")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { companies?: { id: string; name: string }[] } | null) => {
+        if (data?.companies) setCompanies(data.companies);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Auto-expand company we're currently viewing
+  useEffect(() => {
+    const m = pathname.match(/^\/workspace\/([^/]+)/);
+    if (m) {
+      const companyId = m[1];
+      setExpanded((prev) => prev.has(companyId) ? prev : new Set(prev).add(companyId));
+    }
+  }, [pathname]);
+
+  // Fetch projects for expanded companies we haven't loaded yet
+  useEffect(() => {
+    for (const id of expanded) {
+      if (projectsByCompany[id]) continue;
+      fetch(`/api/projects?companyId=${id}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data: { projects?: { id: string; name: string }[] } | null) => {
+          if (data?.projects) {
+            setProjectsByCompany((prev) => ({ ...prev, [id]: data.projects! }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [expanded, projectsByCompany]);
+
+  function toggleExpanded(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -296,12 +359,75 @@ export default function Sidebar() {
 
         <nav style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 4 }}>
           {NAV.map((item) => (
-            <SidebarLink
-              key={item.href}
-              item={item}
-              active={isActive(item.href)}
-              onClick={() => setMobileOpen(false)}
-            />
+            <div key={item.href}>
+              <SidebarLink
+                item={item}
+                active={isActive(item.href)}
+                onClick={() => setMobileOpen(false)}
+              />
+              {item.href === "/workspace" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 2, marginLeft: 16, marginTop: 2, marginBottom: 2 }}>
+                  <SidebarLink
+                    item={{ href: "/workspace", label: "Task Dashboard", icon: Icon.dashboard }}
+                    active={pathname === "/workspace"}
+                    onClick={() => setMobileOpen(false)}
+                    subdued
+                  />
+                  {companies.map((c) => {
+                    const isOpen = expanded.has(c.id);
+                    const isActiveCompany = pathname === `/workspace/${c.id}` || pathname.startsWith(`/workspace/${c.id}/`);
+                    const projects = projectsByCompany[c.id];
+                    return (
+                      <div key={c.id}>
+                        <CompanyRow
+                          name={c.name}
+                          href={`/workspace/${c.id}`}
+                          active={isActiveCompany}
+                          expanded={isOpen}
+                          onToggle={() => toggleExpanded(c.id)}
+                          onNavigate={() => setMobileOpen(false)}
+                          icon={Icon.building}
+                          chevron={Icon.chevron}
+                        />
+                        {isOpen && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 1, marginLeft: 24, marginTop: 1, marginBottom: 2 }}>
+                            {!projects && (
+                              <div style={{ padding: "4px 10px", fontSize: 11, color: "var(--color-text-tertiary)", fontStyle: "italic" }}>
+                                Loading…
+                              </div>
+                            )}
+                            {projects && projects.length === 0 && (
+                              <div style={{ padding: "4px 10px", fontSize: 11, color: "var(--color-text-tertiary)", fontStyle: "italic" }}>
+                                No projects
+                              </div>
+                            )}
+                            {projects && projects.map((p) => (
+                              <Link
+                                key={p.id}
+                                href={`/workspace/${c.id}/${p.id}`}
+                                onClick={() => setMobileOpen(false)}
+                                style={{
+                                  display: "block", padding: "5px 10px", borderRadius: 8,
+                                  fontSize: 12, color: pathname === `/workspace/${c.id}/${p.id}` ? "var(--color-accent)" : "var(--color-text-secondary)",
+                                  background: pathname === `/workspace/${c.id}/${p.id}` ? "rgba(0,113,227,0.08)" : "transparent",
+                                  fontWeight: pathname === `/workspace/${c.id}/${p.id}` ? 600 : 400,
+                                  textDecoration: "none",
+                                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                                }}
+                                onMouseEnter={(e) => { if (pathname !== `/workspace/${c.id}/${p.id}`) e.currentTarget.style.background = "rgba(0,0,0,0.035)"; }}
+                                onMouseLeave={(e) => { if (pathname !== `/workspace/${c.id}/${p.id}`) e.currentTarget.style.background = "transparent"; }}
+                              >
+                                {p.name}
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           ))}
         </nav>
 
@@ -443,7 +569,7 @@ export default function Sidebar() {
   );
 }
 
-function SidebarLink({ item, active, onClick }: { item: NavItem; active: boolean; onClick: () => void }) {
+function SidebarLink({ item, active, onClick, subdued }: { item: NavItem; active: boolean; onClick: () => void; subdued?: boolean }) {
   return (
     <Link
       href={item.href}
@@ -452,12 +578,12 @@ function SidebarLink({ item, active, onClick }: { item: NavItem; active: boolean
         display: "flex",
         alignItems: "center",
         gap: 10,
-        padding: "9px 10px",
+        padding: subdued ? "6px 10px" : "9px 10px",
         borderRadius: 10,
-        color: active ? "var(--color-accent)" : "var(--color-text-primary)",
+        color: active ? "var(--color-accent)" : (subdued ? "var(--color-text-secondary)" : "var(--color-text-primary)"),
         background: active ? "rgba(0,113,227,0.08)" : "transparent",
-        fontWeight: active ? 600 : 500,
-        fontSize: 13,
+        fontWeight: active ? 600 : (subdued ? 400 : 500),
+        fontSize: subdued ? 12 : 13,
         textDecoration: "none",
         transition: "background 120ms var(--ease-apple)",
       }}
@@ -469,7 +595,66 @@ function SidebarLink({ item, active, onClick }: { item: NavItem; active: boolean
       }}
     >
       {item.icon}
-      <span>{item.label}</span>
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.label}</span>
     </Link>
+  );
+}
+
+function CompanyRow({
+  name, href, active, expanded, onToggle, onNavigate, icon, chevron,
+}: {
+  name: string;
+  href: string;
+  active: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  onNavigate: () => void;
+  icon: React.ReactNode;
+  chevron: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex", alignItems: "center",
+        borderRadius: 10,
+        background: active ? "rgba(0,113,227,0.08)" : "transparent",
+        transition: "background 120ms var(--ease-apple)",
+      }}
+      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "rgba(0,0,0,0.035)"; }}
+      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={expanded ? "Collapse" : "Expand"}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "center",
+          width: 22, height: 28, padding: 0, marginLeft: 2,
+          background: "transparent", border: "none", cursor: "pointer",
+          color: "var(--color-text-tertiary)",
+          transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+          transition: "transform 120ms var(--ease-apple)",
+          flexShrink: 0,
+        }}
+      >
+        {chevron}
+      </button>
+      <Link
+        href={href}
+        onClick={onNavigate}
+        style={{
+          display: "flex", alignItems: "center", gap: 8,
+          flex: 1, minWidth: 0,
+          padding: "6px 10px 6px 4px",
+          textDecoration: "none",
+          color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
+          fontWeight: active ? 600 : 400,
+          fontSize: 12,
+        }}
+      >
+        {icon}
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+      </Link>
+    </div>
   );
 }

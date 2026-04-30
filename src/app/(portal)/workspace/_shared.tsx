@@ -111,6 +111,38 @@ export function fmtDate(iso?: string | null) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+export function quarterFromDate(iso: string | null): { key: string; label: string } | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  const q = Math.floor(d.getMonth() / 3) + 1;
+  const y = d.getFullYear();
+  return { key: `${y}-Q${q}`, label: `Q${q} ${y}` };
+}
+
+export function upcomingQuarters(count: number): { key: string; label: string; startDate: string; endDate: string }[] {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const now = new Date();
+  const startQ = Math.floor(now.getMonth() / 3) + 1;
+  const startY = now.getFullYear();
+  const result: { key: string; label: string; startDate: string; endDate: string }[] = [];
+  for (let i = 0; i < count; i++) {
+    const offset = startQ - 1 + i;
+    const q = (offset % 4) + 1;
+    const y = startY + Math.floor(offset / 4);
+    const startMonth = (q - 1) * 3;
+    const endMonth = startMonth + 3;
+    const lastDay = new Date(y, endMonth, 0).getDate();
+    result.push({
+      key: `${y}-Q${q}`,
+      label: `Q${q} ${y}${i === 0 ? " (current)" : ""}`,
+      startDate: `${y}-${pad(startMonth + 1)}-01`,
+      endDate: `${y}-${pad(endMonth)}-${pad(lastDay)}`,
+    });
+  }
+  return result;
+}
+
 export function dueState(iso?: string | null): "overdue" | "today" | "soon" | "future" | null {
   if (!iso) return null;
   const today = new Date(); today.setHours(0, 0, 0, 0);

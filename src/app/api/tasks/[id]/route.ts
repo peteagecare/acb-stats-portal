@@ -43,6 +43,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     expectedOutcome?: string | null;
     status?: "todo" | "doing" | "blocked" | "done";
     completed?: boolean;
+    parentTaskId?: string | null;
     order?: number;
     setCollaborators?: string[];
     recurrence?: unknown;
@@ -78,6 +79,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     updates.expectedOutcome = body.expectedOutcome?.toString().trim() || null;
   if (body.status) updates.status = body.status;
   if (typeof body.order === "number") updates.order = body.order;
+  if (body.parentTaskId !== undefined) {
+    if (body.parentTaskId === id) {
+      return Response.json({ error: "Task cannot be its own parent" }, { status: 400 });
+    }
+    updates.parentTaskId = body.parentTaskId || null;
+  }
 
   if (typeof body.completed === "boolean" && body.completed !== task.completed) {
     updates.completed = body.completed;

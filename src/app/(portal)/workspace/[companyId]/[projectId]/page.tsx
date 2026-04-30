@@ -1,6 +1,7 @@
 "use client";
 
-import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { use, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
@@ -17,6 +18,7 @@ import {
   inputStyle,
   primaryButtonStyle,
   secondaryButtonStyle,
+  upcomingQuarters,
   useUsers,
   userMeta,
 } from "../../_shared";
@@ -72,6 +74,9 @@ interface Task {
   collaborators: string[];
 }
 
+type ProjectType = "quarterly" | "initiative" | "ongoing";
+type Department = "ppc" | "seo" | "content" | "web";
+
 interface Project {
   id: string;
   companyId: string;
@@ -82,6 +87,8 @@ interface Project {
   startDate: string | null;
   endDate: string | null;
   status: ProjectStatus;
+  type: ProjectType;
+  department: Department | null;
   accessMode: "everyone" | "restricted";
   collaborators: string[];
   accessUsers: string[];
@@ -164,6 +171,24 @@ export default function ProjectPage({
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  const childrenByParent = useMemo(() => {
+    const m = new Map<string, Task[]>();
+    if (!data) return m;
+    for (const t of data.tasks) {
+      if (!t.parentTaskId) continue;
+      const list = m.get(t.parentTaskId) ?? [];
+      list.push(t);
+      m.set(t.parentTaskId, list);
+    }
+    for (const arr of m.values()) {
+      arr.sort((a, b) => {
+        if (a.completed !== b.completed) return a.completed ? 1 : -1;
+        return a.order - b.order;
+      });
+    }
+    return m;
+  }, [data]);
+
   const tasksBySection = useMemo(() => {
     const grouped: Record<string, Task[]> = { unsectioned: [] };
     if (!data) return grouped;
@@ -189,14 +214,25 @@ export default function ProjectPage({
       if (!grouped[key]) grouped[key] = [];
       grouped[key].push(t);
     }
+    // A parent task floats to wherever its lowest-ordered child sits, so children
+    // visually appear directly underneath the parent that owns them.
+    const effectiveOrder = (t: Task) => {
+      const kids = childrenByParent.get(t.id);
+      if (!kids || kids.length === 0) return t.order;
+      let min = t.order;
+      for (const k of kids) if (k.order < min) min = k.order;
+      return min;
+    };
     for (const id of Object.keys(grouped)) {
       grouped[id].sort((a, b) => {
         if (a.completed !== b.completed) return a.completed ? 1 : -1;
-        return a.order - b.order;
+        return effectiveOrder(a) - effectiveOrder(b);
       });
     }
     return grouped;
-  }, [data, filterAssignee, showCompleted, trackerFilter]);
+  }, [data, filterAssignee, showCompleted, trackerFilter, childrenByParent]);
+
+  const allProjectTasks = useMemo(() => (data ? data.tasks : ([] as Task[])), [data]);
 
   const counts = useMemo(() => {
     if (!data) return { open: 0, done: 0 };
@@ -354,6 +390,8 @@ export default function ProjectPage({
                 onOpenTask={setOpenTaskId}
                 onMutate={mutateApi}
                 canDelete={data.sections.length > 1}
+                childrenByParent={childrenByParent}
+                allProjectTasks={allProjectTasks}
               />
             ))}
             {(tasksBySection.unsectioned ?? []).length > 0 && (
@@ -372,6 +410,8 @@ export default function ProjectPage({
                 onMutate={mutateApi}
                 canDelete={false}
                 isUnsectioned
+                childrenByParent={childrenByParent}
+                allProjectTasks={allProjectTasks}
               />
             )}
           </div>
@@ -411,6 +451,8 @@ export default function ProjectPage({
           currentEmail={me}
           onClose={closeTaskPanel}
           onMutate={mutateApi}
+          allTasks={data.tasks}
+          onOpenTask={setOpenTaskId}
         />
       )}
 
@@ -644,6 +686,7 @@ function AddSectionInline({ projectId, onCreated }: { projectId: string; onCreat
 function SectionCard({
   section, tasks, users, projectId, sections,
   collapsed, onToggleCollapse, onOpenTask, onMutate, canDelete, isUnsectioned,
+  childrenByParent, allProjectTasks,
 }: {
   section: Section;
   tasks: Task[];
@@ -656,6 +699,8 @@ function SectionCard({
   onMutate: (url: string, init: RequestInit) => Promise<unknown>;
   canDelete: boolean;
   isUnsectioned?: boolean;
+  childrenByParent: Map<string, Task[]>;
+  allProjectTasks: Task[];
 }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
@@ -794,7 +839,16 @@ function SectionCard({
           )}
 
           {tasks.map((task) => (
-            <TaskRow key={task.id} task={task} users={users} sections={sections} onOpen={() => onOpenTask(task.id)} onMutate={onMutate} />
+            <TaskRow
+              key={task.id}
+              task={task}
+              users={users}
+              sections={sections}
+              onOpenTask={onOpenTask}
+              onMutate={onMutate}
+              childrenByParent={childrenByParent}
+              allProjectTasks={allProjectTasks}
+            />
           ))}
 
           {adding ? (
@@ -831,13 +885,16 @@ function SectionCard({
 
 /* ── task row ───────────────────────────────────────────────── */
 function TaskRow({
-  task, users, onOpen, onMutate,
+  task, users, sections, onOpenTask, onMutate, childrenByParent, allProjectTasks, depth = 0,
 }: {
   task: Task;
   users: DirectoryUser[];
   sections: Section[];
-  onOpen: () => void;
+  onOpenTask: (id: string) => void;
   onMutate: (url: string, init: RequestInit) => Promise<unknown>;
+  childrenByParent: Map<string, Task[]>;
+  allProjectTasks: Task[];
+  depth?: number;
 }) {
   const owner = userMeta(task.ownerEmail, users);
   const dStat = dueState(task.endDate);
@@ -853,6 +910,13 @@ function TaskRow({
     (tracker.status === "behind" || tracker.status === "overdue" || tracker.status === "ahead");
   const trackerStyle = TRACKER_STYLE[tracker.status];
 
+  const childTasks = childrenByParent.get(task.id) ?? [];
+  const hasChildren = childTasks.length > 0;
+  const [expanded, setExpanded] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
+
   async function toggleComplete(e: React.MouseEvent) {
     e.stopPropagation();
     await onMutate(`/api/tasks/${task.id}`, {
@@ -862,9 +926,37 @@ function TaskRow({
     });
   }
 
+  async function moveUnder(parentId: string | null) {
+    setMenuOpen(false);
+    await onMutate(`/api/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ parentTaskId: parentId }),
+    });
+  }
+
+  // Valid parents = any task in the project except self + own descendants (prevents cycles)
+  const parentCandidates = useMemo(() => {
+    const excluded = new Set<string>([task.id]);
+    let added = true;
+    while (added) {
+      added = false;
+      for (const t of allProjectTasks) {
+        if (t.parentTaskId && excluded.has(t.parentTaskId) && !excluded.has(t.id)) {
+          excluded.add(t.id);
+          added = true;
+        }
+      }
+    }
+    return allProjectTasks.filter((t) => !excluded.has(t.id));
+  }, [allProjectTasks, task.id]);
+
   return (
+    <>
     <div
-      onClick={onOpen}
+      onClick={() => onOpenTask(task.id)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       draggable
       onDragStart={(e) => {
         e.stopPropagation();
@@ -874,10 +966,35 @@ function TaskRow({
         e.currentTarget.style.opacity = "0.5";
       }}
       onDragEnd={(e) => { e.currentTarget.style.opacity = "1"; }}
-      style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 18px", borderTop: "1px solid var(--color-border)", cursor: "grab", transition: "background 100ms var(--ease-apple)" }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.02)")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+      style={{
+        display: "flex", alignItems: "center", gap: 10,
+        padding: "10px 18px", paddingLeft: 18 + depth * 22,
+        borderTop: "1px solid var(--color-border)",
+        cursor: "grab", transition: "background 100ms var(--ease-apple)",
+        background: hovered ? "rgba(0,0,0,0.02)" : "transparent",
+      }}
     >
+      {hasChildren ? (
+        <button
+          onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+          aria-label={expanded ? "Collapse subtasks" : "Expand subtasks"}
+          style={{
+            width: 18, height: 18, padding: 0, marginRight: -2,
+            background: "transparent", border: "none", cursor: "pointer",
+            color: "var(--color-text-secondary)", flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+            transition: "transform 120ms var(--ease-apple)",
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+            <polyline points="9,6 15,12 9,18" />
+          </svg>
+        </button>
+      ) : (
+        <span style={{ width: 16, flexShrink: 0 }} />
+      )}
+
       <button onClick={toggleComplete} aria-label={task.completed ? "Mark incomplete" : "Mark complete"}
         style={{ width: 18, height: 18, borderRadius: "50%", border: `1.5px solid ${task.completed ? "#10B981" : "var(--color-text-tertiary)"}`, background: task.completed ? "#10B981" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, flexShrink: 0, transition: "all 120ms var(--ease-apple)" }}
       >
@@ -947,13 +1064,449 @@ function TaskRow({
       )}
 
       <Avatar user={owner} size={24} />
+
+      <div
+        style={{
+          opacity: hovered || menuOpen ? 1 : 0,
+          transition: "opacity 120ms var(--ease-apple)",
+          pointerEvents: hovered || menuOpen ? "auto" : "none",
+          flexShrink: 0,
+        }}
+      >
+        <button
+          ref={menuButtonRef}
+          onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
+          aria-label="Move under parent"
+          title="Move under parent"
+          style={{
+            width: 22, height: 22, borderRadius: 6,
+            background: menuOpen ? "rgba(0,113,227,0.1)" : "transparent",
+            border: "none", cursor: "pointer",
+            color: menuOpen ? "var(--color-accent)" : "var(--color-text-secondary)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="9,10 4,15 9,20" />
+            <path d="M20 4v7a4 4 0 01-4 4H4" />
+          </svg>
+        </button>
+        {menuOpen && (
+          <ParentPickerPopover
+            anchor={menuButtonRef.current}
+            taskHasParent={!!task.parentTaskId}
+            currentParentId={task.parentTaskId}
+            candidates={parentCandidates}
+            onClose={() => setMenuOpen(false)}
+            onPick={(parentId) => moveUnder(parentId)}
+          />
+        )}
+      </div>
+    </div>
+    {hasChildren && expanded && childTasks.map((child) => (
+      <TaskRow
+        key={child.id}
+        task={child}
+        users={users}
+        sections={sections}
+        onOpenTask={onOpenTask}
+        onMutate={onMutate}
+        childrenByParent={childrenByParent}
+        allProjectTasks={allProjectTasks}
+        depth={depth + 1}
+      />
+    ))}
+    </>
+  );
+}
+
+/* ── parent picker popover (portaled to body so it escapes overflow) ── */
+function ParentPickerPopover({
+  anchor, taskHasParent, currentParentId, candidates, onClose, onPick,
+}: {
+  anchor: HTMLElement | null;
+  taskHasParent: boolean;
+  currentParentId: string | null;
+  candidates: Task[];
+  onClose: () => void;
+  onPick: (parentId: string | null) => void;
+}) {
+  const [pos, setPos] = useState<{ top: number; left: number; openUp: boolean } | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    if (!anchor) return;
+    function update() {
+      if (!anchor) return;
+      const rect = anchor.getBoundingClientRect();
+      const POPOVER_W = 280;
+      const POPOVER_MAX_H = 320;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUp = spaceBelow < POPOVER_MAX_H + 16 && rect.top > POPOVER_MAX_H + 16;
+      const top = openUp ? rect.top - POPOVER_MAX_H - 6 : rect.bottom + 6;
+      const left = Math.min(
+        Math.max(8, rect.right - POPOVER_W),
+        window.innerWidth - POPOVER_W - 8,
+      );
+      setPos({ top, left, openUp });
+    }
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [anchor]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  if (typeof document === "undefined" || !pos) return null;
+  return createPortal(
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 1000 }} />
+      <div
+        ref={popoverRef}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: "fixed",
+          top: pos.top, left: pos.left,
+          width: 280,
+          maxHeight: 320, overflowY: "auto",
+          background: "white", borderRadius: 10,
+          border: "1px solid var(--color-border)",
+          boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
+          padding: 4, zIndex: 1001,
+        }}
+      >
+        <div style={{ padding: "6px 10px", fontSize: 10, fontWeight: 600, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          Make subtask of
+        </div>
+        {taskHasParent && (
+          <button
+            onClick={() => onPick(null)}
+            style={{
+              display: "block", width: "100%", textAlign: "left",
+              padding: "7px 10px", borderRadius: 6,
+              background: "transparent", border: "none", cursor: "pointer",
+              fontSize: 12, fontFamily: "inherit",
+              color: "var(--color-text-secondary)",
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "rgba(0,0,0,0.04)"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+          >
+            ↑ Detach (back to top level)
+          </button>
+        )}
+        {candidates.length === 0 ? (
+          <div style={{ padding: "8px 10px", fontSize: 12, color: "var(--color-text-tertiary)", fontStyle: "italic" }}>
+            No other top-level tasks.
+          </div>
+        ) : (
+          candidates.map((p) => {
+            const active = p.id === currentParentId;
+            return (
+              <button
+                key={p.id}
+                onClick={() => { if (!active) onPick(p.id); }}
+                disabled={active}
+                style={{
+                  display: "block", width: "100%", textAlign: "left",
+                  padding: "7px 10px", borderRadius: 6,
+                  background: active ? "rgba(0,113,227,0.08)" : "transparent",
+                  border: "none", cursor: active ? "default" : "pointer",
+                  fontSize: 13, fontFamily: "inherit",
+                  color: active ? "var(--color-accent)" : "var(--color-text-primary)",
+                  fontWeight: active ? 600 : 400,
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                }}
+                onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "rgba(0,0,0,0.04)"; }}
+                onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
+              >
+                {p.title}
+              </button>
+            );
+          })
+        )}
+      </div>
+    </>,
+    document.body,
+  );
+}
+
+/* ── Subtasks section (used inside the TaskPanel; recursive) ── */
+function SubtasksSection({
+  parentTask, allTasks, users, onOpenTask, onMutate,
+}: {
+  parentTask: Task;
+  allTasks: Task[];
+  users: DirectoryUser[];
+  onOpenTask: (id: string) => void;
+  onMutate: (url: string, init: RequestInit) => Promise<unknown>;
+}) {
+  const directChildren = useMemo(
+    () => allTasks
+      .filter((t) => t.parentTaskId === parentTask.id)
+      .sort((a, b) => {
+        if (a.completed !== b.completed) return a.completed ? 1 : -1;
+        return a.order - b.order;
+      }),
+    [allTasks, parentTask.id],
+  );
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => { if (adding) inputRef.current?.focus(); }, [adding]);
+
+  async function commitAdd() {
+    const v = draft.trim();
+    if (!v) { setAdding(false); setDraft(""); return; }
+    await onMutate("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        projectId: parentTask.projectId,
+        sectionId: parentTask.sectionId,
+        parentTaskId: parentTask.id,
+        title: v,
+      }),
+    });
+    setDraft("");
+    inputRef.current?.focus();
+  }
+
+  return (
+    <div style={{ marginTop: 6, marginBottom: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
+        <h3 style={{ fontSize: 13, fontWeight: 600, margin: 0, color: "var(--color-text-primary)" }}>
+          Subtasks
+        </h3>
+        <span style={{ marginLeft: 8, fontSize: 11, color: "var(--color-text-tertiary)", background: "rgba(0,0,0,0.04)", padding: "2px 7px", borderRadius: 999 }}>
+          {directChildren.length}
+        </span>
+        <button
+          onClick={() => setAdding(true)}
+          style={{
+            marginLeft: "auto",
+            padding: "3px 9px",
+            background: "rgba(0,113,227,0.1)", color: "var(--color-accent)",
+            border: "none", borderRadius: 7, cursor: "pointer",
+            fontSize: 11, fontWeight: 600, fontFamily: "inherit",
+          }}
+        >+ Add subtask</button>
+      </div>
+
+      {directChildren.length === 0 && !adding && (
+        <div style={{ padding: "8px 4px", fontSize: 12, color: "var(--color-text-tertiary)", fontStyle: "italic" }}>
+          No subtasks yet.
+        </div>
+      )}
+
+      {directChildren.map((c) => (
+        <SubtaskRow
+          key={c.id}
+          task={c}
+          allTasks={allTasks}
+          users={users}
+          onOpenTask={onOpenTask}
+          onMutate={onMutate}
+          depth={0}
+        />
+      ))}
+
+      {adding && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", background: "rgba(0,113,227,0.05)", borderRadius: 8, marginTop: 4 }}>
+          <span style={{ width: 16, height: 16, borderRadius: "50%", border: "1.5px solid var(--color-text-tertiary)", flexShrink: 0 }} />
+          <input
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => { if (!draft.trim()) { setAdding(false); setDraft(""); } }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); commitAdd(); }
+              if (e.key === "Escape") { setAdding(false); setDraft(""); }
+            }}
+            placeholder="Subtask title…"
+            style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: 13, fontFamily: "inherit" }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SubtaskRow({
+  task, allTasks, users, onOpenTask, onMutate, depth,
+}: {
+  task: Task;
+  allTasks: Task[];
+  users: DirectoryUser[];
+  onOpenTask: (id: string) => void;
+  onMutate: (url: string, init: RequestInit) => Promise<unknown>;
+  depth: number;
+}) {
+  const owner = userMeta(task.ownerEmail, users);
+  const grandchildren = allTasks.filter((t) => t.parentTaskId === task.id);
+  const hasChildren = grandchildren.length > 0;
+  const [expanded, setExpanded] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => { if (adding) inputRef.current?.focus(); }, [adding]);
+
+  async function toggleComplete(e: React.MouseEvent) {
+    e.stopPropagation();
+    await onMutate(`/api/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ completed: !task.completed }),
+    });
+  }
+
+  async function commitAdd() {
+    const v = draft.trim();
+    if (!v) { setAdding(false); setDraft(""); return; }
+    await onMutate("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        projectId: task.projectId,
+        sectionId: task.sectionId,
+        parentTaskId: task.id,
+        title: v,
+      }),
+    });
+    setDraft("");
+    inputRef.current?.focus();
+  }
+
+  return (
+    <div style={{ marginLeft: depth * 18 }}>
+      <div
+        onClick={() => onOpenTask(task.id)}
+        style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "7px 8px", borderRadius: 8,
+          cursor: "pointer", transition: "background 100ms var(--ease-apple)",
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.background = "rgba(0,0,0,0.03)"}
+        onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+      >
+        {hasChildren ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+            aria-label={expanded ? "Collapse" : "Expand"}
+            style={{
+              width: 16, height: 16, padding: 0,
+              background: "transparent", border: "none", cursor: "pointer",
+              color: "var(--color-text-secondary)", flexShrink: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+              transition: "transform 120ms var(--ease-apple)",
+            }}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+              <polyline points="9,6 15,12 9,18" />
+            </svg>
+          </button>
+        ) : (
+          <span style={{ width: 14, flexShrink: 0 }} />
+        )}
+        <button
+          onClick={toggleComplete}
+          aria-label={task.completed ? "Mark incomplete" : "Mark complete"}
+          style={{
+            width: 16, height: 16, borderRadius: "50%",
+            border: `1.5px solid ${task.completed ? "#10B981" : "var(--color-text-tertiary)"}`,
+            background: task.completed ? "#10B981" : "transparent",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", padding: 0, flexShrink: 0,
+          }}
+        >
+          {task.completed && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="5,12 10,17 19,7" /></svg>}
+        </button>
+        <span style={{
+          flex: 1, fontSize: 13, minWidth: 0,
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+          color: task.completed ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
+          textDecoration: task.completed ? "line-through" : "none",
+        }}>
+          {task.title}
+        </span>
+        <button
+          onClick={(e) => { e.stopPropagation(); setAdding(true); }}
+          aria-label="Add subtask"
+          title="Add subtask"
+          style={{
+            width: 22, height: 22, borderRadius: 6,
+            background: "transparent", color: "var(--color-text-tertiary)",
+            border: "none", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.background = "rgba(0,0,0,0.06)"}
+          onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+        {owner && <Avatar user={owner} size={20} />}
+      </div>
+
+      {hasChildren && expanded && (
+        <div style={{ marginLeft: 14, paddingLeft: 4, borderLeft: "1px solid var(--color-border)" }}>
+          {grandchildren.map((g) => (
+            <SubtaskRow
+              key={g.id}
+              task={g}
+              allTasks={allTasks}
+              users={users}
+              onOpenTask={onOpenTask}
+              onMutate={onMutate}
+              depth={depth + 1}
+            />
+          ))}
+        </div>
+      )}
+
+      {adding && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "6px 8px", marginLeft: 30,
+          background: "rgba(0,113,227,0.05)", borderRadius: 8, marginTop: 2,
+        }}>
+          <span style={{ width: 14, height: 14, borderRadius: "50%", border: "1.5px solid var(--color-text-tertiary)", flexShrink: 0 }} />
+          <input
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => { if (!draft.trim()) { setAdding(false); setDraft(""); } }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); commitAdd(); }
+              if (e.key === "Escape") { setAdding(false); setDraft(""); }
+            }}
+            placeholder="Subtask title…"
+            style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: 12, fontFamily: "inherit" }}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
 /* ── task panel ─────────────────────────────────────────────── */
 function TaskPanel({
-  task, sections, users, currentEmail, onClose, onMutate,
+  task, sections, users, currentEmail, onClose, onMutate, allTasks, onOpenTask,
 }: {
   task: Task;
   sections: Section[];
@@ -961,6 +1514,8 @@ function TaskPanel({
   currentEmail: string | null;
   onClose: () => void;
   onMutate: (url: string, init: RequestInit) => Promise<unknown>;
+  allTasks: Task[];
+  onOpenTask: (id: string) => void;
 }) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
@@ -1102,6 +1657,14 @@ function TaskPanel({
           />
         </div>
 
+        <SubtasksSection
+          parentTask={task}
+          allTasks={allTasks}
+          users={users}
+          onOpenTask={onOpenTask}
+          onMutate={onMutate}
+        />
+
         <Field label="Description">
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} onBlur={commitDesc} rows={4} placeholder="Add a description, links, or context…" style={{ ...inputStyle, resize: "vertical" }} />
         </Field>
@@ -1152,6 +1715,8 @@ function EditProjectModal({
   const [startDate, setStartDate] = useState(project.startDate ?? "");
   const [endDate, setEndDate] = useState(project.endDate ?? "");
   const [status, setStatus] = useState<ProjectStatus>(project.status);
+  const [type, setType] = useState<ProjectType>(project.type);
+  const [department, setDepartment] = useState<Department | "">(project.department ?? "");
   const [collaborators, setCollaborators] = useState<string[]>(project.collaborators);
   const [accessMode, setAccessMode] = useState<"everyone" | "restricted">(project.accessMode);
   const [accessUsers, setAccessUsers] = useState<string[]>(project.accessUsers);
@@ -1170,8 +1735,10 @@ function EditProjectModal({
           description: description.trim() || null,
           ownerEmail: ownerEmail || null,
           startDate: startDate || null,
-          endDate: endDate || null,
+          endDate: type === "ongoing" ? null : (endDate || null),
           status,
+          type,
+          department: department || null,
           accessMode,
           setCollaborators: collaborators,
           setAccessUsers: accessMode === "restricted" ? accessUsers : [],
@@ -1203,7 +1770,39 @@ function EditProjectModal({
         <Field label="Description">
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} style={{ ...inputStyle, resize: "vertical" }} />
         </Field>
+        <Field label="Type">
+          <div style={{ display: "flex", gap: 8 }}>
+            {([
+              { v: "quarterly" as const, label: "Quarterly" },
+              { v: "initiative" as const, label: "Big project" },
+              { v: "ongoing" as const, label: "Ongoing" },
+            ]).map((t) => (
+              <button
+                key={t.v}
+                type="button"
+                onClick={() => setType(t.v)}
+                style={{
+                  ...secondaryButtonStyle,
+                  borderColor: type === t.v ? "var(--color-accent)" : "var(--color-border)",
+                  color: type === t.v ? "#0071E3" : "var(--color-text-primary)",
+                  background: type === t.v ? "rgba(0,113,227,0.08)" : "transparent",
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Department">
+            <select value={department} onChange={(e) => setDepartment(e.target.value as Department | "")} style={inputStyle}>
+              <option value="">None</option>
+              <option value="ppc">PPC</option>
+              <option value="seo">SEO</option>
+              <option value="content">Content</option>
+              <option value="web">Web</option>
+            </select>
+          </Field>
           <Field label="Primary owner">
             <select value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} style={inputStyle}>
               <option value="">Unassigned</option>
@@ -1222,10 +1821,33 @@ function EditProjectModal({
           <Field label="Start date">
             <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={inputStyle} />
           </Field>
-          <Field label="End date">
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={inputStyle} />
-          </Field>
+          {type !== "ongoing" && (
+            <Field label="End date">
+              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={inputStyle} />
+            </Field>
+          )}
         </div>
+        {type === "quarterly" && (
+          <Field label="Quarter quick-pick">
+            <select
+              value=""
+              onChange={(e) => {
+                const q = upcomingQuarters(5).find((x) => x.key === e.target.value);
+                if (q) {
+                  setStartDate(q.startDate);
+                  setEndDate(q.endDate);
+                }
+                e.currentTarget.value = "";
+              }}
+              style={inputStyle}
+            >
+              <option value="">Pick a quarter to fill dates…</option>
+              {upcomingQuarters(5).map((q) => (
+                <option key={q.key} value={q.key}>{q.label}</option>
+              ))}
+            </select>
+          </Field>
+        )}
         <Field label="Collaborators">
           <MultiUserPicker selected={collaborators} users={users} onChange={setCollaborators} exclude={ownerEmail || null} />
         </Field>

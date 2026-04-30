@@ -68,6 +68,8 @@ export async function POST(request: NextRequest) {
     ownerEmail?: string | null;
     startDate?: string | null;
     endDate?: string | null;
+    type?: "quarterly" | "initiative" | "ongoing";
+    department?: "ppc" | "seo" | "content" | "web" | null;
     collaborators?: string[];
   };
   let body: Body;
@@ -94,6 +96,8 @@ export async function POST(request: NextRequest) {
       ownerEmail: body.ownerEmail || null,
       startDate: body.startDate || null,
       endDate: body.endDate || null,
+      type: body.type ?? "quarterly",
+      department: body.department ?? null,
       createdByEmail: user.email,
     })
     .returning();
