@@ -458,10 +458,33 @@ function GroupedProjects({ projects, users }: { projects: ProjectRow[]; users: D
     g.items.push(p);
     quarterGroups.set(q.key, g);
   }
-  const sortedQuarters = [...quarterGroups.values()].sort((a, b) => b.sortKey.localeCompare(a.sortKey));
+  // Sort: current quarter first, then future ascending, then past quarters
+  // (most recent past first)
+  const now = new Date();
+  const currentKey = `${now.getFullYear()}-Q${Math.floor(now.getMonth() / 3) + 1}`;
+  const sortedQuarters = [...quarterGroups.values()].sort((a, b) => {
+    const aFuture = a.sortKey >= currentKey;
+    const bFuture = b.sortKey >= currentKey;
+    if (aFuture !== bFuture) return aFuture ? -1 : 1;
+    return aFuture
+      ? a.sortKey.localeCompare(b.sortKey)
+      : b.sortKey.localeCompare(a.sortKey);
+  });
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+      {ongoing.length > 0 && (
+        <Section title="Ongoing">
+          <ProjectList projects={ongoing} users={users} />
+        </Section>
+      )}
+
+      {initiatives.length > 0 && (
+        <Section title="Big projects">
+          <ProjectList projects={initiatives} users={users} />
+        </Section>
+      )}
+
       {(quarterly.length > 0) && (
         <Section title="Quarterly">
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -478,18 +501,6 @@ function GroupedProjects({ projects, users }: { projects: ProjectRow[]; users: D
               </div>
             )}
           </div>
-        </Section>
-      )}
-
-      {initiatives.length > 0 && (
-        <Section title="Big projects">
-          <ProjectList projects={initiatives} users={users} />
-        </Section>
-      )}
-
-      {ongoing.length > 0 && (
-        <Section title="Ongoing">
-          <ProjectList projects={ongoing} users={users} />
         </Section>
       )}
     </div>
