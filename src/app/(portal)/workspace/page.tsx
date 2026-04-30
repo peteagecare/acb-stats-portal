@@ -1,30 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Avatar,
   DirectoryUser,
-  Modal,
   colorForEmail,
   fmtDate,
-  inputStyle,
-  primaryButtonStyle,
-  secondaryButtonStyle,
   useUsers,
   userMeta,
 } from "./_shared";
-
-interface CompanyRow {
-  id: string;
-  name: string;
-  description: string | null;
-  accessMode: "everyone" | "restricted";
-  createdAt: string;
-  createdByEmail: string;
-  projectCount: number;
-}
+import { WorkspaceNav } from "./_nav";
 
 interface DashboardTask {
   id: string;
@@ -46,60 +32,21 @@ interface DashboardTask {
   collaborators: string[];
 }
 
-type Tab = "dashboard" | "companies";
-
 export default function WorkspacePage() {
-  const [tab, setTab] = useState<Tab>("dashboard");
-  const [creating, setCreating] = useState(false);
   const users = useUsers();
 
   return (
     <div style={{ padding: "32px 36px 64px", maxWidth: 1100, margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "flex-end", marginBottom: 18, gap: 16 }}>
-        <div>
-          <h1 style={{ fontSize: 28, fontWeight: 600, margin: 0 }}>Workspace</h1>
-          <p style={{ fontSize: 14, color: "var(--color-text-secondary)", margin: "4px 0 0" }}>
-            Your tasks, your team, your projects.
-          </p>
-        </div>
-        {tab === "companies" && (
-          <button onClick={() => setCreating(true)} style={{ ...primaryButtonStyle, marginLeft: "auto" }}>
-            + New company
-          </button>
-        )}
+      <div style={{ marginBottom: 18 }}>
+        <h1 style={{ fontSize: 28, fontWeight: 600, margin: 0 }}>Workspace</h1>
+        <p style={{ fontSize: 14, color: "var(--color-text-secondary)", margin: "4px 0 0" }}>
+          Your tasks, your team, your projects.
+        </p>
       </div>
 
-      <div style={{ display: "flex", gap: 4, marginBottom: 22, borderBottom: "1px solid var(--color-border)" }}>
-        {(["dashboard", "companies"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            style={{
-              padding: "10px 14px",
-              background: "transparent",
-              border: "none",
-              borderBottom: tab === t ? "2px solid var(--color-accent)" : "2px solid transparent",
-              color: tab === t ? "var(--color-text-primary)" : "var(--color-text-secondary)",
-              fontWeight: tab === t ? 600 : 500,
-              fontSize: 13,
-              cursor: "pointer",
-              fontFamily: "inherit",
-              marginBottom: -1,
-            }}
-          >
-            {t === "dashboard" ? "My Dashboard" : "Companies"}
-          </button>
-        ))}
-      </div>
+      <WorkspaceNav current="dashboard" />
 
-      {tab === "dashboard" && <DashboardView users={users} />}
-      {tab === "companies" && (
-        <CompaniesView
-          creating={creating}
-          onCloseCreate={() => setCreating(false)}
-          onOpenCreate={() => setCreating(true)}
-        />
-      )}
+      <DashboardView users={users} />
     </div>
   );
 }
@@ -162,8 +109,8 @@ function DashboardView({ users }: { users: DirectoryUser[] }) {
 type TaskTab = "this_week" | "upcoming" | "overdue" | "completed";
 
 function startOfWeek(d: Date) {
-  const day = d.getDay(); // 0=Sun
-  const diff = day === 0 ? -6 : 1 - day; // Monday-based
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
   const m = new Date(d);
   m.setDate(d.getDate() + diff);
   m.setHours(0, 0, 0, 0);
@@ -254,16 +201,11 @@ function TasksWidget({
             key={t.key}
             onClick={() => setTab(t.key)}
             style={{
-              padding: "6px 0",
-              background: "transparent",
-              border: "none",
+              padding: "6px 0", background: "transparent", border: "none",
               borderBottom: tab === t.key ? "2px solid var(--color-text-primary)" : "2px solid transparent",
               color: tab === t.key ? "var(--color-text-primary)" : "var(--color-text-secondary)",
-              fontWeight: tab === t.key ? 600 : 500,
-              fontSize: 12,
-              cursor: "pointer",
-              fontFamily: "inherit",
-              marginBottom: -1,
+              fontWeight: tab === t.key ? 600 : 500, fontSize: 12,
+              cursor: "pointer", fontFamily: "inherit", marginBottom: -1,
             }}
           >
             {t.label} {t.count > 0 && <span style={{ color: tab === t.key ? "var(--color-text-secondary)" : "var(--color-text-tertiary)" }}>({t.count})</span>}
@@ -313,7 +255,6 @@ function DashboardTaskRow({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ completed: !task.completed }),
     });
-    // optimistic UX: route refresh
     router.refresh();
     window.location.reload();
   }
@@ -393,15 +334,15 @@ function DashboardTaskRow({
 type PeopleWindow = "this_week" | "this_month";
 
 function PeopleWidget({ tasks, users }: { tasks: DashboardTask[]; users: DirectoryUser[] }) {
-  const [window, setWindow] = useState<PeopleWindow>("this_week");
+  const [windowKey, setWindowKey] = useState<PeopleWindow>("this_week");
 
   const stats = useMemo(() => {
     const today = todayStart();
     const winStart =
-      window === "this_week" ? startOfWeek(today) :
+      windowKey === "this_week" ? startOfWeek(today) :
       new Date(today.getFullYear(), today.getMonth(), 1);
     const winEnd =
-      window === "this_week" ? endOfWeek(today) :
+      windowKey === "this_week" ? endOfWeek(today) :
       new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
 
     const winStartMs = winStart.getTime();
@@ -430,14 +371,13 @@ function PeopleWidget({ tasks, users }: { tasks: DashboardTask[]; users: Directo
       }
     }
     const rows = Array.from(map.values());
-    // Sort: most active first
     rows.sort((a, b) => {
       const ta = a.overdue + a.upcoming + a.completed;
       const tb = b.overdue + b.upcoming + b.completed;
       return tb - ta;
     });
     return rows;
-  }, [tasks, window]);
+  }, [tasks, windowKey]);
 
   return (
     <section style={{ background: "var(--bg-card)", borderRadius: 18, padding: "18px 20px", boxShadow: "var(--shadow-card)" }}>
@@ -448,13 +388,13 @@ function PeopleWidget({ tasks, users }: { tasks: DashboardTask[]; users: Directo
         {(["this_week", "this_month"] as const).map((w) => (
           <button
             key={w}
-            onClick={() => setWindow(w)}
+            onClick={() => setWindowKey(w)}
             style={{
               padding: "6px 0",
               background: "transparent", border: "none",
-              borderBottom: window === w ? "2px solid var(--color-text-primary)" : "2px solid transparent",
-              color: window === w ? "var(--color-text-primary)" : "var(--color-text-secondary)",
-              fontWeight: window === w ? 600 : 500,
+              borderBottom: windowKey === w ? "2px solid var(--color-text-primary)" : "2px solid transparent",
+              color: windowKey === w ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+              fontWeight: windowKey === w ? 600 : 500,
               fontSize: 12, cursor: "pointer", fontFamily: "inherit", marginBottom: -1,
             }}
           >
@@ -503,184 +443,5 @@ function Stat({ label, value, color, bg, muted }: { label: string; value: number
     }}>
       {value} {label}
     </span>
-  );
-}
-
-/* ───────────────────────────────────────────────── */
-/* Companies view                                    */
-/* ───────────────────────────────────────────────── */
-
-function CompaniesView({
-  creating, onOpenCreate, onCloseCreate,
-}: {
-  creating: boolean;
-  onOpenCreate: () => void;
-  onCloseCreate: () => void;
-}) {
-  const [companies, setCompanies] = useState<CompanyRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    try {
-      const res = await fetch("/api/companies", { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as { companies: CompanyRow[] };
-      setCompanies(json.companies);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load");
-    }
-  }, []);
-
-  useEffect(() => { refresh(); }, [refresh]);
-
-  return (
-    <>
-      {error && (
-        <div style={{ padding: 16, background: "#FEE2E2", color: "#991B1B", borderRadius: 12, fontSize: 13 }}>
-          {error}
-        </div>
-      )}
-
-      {companies === null && !error && (
-        <div style={{ padding: 40, textAlign: "center", color: "var(--color-text-secondary)" }}>Loading…</div>
-      )}
-
-      {companies && companies.length === 0 && (
-        <div style={{
-          padding: "48px 24px", textAlign: "center",
-          background: "var(--bg-card)", borderRadius: 18, boxShadow: "var(--shadow-card)",
-        }}>
-          <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>No companies yet</div>
-          <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: "0 0 16px" }}>
-            Create your first company to start adding projects and tasks.
-          </p>
-          <button onClick={onOpenCreate} style={primaryButtonStyle}>+ New company</button>
-        </div>
-      )}
-
-      {companies && companies.length > 0 && (
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-          gap: 14,
-        }}>
-          {companies.map((c) => (
-            <Link
-              key={c.id}
-              href={`/workspace/${c.id}`}
-              style={{
-                display: "block", padding: "18px 18px 16px",
-                background: "var(--bg-card)", borderRadius: 18,
-                boxShadow: "var(--shadow-card)",
-                textDecoration: "none", color: "inherit",
-                transition: "box-shadow 150ms var(--ease-apple), transform 120ms var(--ease-apple)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.boxShadow = "var(--shadow-card-hover)";
-                e.currentTarget.style.transform = "translateY(-1px)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.boxShadow = "var(--shadow-card)";
-                e.currentTarget.style.transform = "translateY(0)";
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                <div style={{
-                  width: 34, height: 34, borderRadius: 10,
-                  background: "linear-gradient(135deg,#0071E3,#9333EA)",
-                  color: "white", display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 14, fontWeight: 700,
-                }}>
-                  {c.name.slice(0, 2).toUpperCase()}
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {c.name}
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
-                    {c.projectCount} project{c.projectCount === 1 ? "" : "s"}
-                    {c.accessMode === "restricted" && " · restricted"}
-                  </div>
-                </div>
-              </div>
-              {c.description && (
-                <p style={{
-                  fontSize: 12, color: "var(--color-text-secondary)", margin: 0,
-                  display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
-                  overflow: "hidden",
-                }}>
-                  {c.description}
-                </p>
-              )}
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {creating && (
-        <NewCompanyModal onClose={onCloseCreate} onCreated={() => { onCloseCreate(); refresh(); }} />
-      )}
-    </>
-  );
-}
-
-function NewCompanyModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  async function submit() {
-    if (!name.trim()) return;
-    setSaving(true); setErr(null);
-    try {
-      const res = await fetch("/api/companies", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), description: description.trim() }),
-      });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error((j as { error?: string }).error || `HTTP ${res.status}`);
-      }
-      onCreated();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed to create");
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Modal title="New company" onClose={onClose}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <label style={{ display: "block", fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 4 }}>Name</label>
-        <input
-          autoFocus
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-          placeholder="e.g. Age Care Bathrooms"
-          style={inputStyle}
-          disabled={saving}
-        />
-        <label style={{ display: "block", fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 4 }}>Description (optional)</label>
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="What does this company do?"
-          rows={3}
-          style={{ ...inputStyle, resize: "vertical" }}
-          disabled={saving}
-        />
-        {err && <div style={{ fontSize: 12, color: "#B91C1C" }}>{err}</div>}
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
-          <button onClick={onClose} style={secondaryButtonStyle} disabled={saving}>Cancel</button>
-          <button onClick={submit} style={primaryButtonStyle} disabled={saving || !name.trim()}>
-            {saving ? "Creating…" : "Create company"}
-          </button>
-        </div>
-      </div>
-    </Modal>
   );
 }

@@ -33,6 +33,8 @@ import {
   computeTracker,
   rollupTaskStatuses,
 } from "@/lib/tracker";
+import { RecurrenceRule, formatRecurrence } from "@/lib/recurrence";
+import { RecurrencePicker } from "../../_recurrence-picker";
 
 type ProjectStatus = "planning" | "active" | "on_hold" | "done" | "archived";
 type TaskStatus = "todo" | "doing" | "blocked" | "done";
@@ -62,6 +64,8 @@ interface Task {
   completedAt: string | null;
   goal: string | null;
   expectedOutcome: string | null;
+  recurrence: RecurrenceRule | null;
+  recurrenceSourceId: string | null;
   order: number;
   createdAt: string;
   createdByEmail: string;
@@ -900,6 +904,25 @@ function TaskRow({
         </span>
       )}
 
+      {task.recurrence && (
+        <span
+          title={formatRecurrence(task.recurrence)}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 4,
+            fontSize: 11, fontWeight: 500,
+            color: "#7C3AED", background: "rgba(124, 58, 237, 0.1)",
+            padding: "3px 8px", borderRadius: 999, flexShrink: 0,
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+            <polyline points="23 4 23 10 17 10" />
+            <polyline points="1 20 1 14 7 14" />
+            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+          </svg>
+          Repeats
+        </span>
+      )}
+
       {task.priority && (
         <span style={{ fontSize: 11, fontWeight: 600, color: PRIORITY_META[task.priority].color, background: PRIORITY_META[task.priority].bg, padding: "3px 8px", borderRadius: 999, flexShrink: 0 }}>
           {PRIORITY_META[task.priority].label}
@@ -1071,6 +1094,12 @@ function TaskPanel({
             <option value="">Unsectioned</option>
             {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
+
+          <span style={{ color: "var(--color-text-secondary)", alignSelf: "start", paddingTop: 8 }}>Repeats</span>
+          <RecurrencePicker
+            value={task.recurrence}
+            onChange={(next) => patch({ recurrence: next })}
+          />
         </div>
 
         <Field label="Description">

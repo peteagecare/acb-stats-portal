@@ -3,6 +3,7 @@ import { eq, desc } from "drizzle-orm";
 import { db } from "@/db/client";
 import { tasks, taskCollaborators } from "@/db/schema";
 import { requireUser, canSeeProject } from "@/lib/workspace-auth";
+import { validateRecurrenceRule } from "@/lib/recurrence";
 
 export async function POST(request: NextRequest) {
   const user = requireUser(request);
@@ -21,6 +22,7 @@ export async function POST(request: NextRequest) {
     estimatedHours?: number | null;
     goal?: string;
     expectedOutcome?: string;
+    recurrence?: unknown;
     collaborators?: string[];
   };
   let body: Body;
@@ -47,6 +49,8 @@ export async function POST(request: NextRequest) {
     .limit(1);
   const nextOrder = (last?.order ?? -1) + 1;
 
+  const recurrence = body.recurrence !== undefined ? validateRecurrenceRule(body.recurrence) : null;
+
   const [created] = await db
     .insert(tasks)
     .values({
@@ -65,6 +69,7 @@ export async function POST(request: NextRequest) {
           : null,
       goal: body.goal?.trim() || null,
       expectedOutcome: body.expectedOutcome?.trim() || null,
+      recurrence,
       order: nextOrder,
       createdByEmail: user.email,
     })

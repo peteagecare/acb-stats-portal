@@ -3,6 +3,13 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { tasks, taskCollaborators } from "@/db/schema";
 import { requireUser, canSeeProject } from "@/lib/workspace-auth";
+import {
+  RecurrenceRule,
+  formatISODate,
+  nextOccurrence,
+  parseISODate,
+  validateRecurrenceRule,
+} from "@/lib/recurrence";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -38,6 +45,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     completed?: boolean;
     order?: number;
     setCollaborators?: string[];
+    recurrence?: unknown;
   };
   let body: Body;
   try {
@@ -77,8 +85,77 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (body.completed && !body.status) updates.status = "done";
   }
 
+  if (body.recurrence !== undefined) {
+    updates.recurrence = body.recurrence === null ? null : validateRecurrenceRule(body.recurrence);
+  }
+
   if (Object.keys(updates).length) {
     await db.update(tasks).set(updates).where(eq(tasks.id, id));
+  }
+
+  // If task was just completed AND has a recurrence rule, spawn the next instance.
+  if (
+    typeof body.completed === "boolean" &&
+    body.completed === true &&
+    !task.completed &&
+    task.recurrence
+  ) {
+    const rule = task.recurrence as unknown as RecurrenceRule;
+    const completedDate = updates.completedAt instanceof Date ? updates.completedAt : new Date();
+    const anchor =
+      rule.mode === "completion"
+        ? completedDate
+        : (task.endDate ? parseISODate(task.endDate) : null) ?? completedDate;
+
+    const next = nextOccurrence(rule, anchor);
+    if (next) {
+      // Preserve the original gap between start and end dates if both were set
+      const startMs = task.startDate ? parseISODate(task.startDate)?.getTime() : null;
+      const endMs = task.endDate ? parseISODate(task.endDate)?.getTime() : null;
+      const gapMs = startMs != null && endMs != null ? endMs - startMs : null;
+      const newEnd = formatISODate(next);
+      const newStart =
+        gapMs != null
+          ? formatISODate(new Date(next.getTime() - gapMs))
+          : null;
+
+      const [spawned] = await db
+        .insert(tasks)
+        .values({
+          projectId: task.projectId,
+          sectionId: task.sectionId,
+          parentTaskId: null,
+          title: task.title,
+          description: task.description,
+          ownerEmail: task.ownerEmail,
+          startDate: newStart,
+          endDate: newEnd,
+          priority: task.priority,
+          estimatedHours: task.estimatedHours,
+          status: "todo",
+          completed: false,
+          completedAt: null,
+          goal: task.goal,
+          expectedOutcome: task.expectedOutcome,
+          recurrence: task.recurrence,
+          recurrenceSourceId: task.recurrenceSourceId ?? task.id,
+          order: task.order,
+          createdByEmail: task.createdByEmail,
+        })
+        .returning();
+
+      // Carry collaborators over to the spawned instance
+      const carryCollabs = await db
+        .select()
+        .from(taskCollaborators)
+        .where(eq(taskCollaborators.taskId, id));
+      if (carryCollabs.length) {
+        await db
+          .insert(taskCollaborators)
+          .values(carryCollabs.map((c) => ({ taskId: spawned.id, userEmail: c.userEmail })))
+          .onConflictDoNothing();
+      }
+    }
   }
 
   if (Array.isArray(body.setCollaborators)) {
