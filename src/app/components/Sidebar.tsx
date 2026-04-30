@@ -123,6 +123,13 @@ const Icon = {
       <path d="M21 12a9 9 0 10-4 7.5" />
     </svg>
   ),
+  workspace: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <path d="M3 7l9-4 9 4-9 4z" />
+      <path d="M3 12l9 4 9-4" />
+      <path d="M3 17l9 4 9-4" />
+    </svg>
+  ),
   logout: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
       <path d="M15 17l5-5-5-5" />
@@ -134,6 +141,7 @@ const Icon = {
 
 const NAV: NavItem[] = [
   { href: "/", label: "Dashboard", icon: Icon.dashboard },
+  { href: "/workspace", label: "Workspace", icon: Icon.workspace },
   { href: "/funnel", label: "Customer Funnel", icon: Icon.funnel },
   { href: "/teams", label: "Contacts Per Team", icon: Icon.teams },
   { href: "/trends", label: "Trends & Lifecycle", icon: Icon.trends },

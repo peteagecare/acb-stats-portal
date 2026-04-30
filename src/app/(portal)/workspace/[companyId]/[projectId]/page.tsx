@@ -1,0 +1,1250 @@
+"use client";
+
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import {
+  Avatar,
+  AvatarStack,
+  DUE_STYLE,
+  DirectoryUser,
+  Modal,
+  MultiUserPicker,
+  PRIORITY_META,
+  PROJECT_STATUS_META,
+  dueState,
+  fmtDate,
+  inputStyle,
+  primaryButtonStyle,
+  secondaryButtonStyle,
+  useUsers,
+  userMeta,
+} from "../../_shared";
+import {
+  Attachments,
+  Comments,
+  ProjectLinks,
+  ProjectNotes,
+} from "../../_collaboration";
+import {
+  TRACKER_STYLE,
+  TrackerStatus,
+  computeProjectTracker,
+  computeTracker,
+  rollupTaskStatuses,
+} from "@/lib/tracker";
+
+type ProjectStatus = "planning" | "active" | "on_hold" | "done" | "archived";
+type TaskStatus = "todo" | "doing" | "blocked" | "done";
+type Priority = "low" | "medium" | "high";
+
+interface Section {
+  id: string;
+  projectId: string;
+  name: string;
+  order: number;
+}
+
+interface Task {
+  id: string;
+  projectId: string;
+  sectionId: string | null;
+  parentTaskId: string | null;
+  title: string;
+  description: string | null;
+  ownerEmail: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  priority: Priority | null;
+  estimatedHours: number | null;
+  status: TaskStatus;
+  completed: boolean;
+  completedAt: string | null;
+  goal: string | null;
+  expectedOutcome: string | null;
+  order: number;
+  createdAt: string;
+  createdByEmail: string;
+  collaborators: string[];
+}
+
+interface Project {
+  id: string;
+  companyId: string;
+  name: string;
+  description: string | null;
+  notes: string | null;
+  ownerEmail: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  status: ProjectStatus;
+  accessMode: "everyone" | "restricted";
+  collaborators: string[];
+  accessUsers: string[];
+}
+
+type Tab = "tasks" | "notes" | "files" | "links" | "comments";
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: "tasks", label: "Tasks" },
+  { key: "notes", label: "Notes" },
+  { key: "files", label: "Files" },
+  { key: "links", label: "Links" },
+  { key: "comments", label: "Comments" },
+];
+
+interface ProjectPayload {
+  project: Project;
+  sections: Section[];
+  tasks: Task[];
+}
+
+export default function ProjectPage({
+  params,
+}: {
+  params: Promise<{ companyId: string; projectId: string }>;
+}) {
+  const { companyId, projectId } = use(params);
+  const users = useUsers();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [data, setData] = useState<ProjectPayload | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+
+  // Open task from ?task= param when data arrives
+  useEffect(() => {
+    const t = searchParams.get("task");
+    if (t && data?.tasks.some((x) => x.id === t)) {
+      setOpenTaskId(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.tasks.length, searchParams]);
+
+  function closeTaskPanel() {
+    setOpenTaskId(null);
+    // strip ?task= from URL so refresh doesn't re-open
+    if (searchParams.get("task")) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("task");
+      router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname, { scroll: false });
+    }
+  }
+  const [filterAssignee, setFilterAssignee] = useState<string | "all">("all");
+  const [trackerFilter, setTrackerFilter] = useState<TrackerStatus | "all">("all");
+  const [showCompleted, setShowCompleted] = useState(true);
+  const [editingProject, setEditingProject] = useState(false);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [tab, setTab] = useState<Tab>("tasks");
+  const [me, setMe] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { email?: string } | null) => setMe(d?.email ?? null))
+      .catch(() => {});
+  }, []);
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}`, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = (await res.json()) as ProjectPayload;
+      setData(json);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load");
+    }
+  }, [projectId]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const tasksBySection = useMemo(() => {
+    const grouped: Record<string, Task[]> = { unsectioned: [] };
+    if (!data) return grouped;
+    for (const s of data.sections) grouped[s.id] = [];
+    for (const t of data.tasks) {
+      if (t.parentTaskId) continue; // skip subtasks at top level
+      if (filterAssignee !== "all") {
+        const matches = t.ownerEmail === filterAssignee || t.collaborators.includes(filterAssignee);
+        const unassignedFilter = filterAssignee === "" && !t.ownerEmail && t.collaborators.length === 0;
+        if (!matches && !unassignedFilter) continue;
+      }
+      if (!showCompleted && t.completed) continue;
+      if (trackerFilter !== "all") {
+        const tr = computeTracker({
+          startDate: t.startDate,
+          endDate: t.endDate,
+          completed: t.completed,
+          status: t.status,
+        });
+        if (tr.status !== trackerFilter) continue;
+      }
+      const key = t.sectionId ?? "unsectioned";
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(t);
+    }
+    for (const id of Object.keys(grouped)) {
+      grouped[id].sort((a, b) => {
+        if (a.completed !== b.completed) return a.completed ? 1 : -1;
+        return a.order - b.order;
+      });
+    }
+    return grouped;
+  }, [data, filterAssignee, showCompleted, trackerFilter]);
+
+  const counts = useMemo(() => {
+    if (!data) return { open: 0, done: 0 };
+    let open = 0; let done = 0;
+    for (const t of data.tasks) {
+      if (t.parentTaskId) continue;
+      if (t.completed) done++; else open++;
+    }
+    return { open, done };
+  }, [data]);
+
+  const rollup = useMemo(() => {
+    if (!data) return null;
+    const taskResults = data.tasks
+      .filter((t) => !t.parentTaskId)
+      .map((t) => computeTracker({
+        startDate: t.startDate,
+        endDate: t.endDate,
+        completed: t.completed,
+        status: t.status,
+      }));
+    return rollupTaskStatuses(taskResults);
+  }, [data]);
+
+  const projectTracker = useMemo(() => {
+    if (!data) return null;
+    return computeProjectTracker(data.tasks, data.project.startDate, data.project.endDate);
+  }, [data]);
+
+  async function mutateApi(url: string, init: RequestInit) {
+    const res = await fetch(url, init);
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      throw new Error((j as { error?: string }).error || `HTTP ${res.status}`);
+    }
+    await refresh();
+    return res.json();
+  }
+
+  const openTask = data?.tasks.find((t) => t.id === openTaskId) ?? null;
+
+  return (
+    <div style={{ padding: "32px 36px 64px", maxWidth: 1100, margin: "0 auto" }}>
+      <nav style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 12 }}>
+        <Link href="/workspace" style={{ color: "inherit", textDecoration: "none" }}>Workspace</Link>
+        {" / "}
+        <Link href={`/workspace/${companyId}`} style={{ color: "inherit", textDecoration: "none" }}>Company</Link>
+        {" / "}
+        {data ? data.project.name : "…"}
+      </nav>
+
+      {error && (
+        <div style={{ padding: 16, background: "#FEE2E2", color: "#991B1B", borderRadius: 12, fontSize: 13 }}>
+          {error}
+        </div>
+      )}
+
+      {data && (
+        <ProjectHeader
+          project={data.project}
+          counts={counts}
+          rollup={rollup}
+          projectTracker={projectTracker}
+          users={users}
+          onEdit={() => setEditingProject(true)}
+        />
+      )}
+
+      {data && (
+        <div style={{ display: "flex", gap: 4, marginTop: 20, marginBottom: 18, borderBottom: "1px solid var(--color-border)" }}>
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              style={{
+                padding: "10px 14px",
+                background: "transparent",
+                border: "none",
+                borderBottom: tab === t.key ? "2px solid var(--color-accent)" : "2px solid transparent",
+                color: tab === t.key ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+                fontWeight: tab === t.key ? 600 : 500,
+                fontSize: 13,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                marginBottom: -1,
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {data && tab === "tasks" && (
+        <>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+            <FilterChip label="Everyone" active={filterAssignee === "all"} onClick={() => setFilterAssignee("all")} />
+            {users.map((u) => (
+              <FilterChip key={u.email} label={u.label} color={u.color} active={filterAssignee === u.email} onClick={() => setFilterAssignee(u.email)} />
+            ))}
+            <FilterChip label="Unassigned" active={filterAssignee === ""} onClick={() => setFilterAssignee("")} />
+            <div style={{ width: 1, height: 22, background: "var(--color-border)", margin: "auto 4px" }} />
+            <button
+              onClick={() => setShowCompleted((v) => !v)}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "6px 12px", borderRadius: 999,
+                background: showCompleted ? "rgba(0,113,227,0.08)" : "transparent",
+                border: "1px solid var(--color-border)",
+                color: showCompleted ? "#0071E3" : "var(--color-text-secondary)",
+                fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><polyline points="4,12 9,17 20,6" /></svg>
+              {showCompleted ? "Hide completed" : "Show completed"}
+            </button>
+            <div style={{ marginLeft: "auto" }}>
+              <AddSectionInline projectId={projectId} onCreated={refresh} />
+            </div>
+          </div>
+
+          {rollup && rollup.total > 0 && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 18 }}>
+              <TrackerChip label="All" active={trackerFilter === "all"} count={rollup.total} onClick={() => setTrackerFilter("all")} />
+              {(["overdue", "behind", "on_track", "ahead", "upcoming", "unscheduled"] as const).map((s) => {
+                const count = rollup[s];
+                if (count === 0) return null;
+                return (
+                  <TrackerChip
+                    key={s}
+                    label={s === "on_track" ? "On track" : s.charAt(0).toUpperCase() + s.slice(1).replace("_", " ")}
+                    active={trackerFilter === s}
+                    count={count}
+                    statusKey={s}
+                    onClick={() => setTrackerFilter(s)}
+                  />
+                );
+              })}
+            </div>
+          )}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {data.sections.map((section) => (
+              <SectionCard
+                key={section.id}
+                section={section}
+                tasks={tasksBySection[section.id] ?? []}
+                users={users}
+                projectId={projectId}
+                sections={data.sections}
+                collapsed={!!collapsed[section.id]}
+                onToggleCollapse={() =>
+                  setCollapsed((c) => ({ ...c, [section.id]: !c[section.id] }))
+                }
+                onOpenTask={setOpenTaskId}
+                onMutate={mutateApi}
+                canDelete={data.sections.length > 1}
+              />
+            ))}
+            {(tasksBySection.unsectioned ?? []).length > 0 && (
+              <SectionCard
+                key="unsectioned"
+                section={{ id: "unsectioned", projectId, name: "Unsectioned", order: 999 }}
+                tasks={tasksBySection.unsectioned}
+                users={users}
+                projectId={projectId}
+                sections={data.sections}
+                collapsed={!!collapsed.unsectioned}
+                onToggleCollapse={() =>
+                  setCollapsed((c) => ({ ...c, unsectioned: !c.unsectioned }))
+                }
+                onOpenTask={setOpenTaskId}
+                onMutate={mutateApi}
+                canDelete={false}
+                isUnsectioned
+              />
+            )}
+          </div>
+        </>
+      )}
+
+      {data && tab === "notes" && (
+        <div style={{ background: "var(--bg-card)", padding: 20, borderRadius: 18, boxShadow: "var(--shadow-card)" }}>
+          <ProjectNotes projectId={projectId} initialNotes={data.project.notes} key={data.project.id} />
+        </div>
+      )}
+
+      {data && tab === "files" && (
+        <div style={{ background: "var(--bg-card)", padding: 20, borderRadius: 18, boxShadow: "var(--shadow-card)" }}>
+          <Attachments parentType="project" parentId={projectId} users={users} />
+        </div>
+      )}
+
+      {data && tab === "links" && (
+        <div style={{ background: "var(--bg-card)", padding: 20, borderRadius: 18, boxShadow: "var(--shadow-card)" }}>
+          <ProjectLinks projectId={projectId} />
+        </div>
+      )}
+
+      {data && tab === "comments" && (
+        <div style={{ background: "var(--bg-card)", padding: 20, borderRadius: 18, boxShadow: "var(--shadow-card)" }}>
+          <Comments parentType="project" parentId={projectId} users={users} currentEmail={me} />
+        </div>
+      )}
+
+      {openTask && data && (
+        <TaskPanel
+          key={openTask.id}
+          task={openTask}
+          sections={data.sections}
+          users={users}
+          currentEmail={me}
+          onClose={closeTaskPanel}
+          onMutate={mutateApi}
+        />
+      )}
+
+      {editingProject && data && (
+        <EditProjectModal
+          project={data.project}
+          users={users}
+          onClose={() => setEditingProject(false)}
+          onSaved={() => { setEditingProject(false); refresh(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── project header ─────────────────────────────────────────── */
+function ProjectHeader({
+  project, counts, rollup, projectTracker, users, onEdit,
+}: {
+  project: Project;
+  counts: { open: number; done: number };
+  rollup: ReturnType<typeof rollupTaskStatuses> | null;
+  projectTracker: ReturnType<typeof computeProjectTracker> | null;
+  users: DirectoryUser[];
+  onEdit: () => void;
+}) {
+  const owner = userMeta(project.ownerEmail, users);
+  const status = PROJECT_STATUS_META[project.status];
+  const trackerStyle = projectTracker ? TRACKER_STYLE[projectTracker.status] : null;
+  return (
+    <div style={{
+      background: "var(--bg-card)", borderRadius: 18, padding: "20px 22px",
+      boxShadow: "var(--shadow-card)",
+    }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+            <h1 style={{ fontSize: 22, fontWeight: 600, margin: 0 }}>{project.name}</h1>
+            <span style={{
+              fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999,
+              color: status.color, background: status.bg,
+            }}>{status.label}</span>
+            {projectTracker && trackerStyle && projectTracker.status !== "unscheduled" && (
+              <span
+                title={`Project actual ${Math.round(projectTracker.actual * 100)}% vs expected ${Math.round(projectTracker.expected * 100)}%`}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 5,
+                  fontSize: 11, fontWeight: 600,
+                  padding: "2px 8px", borderRadius: 999,
+                  color: trackerStyle.color, background: trackerStyle.bg,
+                }}
+              >
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: trackerStyle.dot }} />
+                {projectTracker.label}
+              </span>
+            )}
+            <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+              {counts.open} open · {counts.done} done
+            </span>
+          </div>
+          {project.description && (
+            <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: "4px 0 12px" }}>
+              {project.description}
+            </p>
+          )}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 18, alignItems: "center", fontSize: 12, color: "var(--color-text-secondary)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span>Owner</span>
+              <Avatar user={owner} size={22} />
+              <span style={{ color: "var(--color-text-primary)" }}>{owner?.label ?? "Unassigned"}</span>
+            </div>
+            {project.collaborators.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span>Collaborators</span>
+                <AvatarStack emails={project.collaborators} users={users} size={22} max={5} />
+              </div>
+            )}
+            {(project.startDate || project.endDate) && (
+              <div>
+                <span>Dates</span>{" "}
+                <span style={{ color: "var(--color-text-primary)" }}>
+                  {fmtDate(project.startDate) ?? "—"} → {fmtDate(project.endDate) ?? "—"}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+        <button onClick={onEdit} style={secondaryButtonStyle}>Edit project</button>
+      </div>
+
+      {rollup && rollup.total > 0 && (
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--color-border)" }}>
+          <RollupBar rollup={rollup} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RollupBar({ rollup }: { rollup: ReturnType<typeof rollupTaskStatuses> }) {
+  const all: { key: TrackerStatus; count: number; label: string }[] = [
+    { key: "overdue", count: rollup.overdue, label: "Overdue" },
+    { key: "behind", count: rollup.behind, label: "Behind" },
+    { key: "on_track", count: rollup.on_track, label: "On track" },
+    { key: "ahead", count: rollup.ahead, label: "Ahead" },
+    { key: "upcoming", count: rollup.upcoming, label: "Upcoming" },
+    { key: "done", count: rollup.done, label: "Done" },
+    { key: "unscheduled", count: rollup.unscheduled, label: "No schedule" },
+  ];
+  const segments = all.filter((s) => s.count > 0);
+
+  return (
+    <div>
+      <div style={{ display: "flex", height: 6, borderRadius: 99, overflow: "hidden", background: "rgba(0,0,0,0.04)", marginBottom: 8 }}>
+        {segments.map((s) => (
+          <div
+            key={s.key}
+            title={`${s.label}: ${s.count}`}
+            style={{
+              flex: s.count,
+              background: TRACKER_STYLE[s.key].dot,
+            }}
+          />
+        ))}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, fontSize: 11, color: "var(--color-text-secondary)" }}>
+        {segments.map((s) => (
+          <span key={s.key} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: TRACKER_STYLE[s.key].dot }} />
+            {s.count} {s.label.toLowerCase()}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── tracker filter chip ────────────────────────────────────── */
+function TrackerChip({
+  label, active, count, statusKey, onClick,
+}: {
+  label: string;
+  active: boolean;
+  count: number;
+  statusKey?: TrackerStatus;
+  onClick: () => void;
+}) {
+  const dot = statusKey ? TRACKER_STYLE[statusKey].dot : null;
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 6,
+        padding: "5px 10px", borderRadius: 999,
+        background: active ? (statusKey ? TRACKER_STYLE[statusKey].bg : "rgba(0,113,227,0.1)") : "transparent",
+        border: `1px solid ${active ? (statusKey ? TRACKER_STYLE[statusKey].dot : "#0071E3") : "var(--color-border)"}`,
+        color: active ? (statusKey ? TRACKER_STYLE[statusKey].color : "#0071E3") : "var(--color-text-secondary)",
+        fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
+      }}
+    >
+      {dot && <span style={{ width: 7, height: 7, borderRadius: "50%", background: dot }} />}
+      {label}
+      <span style={{ fontWeight: 600, opacity: 0.7 }}>{count}</span>
+    </button>
+  );
+}
+
+/* ── filter chip ────────────────────────────────────────────── */
+function FilterChip({ label, active, onClick, color }: { label: string; active: boolean; onClick: () => void; color?: string; }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 6,
+        padding: "6px 12px", borderRadius: 999,
+        background: active ? (color ? `${color}1A` : "rgba(0,113,227,0.1)") : "transparent",
+        border: `1px solid ${active ? (color ?? "#0071E3") : "var(--color-border)"}`,
+        color: active ? (color ?? "#0071E3") : "var(--color-text-secondary)",
+        fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
+      }}
+    >
+      {color && <span style={{ width: 8, height: 8, borderRadius: "50%", background: color }} />}
+      {label}
+    </button>
+  );
+}
+
+/* ── add section inline ─────────────────────────────────────── */
+function AddSectionInline({ projectId, onCreated }: { projectId: string; onCreated: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState("");
+  const ref = useRef<HTMLInputElement | null>(null);
+  useEffect(() => { if (editing) ref.current?.focus(); }, [editing]);
+
+  if (!editing) {
+    return <button onClick={() => setEditing(true)} style={primaryButtonStyle}>+ Add section</button>;
+  }
+
+  async function commit() {
+    const v = name.trim();
+    setEditing(false); setName("");
+    if (!v) return;
+    await fetch("/api/sections", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId, name: v }),
+    });
+    onCreated();
+  }
+
+  return (
+    <input
+      ref={ref}
+      value={name}
+      onChange={(e) => setName(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Escape") { setName(""); setEditing(false); }
+      }}
+      placeholder="Section name"
+      style={{
+        padding: "6px 12px", borderRadius: 999, border: "1px solid var(--color-accent)",
+        outline: "none", fontSize: 12, fontFamily: "inherit", minWidth: 180,
+      }}
+    />
+  );
+}
+
+/* ── section card ───────────────────────────────────────────── */
+function SectionCard({
+  section, tasks, users, projectId, sections,
+  collapsed, onToggleCollapse, onOpenTask, onMutate, canDelete, isUnsectioned,
+}: {
+  section: Section;
+  tasks: Task[];
+  users: DirectoryUser[];
+  projectId: string;
+  sections: Section[];
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+  onOpenTask: (id: string) => void;
+  onMutate: (url: string, init: RequestInit) => Promise<unknown>;
+  canDelete: boolean;
+  isUnsectioned?: boolean;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [dropActive, setDropActive] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  function onDragOver(e: React.DragEvent) {
+    if (!e.dataTransfer.types.includes("application/x-task-id")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (!dropActive) setDropActive(true);
+  }
+  function onDragLeave(e: React.DragEvent) {
+    // Only clear when actually leaving the section, not entering a child
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setDropActive(false);
+  }
+  async function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDropActive(false);
+    const taskId = e.dataTransfer.getData("application/x-task-id");
+    const fromSectionId = e.dataTransfer.getData("application/x-from-section");
+    if (!taskId) return;
+    const targetSectionId = isUnsectioned ? null : section.id;
+    if ((fromSectionId || null) === (targetSectionId || null)) return;
+    await onMutate(`/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sectionId: targetSectionId }),
+    });
+  }
+
+  useEffect(() => { if (adding) inputRef.current?.focus(); }, [adding]);
+
+  function startRename() { setEditName(section.name); setRenaming(true); }
+
+  async function commitAdd() {
+    const title = draft.trim();
+    if (!title) { setAdding(false); setDraft(""); return; }
+    await onMutate("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        projectId,
+        sectionId: isUnsectioned ? null : section.id,
+        title,
+      }),
+    });
+    setDraft("");
+    inputRef.current?.focus();
+  }
+
+  async function commitRename() {
+    const next = editName.trim();
+    setRenaming(false);
+    if (!next || next === section.name) return;
+    await onMutate(`/api/sections/${section.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: next }),
+    });
+  }
+
+  async function handleDelete() {
+    if (!canDelete) return;
+    if (!confirm(`Delete "${section.name}" and ${tasks.length} task${tasks.length === 1 ? "" : "s"}?`)) return;
+    await onMutate(`/api/sections/${section.id}`, { method: "DELETE" });
+  }
+
+  return (
+    <section
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      style={{
+        background: "var(--bg-card)",
+        borderRadius: 18,
+        boxShadow: dropActive ? "0 0 0 2px var(--color-accent)" : "var(--shadow-card)",
+        overflow: "hidden",
+        transition: "box-shadow 120ms var(--ease-apple)",
+      }}
+    >
+      <header style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", borderBottom: collapsed ? "none" : "1px solid var(--color-border)" }}>
+        <button onClick={onToggleCollapse} style={{ background: "transparent", border: "none", cursor: "pointer", padding: 2, color: "var(--color-text-secondary)", display: "flex" }} aria-label={collapsed ? "Expand" : "Collapse"}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)", transition: "transform 150ms var(--ease-apple)" }}>
+            <polyline points="6,9 12,15 18,9" />
+          </svg>
+        </button>
+
+        {renaming && !isUnsectioned ? (
+          <input
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              if (e.key === "Escape") setRenaming(false);
+            }}
+            autoFocus
+            style={{ fontSize: 16, fontWeight: 600, border: "1px solid var(--color-border)", borderRadius: 8, padding: "4px 8px", fontFamily: "inherit", minWidth: 200 }}
+          />
+        ) : (
+          <button
+            onClick={isUnsectioned ? undefined : startRename}
+            style={{ background: "transparent", border: "none", padding: 0, cursor: isUnsectioned ? "default" : "text", fontSize: 16, fontWeight: 600, color: "var(--color-text-primary)", fontFamily: "inherit" }}
+            title={isUnsectioned ? undefined : "Click to rename"}
+          >
+            {section.name}
+          </button>
+        )}
+        <span style={{ fontSize: 12, color: "var(--color-text-tertiary)", background: "rgba(0,0,0,0.04)", padding: "2px 8px", borderRadius: 999 }}>
+          {tasks.filter((t) => !t.completed).length}
+        </span>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+          {!collapsed && (
+            <button onClick={() => setAdding(true)} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 8, background: "transparent", border: "1px solid var(--color-border)", color: "var(--color-text-secondary)", fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
+              + Add task
+            </button>
+          )}
+          {canDelete && !isUnsectioned && (
+            <button onClick={handleDelete} style={{ background: "transparent", border: "none", color: "var(--color-text-tertiary)", cursor: "pointer", padding: 4, display: "flex" }} aria-label="Delete section">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M3 6h18" /><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </header>
+
+      {!collapsed && (
+        <div>
+          {tasks.length === 0 && !adding && (
+            <div style={{ padding: "20px 18px", fontSize: 13, color: "var(--color-text-tertiary)", fontStyle: "italic" }}>No tasks yet.</div>
+          )}
+
+          {tasks.map((task) => (
+            <TaskRow key={task.id} task={task} users={users} sections={sections} onOpen={() => onOpenTask(task.id)} onMutate={onMutate} />
+          ))}
+
+          {adding ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 18px", borderTop: "1px solid var(--color-border)", background: "rgba(0,113,227,0.03)" }}>
+              <span style={{ width: 18, height: 18, borderRadius: "50%", border: "1.5px solid var(--color-text-tertiary)", flexShrink: 0 }} />
+              <input
+                ref={inputRef}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Type a task name and press Enter"
+                onBlur={() => { if (!draft.trim()) { setAdding(false); setDraft(""); } }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); commitAdd(); }
+                  if (e.key === "Escape") { setAdding(false); setDraft(""); }
+                }}
+                style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: 14, fontFamily: "inherit", color: "var(--color-text-primary)" }}
+              />
+            </div>
+          ) : (
+            <button
+              onClick={() => setAdding(true)}
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 18px", width: "100%", background: "transparent", border: "none", borderTop: tasks.length ? "1px solid var(--color-border)" : "none", cursor: "pointer", fontFamily: "inherit", color: "var(--color-text-tertiary)", fontSize: 13, textAlign: "left" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.02)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            >
+              + Add task
+            </button>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ── task row ───────────────────────────────────────────────── */
+function TaskRow({
+  task, users, onOpen, onMutate,
+}: {
+  task: Task;
+  users: DirectoryUser[];
+  sections: Section[];
+  onOpen: () => void;
+  onMutate: (url: string, init: RequestInit) => Promise<unknown>;
+}) {
+  const owner = userMeta(task.ownerEmail, users);
+  const dStat = dueState(task.endDate);
+  const dueLabel = fmtDate(task.endDate);
+  const tracker = computeTracker({
+    startDate: task.startDate,
+    endDate: task.endDate,
+    completed: task.completed,
+    status: task.status,
+  });
+  const showTrackerBadge =
+    !task.completed &&
+    (tracker.status === "behind" || tracker.status === "overdue" || tracker.status === "ahead");
+  const trackerStyle = TRACKER_STYLE[tracker.status];
+
+  async function toggleComplete(e: React.MouseEvent) {
+    e.stopPropagation();
+    await onMutate(`/api/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ completed: !task.completed }),
+    });
+  }
+
+  return (
+    <div
+      onClick={onOpen}
+      draggable
+      onDragStart={(e) => {
+        e.stopPropagation();
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("application/x-task-id", task.id);
+        e.dataTransfer.setData("application/x-from-section", task.sectionId ?? "");
+        e.currentTarget.style.opacity = "0.5";
+      }}
+      onDragEnd={(e) => { e.currentTarget.style.opacity = "1"; }}
+      style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 18px", borderTop: "1px solid var(--color-border)", cursor: "grab", transition: "background 100ms var(--ease-apple)" }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.02)")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+    >
+      <button onClick={toggleComplete} aria-label={task.completed ? "Mark incomplete" : "Mark complete"}
+        style={{ width: 18, height: 18, borderRadius: "50%", border: `1.5px solid ${task.completed ? "#10B981" : "var(--color-text-tertiary)"}`, background: task.completed ? "#10B981" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0, flexShrink: 0, transition: "all 120ms var(--ease-apple)" }}
+      >
+        {task.completed && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="5,12 10,17 19,7" /></svg>}
+      </button>
+
+      <span style={{ flex: 1, fontSize: 14, color: task.completed ? "var(--color-text-tertiary)" : "var(--color-text-primary)", textDecoration: task.completed ? "line-through" : "none", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {task.title}
+      </span>
+
+      {showTrackerBadge && (
+        <span
+          title={`${Math.round(tracker.actual * 100)}% done vs ${Math.round(tracker.expected * 100)}% expected`}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 4,
+            fontSize: 11, fontWeight: 600,
+            padding: "3px 8px", borderRadius: 999,
+            color: trackerStyle.color, background: trackerStyle.bg,
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: trackerStyle.dot }} />
+          {tracker.label}
+        </span>
+      )}
+
+      {task.priority && (
+        <span style={{ fontSize: 11, fontWeight: 600, color: PRIORITY_META[task.priority].color, background: PRIORITY_META[task.priority].bg, padding: "3px 8px", borderRadius: 999, flexShrink: 0 }}>
+          {PRIORITY_META[task.priority].label}
+        </span>
+      )}
+
+      {typeof task.estimatedHours === "number" && (
+        <span style={{ fontSize: 11, color: "var(--color-text-secondary)", flexShrink: 0 }}>
+          {task.estimatedHours}h
+        </span>
+      )}
+
+      {dueLabel && dStat && (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 500, color: DUE_STYLE[dStat].color, background: DUE_STYLE[dStat].bg, padding: "3px 8px", borderRadius: 999, flexShrink: 0 }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /></svg>
+          {dueLabel}
+        </span>
+      )}
+
+      {task.collaborators.length > 0 && (
+        <AvatarStack emails={task.collaborators} users={users} size={20} max={3} />
+      )}
+
+      <Avatar user={owner} size={24} />
+    </div>
+  );
+}
+
+/* ── task panel ─────────────────────────────────────────────── */
+function TaskPanel({
+  task, sections, users, currentEmail, onClose, onMutate,
+}: {
+  task: Task;
+  sections: Section[];
+  users: DirectoryUser[];
+  currentEmail: string | null;
+  onClose: () => void;
+  onMutate: (url: string, init: RequestInit) => Promise<unknown>;
+}) {
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description ?? "");
+  const [goal, setGoal] = useState(task.goal ?? "");
+  const [outcome, setOutcome] = useState(task.expectedOutcome ?? "");
+
+  const tracker = computeTracker({
+    startDate: task.startDate,
+    endDate: task.endDate,
+    completed: task.completed,
+    status: task.status,
+  });
+  const trackerStyle = TRACKER_STYLE[tracker.status];
+
+  const baseUrl = `/api/tasks/${task.id}`;
+
+  async function patch(p: object) {
+    await onMutate(baseUrl, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(p),
+    });
+  }
+
+  async function commitTitle() {
+    const v = title.trim();
+    if (!v || v === task.title) { setTitle(task.title); return; }
+    await patch({ title: v });
+  }
+  async function commitDesc() {
+    if ((description ?? "") === (task.description ?? "")) return;
+    await patch({ description });
+  }
+  async function commitGoal() {
+    if (goal === (task.goal ?? "")) return;
+    await patch({ goal });
+  }
+  async function commitOutcome() {
+    if (outcome === (task.expectedOutcome ?? "")) return;
+    await patch({ expectedOutcome: outcome });
+  }
+  async function handleDelete() {
+    if (!confirm(`Delete "${task.title}"?`)) return;
+    await onMutate(baseUrl, { method: "DELETE" });
+    onClose();
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.2)", zIndex: 60, display: "flex", justifyContent: "flex-end" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 520, height: "100%", background: "white", boxShadow: "var(--shadow-modal)", padding: "20px 24px 24px", overflowY: "auto", animation: "slideIn 220ms var(--ease-apple)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
+          <button
+            onClick={() => patch({ completed: !task.completed })}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 999, background: task.completed ? "#D1FAE5" : "transparent", border: `1px solid ${task.completed ? "#10B981" : "var(--color-border)"}`, color: task.completed ? "#065F46" : "var(--color-text-secondary)", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><polyline points="4,12 9,17 20,6" /></svg>
+            {task.completed ? "Completed" : "Mark complete"}
+          </button>
+          {tracker.status !== "unscheduled" && (
+            <span
+              title={`Actual ${Math.round(tracker.actual * 100)}% · Expected ${Math.round(tracker.expected * 100)}%`}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 5,
+                fontSize: 11, fontWeight: 600,
+                padding: "5px 10px", borderRadius: 999,
+                color: trackerStyle.color, background: trackerStyle.bg,
+              }}
+            >
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: trackerStyle.dot }} />
+              {tracker.label}
+            </span>
+          )}
+          <button onClick={onClose} style={{ marginLeft: "auto", background: "transparent", border: "none", cursor: "pointer", padding: 6, color: "var(--color-text-secondary)", display: "flex" }} aria-label="Close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={commitTitle}
+          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+          style={{ width: "100%", fontSize: 22, fontWeight: 600, border: "none", outline: "none", padding: "4px 0 12px", color: "var(--color-text-primary)", fontFamily: "inherit", background: "transparent" }}
+        />
+
+        <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", rowGap: 12, columnGap: 12, alignItems: "center", marginTop: 8, marginBottom: 22, fontSize: 13 }}>
+          <span style={{ color: "var(--color-text-secondary)" }}>Owner</span>
+          <select value={task.ownerEmail ?? ""} onChange={(e) => patch({ ownerEmail: e.target.value || null })} style={inputStyle}>
+            <option value="">Unassigned</option>
+            {users.map((u) => <option key={u.email} value={u.email}>{u.label}</option>)}
+          </select>
+
+          <span style={{ color: "var(--color-text-secondary)", alignSelf: "start", paddingTop: 8 }}>Collaborators</span>
+          <MultiUserPicker selected={task.collaborators} users={users} onChange={(next) => patch({ setCollaborators: next })} exclude={task.ownerEmail} />
+
+          <span style={{ color: "var(--color-text-secondary)" }}>Start date</span>
+          <input type="date" value={task.startDate ?? ""} onChange={(e) => patch({ startDate: e.target.value || null })} style={inputStyle} />
+
+          <span style={{ color: "var(--color-text-secondary)" }}>End date</span>
+          <input type="date" value={task.endDate ?? ""} onChange={(e) => patch({ endDate: e.target.value || null })} style={inputStyle} />
+
+          <span style={{ color: "var(--color-text-secondary)" }}>Priority</span>
+          <select value={task.priority ?? ""} onChange={(e) => patch({ priority: (e.target.value || null) as Priority | null })} style={inputStyle}>
+            <option value="">None</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+
+          <span style={{ color: "var(--color-text-secondary)" }}>Est. hours</span>
+          <input
+            type="number"
+            min={0}
+            step={0.25}
+            value={task.estimatedHours ?? ""}
+            onChange={(e) => patch({ estimatedHours: e.target.value ? Number(e.target.value) : null })}
+            style={inputStyle}
+            placeholder="—"
+          />
+
+          <span style={{ color: "var(--color-text-secondary)" }}>Status</span>
+          <select value={task.status} onChange={(e) => patch({ status: e.target.value as TaskStatus })} style={inputStyle}>
+            <option value="todo">To do</option>
+            <option value="doing">Doing</option>
+            <option value="blocked">Blocked</option>
+            <option value="done">Done</option>
+          </select>
+
+          <span style={{ color: "var(--color-text-secondary)" }}>Section</span>
+          <select value={task.sectionId ?? ""} onChange={(e) => patch({ sectionId: e.target.value || null })} style={inputStyle}>
+            <option value="">Unsectioned</option>
+            {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+
+        <Field label="Description">
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} onBlur={commitDesc} rows={4} placeholder="Add a description, links, or context…" style={{ ...inputStyle, resize: "vertical" }} />
+        </Field>
+        <div style={{ height: 12 }} />
+        <Field label="Goal (optional)">
+          <textarea value={goal} onChange={(e) => setGoal(e.target.value)} onBlur={commitGoal} rows={2} placeholder="What does success look like?" style={{ ...inputStyle, resize: "vertical" }} />
+        </Field>
+        <div style={{ height: 12 }} />
+        <Field label="Expected outcome (optional)">
+          <textarea value={outcome} onChange={(e) => setOutcome(e.target.value)} onBlur={commitOutcome} rows={2} placeholder="Concrete result of completing this task" style={{ ...inputStyle, resize: "vertical" }} />
+        </Field>
+
+        <div style={{ marginTop: 22, paddingTop: 16, borderTop: "1px solid var(--color-border)" }}>
+          <h3 style={{ fontSize: 13, fontWeight: 600, margin: "0 0 10px", color: "var(--color-text-primary)" }}>Files</h3>
+          <Attachments parentType="task" parentId={task.id} users={users} />
+        </div>
+
+        <div style={{ marginTop: 22, paddingTop: 16, borderTop: "1px solid var(--color-border)" }}>
+          <h3 style={{ fontSize: 13, fontWeight: 600, margin: "0 0 10px", color: "var(--color-text-primary)" }}>Comments</h3>
+          <Comments parentType="task" parentId={task.id} users={users} currentEmail={currentEmail} />
+        </div>
+
+        <div style={{ marginTop: 22, paddingTop: 16, borderTop: "1px solid var(--color-border)", fontSize: 11, color: "var(--color-text-tertiary)" }}>
+          Created {new Date(task.createdAt).toLocaleString()} by {task.createdByEmail}
+          {task.completedAt && <> · Completed {new Date(task.completedAt).toLocaleString()}</>}
+        </div>
+
+        <button onClick={handleDelete} style={{ marginTop: 18, padding: "8px 14px", borderRadius: 10, background: "transparent", border: "1px solid #FCA5A5", color: "#B91C1C", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
+          Delete task
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── edit project modal ─────────────────────────────────────── */
+function EditProjectModal({
+  project, users, onClose, onSaved,
+}: {
+  project: Project;
+  users: DirectoryUser[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(project.name);
+  const [description, setDescription] = useState(project.description ?? "");
+  const [ownerEmail, setOwnerEmail] = useState(project.ownerEmail ?? "");
+  const [startDate, setStartDate] = useState(project.startDate ?? "");
+  const [endDate, setEndDate] = useState(project.endDate ?? "");
+  const [status, setStatus] = useState<ProjectStatus>(project.status);
+  const [collaborators, setCollaborators] = useState<string[]>(project.collaborators);
+  const [accessMode, setAccessMode] = useState<"everyone" | "restricted">(project.accessMode);
+  const [accessUsers, setAccessUsers] = useState<string[]>(project.accessUsers);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit() {
+    if (!name.trim()) return;
+    setSaving(true); setErr(null);
+    try {
+      const res = await fetch(`/api/projects/${project.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim() || null,
+          ownerEmail: ownerEmail || null,
+          startDate: startDate || null,
+          endDate: endDate || null,
+          status,
+          accessMode,
+          setCollaborators: collaborators,
+          setAccessUsers: accessMode === "restricted" ? accessUsers : [],
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error((j as { error?: string }).error || `HTTP ${res.status}`);
+      }
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to save");
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm(`Delete project "${project.name}" and all its tasks?`)) return;
+    const res = await fetch(`/api/projects/${project.id}`, { method: "DELETE" });
+    if (res.ok) window.location.href = `/workspace/${project.companyId}`;
+  }
+
+  return (
+    <Modal title="Edit project" onClose={onClose} width={560}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <Field label="Name">
+          <input value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} disabled={saving} />
+        </Field>
+        <Field label="Description">
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} style={{ ...inputStyle, resize: "vertical" }} />
+        </Field>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Primary owner">
+            <select value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} style={inputStyle}>
+              <option value="">Unassigned</option>
+              {users.map((u) => <option key={u.email} value={u.email}>{u.label}</option>)}
+            </select>
+          </Field>
+          <Field label="Status">
+            <select value={status} onChange={(e) => setStatus(e.target.value as ProjectStatus)} style={inputStyle}>
+              <option value="planning">Planning</option>
+              <option value="active">Active</option>
+              <option value="on_hold">On hold</option>
+              <option value="done">Done</option>
+              <option value="archived">Archived</option>
+            </select>
+          </Field>
+          <Field label="Start date">
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={inputStyle} />
+          </Field>
+          <Field label="End date">
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={inputStyle} />
+          </Field>
+        </div>
+        <Field label="Collaborators">
+          <MultiUserPicker selected={collaborators} users={users} onChange={setCollaborators} exclude={ownerEmail || null} />
+        </Field>
+        <Field label="Access">
+          <div style={{ display: "flex", gap: 8 }}>
+            {(["everyone", "restricted"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setAccessMode(m)}
+                style={{
+                  ...secondaryButtonStyle,
+                  borderColor: accessMode === m ? "var(--color-accent)" : "var(--color-border)",
+                  color: accessMode === m ? "#0071E3" : "var(--color-text-primary)",
+                  background: accessMode === m ? "rgba(0,113,227,0.08)" : "transparent",
+                }}
+              >
+                {m === "everyone" ? "Everyone in company" : "Restricted"}
+              </button>
+            ))}
+          </div>
+        </Field>
+        {accessMode === "restricted" && (
+          <Field label="Who can see this project">
+            <MultiUserPicker selected={accessUsers} users={users} onChange={setAccessUsers} />
+          </Field>
+        )}
+        {err && <div style={{ fontSize: 12, color: "#B91C1C" }}>{err}</div>}
+        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <button onClick={handleDelete} style={{ ...secondaryButtonStyle, borderColor: "#FCA5A5", color: "#B91C1C" }}>Delete project</button>
+          <div style={{ flex: 1 }} />
+          <button onClick={onClose} style={secondaryButtonStyle} disabled={saving}>Cancel</button>
+          <button onClick={submit} style={primaryButtonStyle} disabled={saving || !name.trim()}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label style={{ display: "block", fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 6, fontWeight: 500 }}>
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
