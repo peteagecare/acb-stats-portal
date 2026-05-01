@@ -774,11 +774,27 @@ function endDateMs(iso?: string | null) {
   return new Date(y, m - 1, d).getTime();
 }
 
+type ViewMode = "list" | "kanban" | "calendar";
+const VIEW_KEY = "workspace-tasks-view";
+
 function TasksTabs({ data, users }: { data: { me: string; tasks: DashboardTask[] }; users: DirectoryUser[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const view = searchParams.get("view") === "team" ? "team" : "mine";
   const [filterAssignee, setFilterAssignee] = useState<string>("");
+  const [mode, setMode] = useState<ViewMode>("list");
+
+  // Hydrate persisted view mode after mount
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = localStorage.getItem(VIEW_KEY);
+    if (stored === "kanban" || stored === "calendar" || stored === "list") setMode(stored);
+  }, []);
+
+  function changeMode(next: ViewMode) {
+    setMode(next);
+    if (typeof window !== "undefined") localStorage.setItem(VIEW_KEY, next);
+  }
 
   function setView(v: "mine" | "team") {
     const sp = new URLSearchParams(searchParams.toString());
@@ -791,7 +807,6 @@ function TasksTabs({ data, users }: { data: { me: string; tasks: DashboardTask[]
     if (view === "mine") {
       return (t: DashboardTask) => t.ownerEmail === data.me || t.collaborators.includes(data.me);
     }
-    // Team view: every assigned task across the team, optionally filtered to one person
     return (t: DashboardTask) => {
       if (!t.ownerEmail) return false;
       if (filterAssignee && t.ownerEmail !== filterAssignee) return false;
@@ -804,6 +819,8 @@ function TasksTabs({ data, users }: { data: { me: string; tasks: DashboardTask[]
       <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 12, borderBottom: "1px solid var(--color-border)" }}>
         <TasksTab label="My tasks" active={view === "mine"} onClick={() => setView("mine")} />
         <TasksTab label="Team tasks" active={view === "team"} onClick={() => setView("team")} />
+        <span style={{ flex: 1 }} />
+        <ViewModeSwitcher value={mode} onChange={changeMode} />
       </div>
 
       {view === "team" && users.length > 0 && (
@@ -821,8 +838,383 @@ function TasksTabs({ data, users }: { data: { me: string; tasks: DashboardTask[]
         </div>
       )}
 
-      <TasksBuckets data={data} users={users} predicate={predicate} />
+      {mode === "list" && <TasksBuckets data={data} users={users} predicate={predicate} />}
+      {mode === "kanban" && <KanbanView data={data} users={users} predicate={predicate} />}
+      {mode === "calendar" && <CalendarView data={data} users={users} predicate={predicate} />}
     </section>
+  );
+}
+
+function ViewModeSwitcher({ value, onChange }: { value: ViewMode; onChange: (m: ViewMode) => void }) {
+  const Btn = ({ mode, label, children }: { mode: ViewMode; label: string; children: React.ReactNode }) => (
+    <button
+      onClick={() => onChange(mode)}
+      title={label}
+      aria-label={label}
+      style={{
+        padding: 6, marginBottom: -1,
+        background: value === mode ? "rgba(0,113,227,0.1)" : "transparent",
+        border: "none",
+        borderRadius: 8,
+        color: value === mode ? "var(--color-accent)" : "var(--color-text-secondary)",
+        cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+    >
+      {children}
+    </button>
+  );
+  return (
+    <div style={{ display: "flex", gap: 2, padding: "0 0 8px" }}>
+      <Btn mode="list" label="List view">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <line x1="8" y1="6" x2="21" y2="6" />
+          <line x1="8" y1="12" x2="21" y2="12" />
+          <line x1="8" y1="18" x2="21" y2="18" />
+          <circle cx="4" cy="6" r="1" fill="currentColor" />
+          <circle cx="4" cy="12" r="1" fill="currentColor" />
+          <circle cx="4" cy="18" r="1" fill="currentColor" />
+        </svg>
+      </Btn>
+      <Btn mode="kanban" label="Kanban view">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="4" width="5" height="16" rx="1" />
+          <rect x="10" y="4" width="5" height="10" rx="1" />
+          <rect x="17" y="4" width="4" height="13" rx="1" />
+        </svg>
+      </Btn>
+      <Btn mode="calendar" label="Calendar view">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="5" width="18" height="16" rx="2" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+          <line x1="8" y1="3" x2="8" y2="7" />
+          <line x1="16" y1="3" x2="16" y2="7" />
+        </svg>
+      </Btn>
+    </div>
+  );
+}
+
+/* ─── Kanban view ─── */
+
+const KANBAN_COLUMNS: { key: DashboardTask["status"]; label: string; color: string }[] = [
+  { key: "todo",    label: "To do",   color: "#94A3B8" },
+  { key: "doing",   label: "Doing",   color: "#0071E3" },
+  { key: "blocked", label: "Blocked", color: "#DC2626" },
+  { key: "done",    label: "Done",    color: "#10B981" },
+];
+
+function KanbanView({
+  data, users, predicate,
+}: {
+  data: { me: string; tasks: DashboardTask[] };
+  users: DirectoryUser[];
+  predicate: (t: DashboardTask) => boolean;
+}) {
+  const grouped = useMemo(() => {
+    const out: Record<DashboardTask["status"], DashboardTask[]> = { todo: [], doing: [], blocked: [], done: [] };
+    for (const t of data.tasks) {
+      if (t.parentTaskId) continue;
+      if (!predicate(t)) continue;
+      out[t.status].push(t);
+    }
+    const sortByDue = (a: DashboardTask, b: DashboardTask) => {
+      const da = endDateMs(a.endDate) ?? Number.POSITIVE_INFINITY;
+      const db = endDateMs(b.endDate) ?? Number.POSITIVE_INFINITY;
+      return da - db;
+    };
+    for (const k of Object.keys(out) as (keyof typeof out)[]) out[k].sort(sortByDue);
+    return out;
+  }, [data, predicate]);
+
+  return (
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: "repeat(4, minmax(240px, 1fr))",
+      gap: 12,
+      overflowX: "auto",
+      paddingBottom: 8,
+    }}>
+      {KANBAN_COLUMNS.map((col) => {
+        const tasks = grouped[col.key];
+        return (
+          <div key={col.key} style={{
+            background: "var(--bg-card)", borderRadius: 14,
+            boxShadow: "var(--shadow-card)",
+            display: "flex", flexDirection: "column",
+            minHeight: 200, maxHeight: "calc(100vh - 280px)",
+          }}>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "12px 14px",
+              borderBottom: "1px solid var(--color-border)",
+            }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: col.color }} />
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{col.label}</span>
+              <span style={{
+                fontSize: 11, color: "var(--color-text-tertiary)",
+                background: "rgba(0,0,0,0.04)", padding: "2px 8px", borderRadius: 999,
+              }}>{tasks.length}</span>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+              {tasks.length === 0 ? (
+                <div style={{ padding: "20px 8px", fontSize: 12, fontStyle: "italic", color: "var(--color-text-tertiary)", textAlign: "center" }}>
+                  Empty
+                </div>
+              ) : (
+                tasks.map((t) => <KanbanCard key={t.id} task={t} users={users} />)
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function KanbanCard({ task, users }: { task: DashboardTask; users: DirectoryUser[] }) {
+  const router = useRouter();
+  const allTags = useTags();
+  const owner = userMeta(task.ownerEmail, users);
+  const projectColor = colorForEmail(task.projectId);
+  const due = endDateMs(task.endDate);
+  const overdue = due != null && due < todayStart().getTime() && !task.completed;
+  return (
+    <div
+      onClick={() => router.push(`/workspace/${task.companyId}/${task.projectId}?task=${task.id}`)}
+      style={{
+        background: "white", borderRadius: 10, padding: 10,
+        border: "1px solid var(--color-border)",
+        cursor: "pointer",
+        transition: "box-shadow 100ms var(--ease-apple), transform 100ms var(--ease-apple)",
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.06)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "none"; }}
+    >
+      <div style={{
+        fontSize: 13, fontWeight: 500,
+        color: task.completed ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
+        textDecoration: task.completed ? "line-through" : "none",
+        lineHeight: 1.4, marginBottom: 6,
+      }}>
+        {task.title}
+      </div>
+      {task.tagIds.length > 0 && (
+        <div style={{ marginBottom: 6 }}>
+          <TagPillList tagIds={task.tagIds} allTags={allTags} max={3} size="xs" />
+        </div>
+      )}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
+        fontSize: 11,
+      }}>
+        <span style={{
+          display: "inline-flex", alignItems: "center", gap: 4,
+          padding: "2px 7px", borderRadius: 999,
+          background: `${projectColor}1A`, color: projectColor,
+          maxWidth: 160,
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+        }}>
+          <span style={{ width: 5, height: 5, borderRadius: "50%", background: projectColor, flexShrink: 0 }} />
+          {task.projectName}
+        </span>
+        {task.priority && (
+          <span style={{
+            fontWeight: 600,
+            color: PRIORITY_META[task.priority].color, background: PRIORITY_META[task.priority].bg,
+            padding: "2px 7px", borderRadius: 999,
+          }}>{PRIORITY_META[task.priority].label}</span>
+        )}
+        {task.endDate && (
+          <span style={{
+            fontWeight: 500,
+            padding: "2px 7px", borderRadius: 999,
+            color: overdue ? "#B91C1C" : "var(--color-text-secondary)",
+            background: overdue ? "#FEE2E2" : "transparent",
+          }}>
+            {fmtDate(task.endDate)}
+          </span>
+        )}
+        <span style={{ flex: 1 }} />
+        {owner && <Avatar user={owner} size={20} />}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Calendar view ─── */
+
+const CAL_WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const CAL_MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+function CalendarView({
+  data, users, predicate,
+}: {
+  data: { me: string; tasks: DashboardTask[] };
+  users: DirectoryUser[];
+  predicate: (t: DashboardTask) => boolean;
+}) {
+  const router = useRouter();
+  const [view, setView] = useState(() => {
+    const t = new Date();
+    return new Date(t.getFullYear(), t.getMonth(), 1);
+  });
+
+  const tasksByDay = useMemo(() => {
+    const m = new Map<string, DashboardTask[]>();
+    for (const t of data.tasks) {
+      if (t.parentTaskId) continue;
+      if (!predicate(t)) continue;
+      if (!t.endDate) continue;
+      const list = m.get(t.endDate) ?? [];
+      list.push(t);
+      m.set(t.endDate, list);
+    }
+    const sortByName = (a: DashboardTask, b: DashboardTask) => a.title.localeCompare(b.title);
+    for (const list of m.values()) list.sort(sortByName);
+    return m;
+  }, [data, predicate]);
+
+  const startDay = view.getDay() === 0 ? 6 : view.getDay() - 1;
+  const daysInMonth = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
+  type Cell = { d: Date; otherMonth: boolean };
+  const cells: Cell[] = [];
+  for (let i = startDay; i > 0; i--) {
+    cells.push({ d: new Date(view.getFullYear(), view.getMonth(), 1 - i), otherMonth: true });
+  }
+  for (let i = 1; i <= daysInMonth; i++) {
+    cells.push({ d: new Date(view.getFullYear(), view.getMonth(), i), otherMonth: false });
+  }
+  while (cells.length < 42) {
+    const last = cells[cells.length - 1].d;
+    cells.push({ d: new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1), otherMonth: true });
+  }
+  const today = todayStart();
+
+  function isoFor(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  return (
+    <div style={{
+      background: "var(--bg-card)", borderRadius: 14,
+      boxShadow: "var(--shadow-card)", overflow: "hidden",
+    }}>
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8,
+        padding: "12px 16px",
+        borderBottom: "1px solid var(--color-border)",
+      }}>
+        <button
+          onClick={() => setView((v) => new Date(v.getFullYear(), v.getMonth() - 1, 1))}
+          aria-label="Previous month"
+          style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, color: "var(--color-text-secondary)", display: "flex" }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15,6 9,12 15,18" /></svg>
+        </button>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>
+          {CAL_MONTHS[view.getMonth()]} {view.getFullYear()}
+        </div>
+        <button
+          onClick={() => setView((v) => new Date(v.getFullYear(), v.getMonth() + 1, 1))}
+          aria-label="Next month"
+          style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, color: "var(--color-text-secondary)", display: "flex" }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9,6 15,12 9,18" /></svg>
+        </button>
+        <button
+          onClick={() => { const t = new Date(); setView(new Date(t.getFullYear(), t.getMonth(), 1)); }}
+          style={{
+            marginLeft: 4, padding: "4px 10px",
+            background: "transparent", border: "1px solid var(--color-border)",
+            color: "var(--color-text-secondary)",
+            borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
+          }}
+        >Today</button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: "1px solid var(--color-border)" }}>
+        {CAL_WEEKDAYS.map((w) => (
+          <div key={w} style={{
+            padding: "8px 10px", fontSize: 11, fontWeight: 600,
+            color: "var(--color-text-tertiary)",
+            textTransform: "uppercase", letterSpacing: 0.4,
+          }}>{w}</div>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+        {cells.map(({ d, otherMonth }, i) => {
+          const iso = isoFor(d);
+          const dayTasks = tasksByDay.get(iso) ?? [];
+          const isToday = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
+          return (
+            <div
+              key={i}
+              style={{
+                minHeight: 110,
+                padding: "6px 6px 8px",
+                borderRight: (i + 1) % 7 === 0 ? "none" : "1px solid var(--color-border)",
+                borderBottom: i < 35 ? "1px solid var(--color-border)" : "none",
+                background: otherMonth ? "rgba(0,0,0,0.015)" : "transparent",
+              }}
+            >
+              <div style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                minWidth: 22, height: 22, borderRadius: 999,
+                fontSize: 12, fontWeight: isToday ? 700 : 500,
+                color: isToday ? "white" : otherMonth ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
+                background: isToday ? "var(--color-accent)" : "transparent",
+                marginBottom: 4,
+                padding: "0 6px",
+              }}>{d.getDate()}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                {dayTasks.slice(0, 3).map((t) => (
+                  <CalendarTaskChip key={t.id} task={t} users={users} onClick={() => router.push(`/workspace/${t.companyId}/${t.projectId}?task=${t.id}`)} />
+                ))}
+                {dayTasks.length > 3 && (
+                  <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", padding: "2px 4px" }}>
+                    +{dayTasks.length - 3} more
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CalendarTaskChip({ task, users, onClick }: { task: DashboardTask; users: DirectoryUser[]; onClick: () => void }) {
+  const owner = userMeta(task.ownerEmail, users);
+  const projectColor = colorForEmail(task.projectId);
+  return (
+    <button
+      onClick={onClick}
+      title={`${task.title} · ${task.projectName}${owner ? ` · ${owner.label}` : ""}`}
+      style={{
+        display: "flex", alignItems: "center", gap: 4,
+        padding: "3px 6px", borderRadius: 6,
+        background: `${projectColor}1A`,
+        border: "none", cursor: "pointer", fontFamily: "inherit",
+        textAlign: "left", width: "100%",
+      }}
+    >
+      <span style={{ width: 5, height: 5, borderRadius: "50%", background: projectColor, flexShrink: 0 }} />
+      <span style={{
+        flex: 1, minWidth: 0,
+        fontSize: 11,
+        color: task.completed ? "var(--color-text-tertiary)" : projectColor,
+        textDecoration: task.completed ? "line-through" : "none",
+        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+        fontWeight: 500,
+      }}>{task.title}</span>
+      {owner && <Avatar user={owner} size={14} />}
+    </button>
   );
 }
 
