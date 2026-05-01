@@ -86,6 +86,9 @@ export const tasks = pgTable("tasks", {
   expectedOutcome: text("expected_outcome"),
   recurrence: jsonb("recurrence"),
   recurrenceSourceId: uuid("recurrence_source_id"),
+  preCompletionSectionId: uuid("pre_completion_section_id").references(() => sections.id, {
+    onDelete: "set null",
+  }),
   order: integer("order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   createdByEmail: text("created_by_email").notNull(),

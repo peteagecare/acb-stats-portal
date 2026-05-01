@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { tasks, taskCollaborators } from "@/db/schema";
+import { tasks, taskCollaborators, sections } from "@/db/schema";
 import { requireUser, canSeeProject } from "@/lib/workspace-auth";
 import {
   RecurrenceRule,
@@ -10,6 +10,8 @@ import {
   parseISODate,
   validateRecurrenceRule,
 } from "@/lib/recurrence";
+
+const DONE_SECTION_NAMES = new Set(["done", "completed", "finished", "complete"]);
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -90,6 +92,28 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     updates.completed = body.completed;
     updates.completedAt = body.completed ? new Date() : null;
     if (body.completed && !body.status) updates.status = "done";
+
+    if (body.completed && body.sectionId === undefined) {
+      // Auto-move to a "Done"-named section on completion (unless the same
+      // PATCH explicitly sets sectionId — caller's choice wins).
+      const projectSections = await db
+        .select()
+        .from(sections)
+        .where(eq(sections.projectId, task.projectId));
+      const doneSection = projectSections.find((s) =>
+        DONE_SECTION_NAMES.has(s.name.trim().toLowerCase()),
+      );
+      if (doneSection && task.sectionId !== doneSection.id) {
+        updates.preCompletionSectionId = task.sectionId;
+        updates.sectionId = doneSection.id;
+      }
+    }
+
+    if (!body.completed && body.sectionId === undefined && task.preCompletionSectionId) {
+      // Unticking — restore to the section the task came from.
+      updates.sectionId = task.preCompletionSectionId;
+      updates.preCompletionSectionId = null;
+    }
   }
 
   if (body.recurrence !== undefined) {

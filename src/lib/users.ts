@@ -15,27 +15,43 @@ export interface AppUser {
 }
 
 /**
- * Load users list. If no users exist yet, seed with Pete as admin
- * using the existing TOTP_SECRET env var.
+ * Load users list. Returns an admin Pete fallback in memory if the directory
+ * is empty, but DOES NOT persist that fallback — historically that auto-save
+ * would silently wipe the directory whenever a transient blob read failed.
+ * Use `seedAdminIfMissing()` deliberately when you actually want to write.
  */
 export async function loadUsers(): Promise<AppUser[]> {
   const users = await loadJson<AppUser[]>(KEY, FALLBACK, []);
-  if (users.length === 0) {
-    // Seed admin user with the existing env TOTP secret
-    const secret = process.env.TOTP_SECRET;
-    if (secret) {
-      const admin: AppUser = {
-        email: ADMIN_EMAIL,
-        label: "Pete",
-        role: "admin",
-        totpSecret: secret,
-        createdAt: new Date().toISOString(),
-      };
-      await saveJson(KEY, FALLBACK, [admin]);
-      return [admin];
-    }
-  }
-  return users;
+  if (users.length > 0) return users;
+
+  const secret = process.env.TOTP_SECRET;
+  if (!secret) return [];
+  // In-memory fallback only — never written.
+  return [
+    {
+      email: ADMIN_EMAIL,
+      label: "Pete",
+      role: "admin",
+      totpSecret: secret,
+      createdAt: new Date().toISOString(),
+    },
+  ];
+}
+
+/** Explicit seed — only call from a deliberate admin-bootstrap path. */
+export async function seedAdminIfMissing(): Promise<void> {
+  const users = await loadJson<AppUser[]>(KEY, FALLBACK, []);
+  if (users.length > 0) return;
+  const secret = process.env.TOTP_SECRET;
+  if (!secret) return;
+  const admin: AppUser = {
+    email: ADMIN_EMAIL,
+    label: "Pete",
+    role: "admin",
+    totpSecret: secret,
+    createdAt: new Date().toISOString(),
+  };
+  await saveJson(KEY, FALLBACK, [admin]);
 }
 
 export async function saveUsers(users: AppUser[]): Promise<void> {
