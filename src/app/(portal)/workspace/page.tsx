@@ -113,7 +113,7 @@ export default function WorkspacePage() {
   }, [companies]);
 
   return (
-    <div className="wsp-page" style={{ padding: "32px 36px 64px", maxWidth: 1100, margin: "0 auto" }}>
+    <div className="wsp-page" style={{ padding: "28px 32px 56px" }}>
       <div style={{ display: "flex", alignItems: "flex-end", marginBottom: 22, gap: 16 }}>
         <div>
           <h1 style={{ fontSize: 28, fontWeight: 600, margin: 0 }}>Task Dashboard</h1>
@@ -1155,8 +1155,8 @@ function CalendarView({
             <div
               key={i}
               style={{
-                minHeight: 110,
-                padding: "6px 6px 8px",
+                minHeight: 140,
+                padding: "8px 8px 10px",
                 borderRight: (i + 1) % 7 === 0 ? "none" : "1px solid var(--color-border)",
                 borderBottom: i < 35 ? "1px solid var(--color-border)" : "none",
                 background: otherMonth ? "rgba(0,0,0,0.015)" : "transparent",
@@ -1164,20 +1164,20 @@ function CalendarView({
             >
               <div style={{
                 display: "inline-flex", alignItems: "center", justifyContent: "center",
-                minWidth: 22, height: 22, borderRadius: 999,
-                fontSize: 12, fontWeight: isToday ? 700 : 500,
+                minWidth: 24, height: 24, borderRadius: 999,
+                fontSize: 13, fontWeight: isToday ? 700 : 500,
                 color: isToday ? "white" : otherMonth ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
                 background: isToday ? "var(--color-accent)" : "transparent",
-                marginBottom: 4,
-                padding: "0 6px",
+                marginBottom: 6,
+                padding: "0 7px",
               }}>{d.getDate()}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                {dayTasks.slice(0, 3).map((t) => (
+                {dayTasks.slice(0, 4).map((t) => (
                   <CalendarTaskChip key={t.id} task={t} users={users} onClick={() => router.push(`/workspace/${t.companyId}/${t.projectId}?task=${t.id}`)} />
                 ))}
-                {dayTasks.length > 3 && (
+                {dayTasks.length > 4 && (
                   <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", padding: "2px 4px" }}>
-                    +{dayTasks.length - 3} more
+                    +{dayTasks.length - 4} more
                   </div>
                 )}
               </div>

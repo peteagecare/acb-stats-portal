@@ -124,7 +124,7 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
   }
 
   return (
-    <div className="wsp-page" style={{ padding: "32px 36px 64px", maxWidth: 1100, margin: "0 auto" }}>
+    <div className="wsp-page" style={{ padding: "28px 32px 56px" }}>
       <nav style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 12 }}>
         <Link href="/workspace" style={{ color: "inherit", textDecoration: "none" }}>Workspace</Link>
         {" / "}
