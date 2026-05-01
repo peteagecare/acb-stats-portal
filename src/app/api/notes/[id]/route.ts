@@ -217,11 +217,11 @@ export async function DELETE(request: NextRequest, { params }: Params) {
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
 
-  // Only the author can delete a note (safer than letting any viewer wipe it)
+  // Author can always delete; admins can delete anyone's note.
   const [note] = await db.select().from(meetingNotes).where(eq(meetingNotes.id, id)).limit(1);
   if (!note) return Response.json({ error: "Not found" }, { status: 404 });
-  if (note.authorEmail !== user.email) {
-    return Response.json({ error: "Only the author can delete this note" }, { status: 403 });
+  if (note.authorEmail !== user.email && user.role !== "admin") {
+    return Response.json({ error: "Only the author or an admin can delete this note" }, { status: 403 });
   }
 
   await db.delete(meetingNotes).where(eq(meetingNotes.id, id));

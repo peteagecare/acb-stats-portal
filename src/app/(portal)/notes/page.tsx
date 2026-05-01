@@ -11,6 +11,7 @@ import { createSlashCommand } from "./_slash";
 import { ResizableImageExtension } from "./_image";
 import { UserMention, type MentionPendingDetail } from "./_mention";
 import { TagFilterChips, TagPicker, TagPillList, useTags } from "../workspace/_tags";
+import { ConfirmDialog } from "@/app/components/ConfirmDialog";
 
 const LinkedTaskItem = TaskItem.extend({
   addAttributes() {
@@ -94,6 +95,9 @@ function NotesPageInner() {
   const [notes, setNotes] = useState<Note[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Note | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [activeTagIds, setActiveTagIds] = useState<Set<string>>(new Set());
   const [companiesWithProjects, setCompaniesWithProjects] = useState<CompanyWithProjects[]>([]);
@@ -166,16 +170,36 @@ function NotesPageInner() {
     }
   }
 
-  async function deleteNote(id: string) {
-    if (!confirm("Delete this note?")) return;
-    const res = await fetch(`/api/notes/${id}`, { method: "DELETE" });
-    if (res.ok) {
+  function requestDeleteNote(id: string) {
+    const note = notes?.find((n) => n.id === id);
+    if (!note) return;
+    setDeleteError(null);
+    setPendingDelete(note);
+  }
+
+  async function confirmDeleteNote() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/notes/${pendingDelete.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as { error?: string } | null;
+        setDeleteError(j?.error ?? `HTTP ${res.status}`);
+        return;
+      }
+      const id = pendingDelete.id;
       setNotes((prev) => prev?.filter((n) => n.id !== id) ?? null);
       setSelectedId((prev) => {
         if (prev !== id) return prev;
         const remaining = (notes ?? []).filter((n) => n.id !== id);
         return remaining[0]?.id ?? null;
       });
+      setPendingDelete(null);
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "Failed to delete");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -316,7 +340,7 @@ function NotesPageInner() {
             key={selected.id}
             note={selected}
             onChange={(patch) => patchLocal(selected.id, patch)}
-            onDelete={() => deleteNote(selected.id)}
+            onDelete={() => requestDeleteNote(selected.id)}
             scrollToMention={queryNoteId === selected.id ? queryMention : null}
           />
         )}
@@ -355,6 +379,34 @@ function NotesPageInner() {
           )}
         </aside>
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete this note?"
+        message={
+          <>
+            <div>
+              You&apos;re about to delete{" "}
+              <strong>{pendingDelete?.title?.trim() || "Untitled meeting"}</strong>.
+            </div>
+            <div style={{ marginTop: 6 }}>This can&apos;t be undone.</div>
+            {deleteError && (
+              <div style={{
+                marginTop: 10, padding: "8px 10px",
+                background: "#FEE2E2", color: "#991B1B",
+                borderRadius: 8, fontSize: 12,
+              }}>
+                {deleteError}
+              </div>
+            )}
+          </>
+        }
+        confirmLabel="Delete note"
+        destructive
+        busy={deleting}
+        onConfirm={confirmDeleteNote}
+        onCancel={() => { setPendingDelete(null); setDeleteError(null); }}
+      />
     </div>
   );
 }

@@ -265,3 +265,12 @@ body {
 .unsorted-row:hover .unsorted-row-delete {
   opacity: 1;
 }
+
+@keyframes confirmFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes confirmSlideIn {
+  from { transform: translateY(8px) scale(0.98); opacity: 0; }
+  to   { transform: translateY(0) scale(1);     opacity: 1; }
+}
