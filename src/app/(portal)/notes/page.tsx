@@ -1029,16 +1029,18 @@ function MentionComposer({
           position: "fixed", top, left, zIndex: 1100,
           width: W,
           maxHeight: `calc(100vh - ${margin * 2}px)`,
-          background: "white", borderRadius: 12,
-          border: "1px solid var(--color-border)",
-          boxShadow: "0 12px 36px rgba(0,0,0,0.18)",
-          padding: 12,
-          display: "flex", flexDirection: "column", gap: 8,
+          background: "var(--bg-page)",
+          borderLeft: "3px solid var(--color-accent)",
+          borderRadius: "0 8px 8px 0",
+          boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
+          padding: "10px 14px",
+          display: "flex", flexDirection: "column", gap: 6,
           overflow: "auto",
+          fontFamily: "inherit",
         }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+        <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", letterSpacing: 0.2 }}>
           Tagging{" "}
           <span style={{ color: "var(--color-accent)", fontWeight: 600 }}>@{detail.label}</span>
         </div>
@@ -1054,22 +1056,31 @@ function MentionComposer({
             }
           }}
           placeholder={`Write a message for ${detail.label}…`}
-          rows={4}
+          rows={3}
           style={{
-            width: "100%", padding: "8px 10px",
-            border: "1px solid var(--color-border)",
-            borderRadius: 8,
-            fontSize: 13, fontFamily: "inherit",
-            outline: "none", resize: "vertical",
+            width: "100%", padding: 0,
+            border: "none", outline: "none",
+            background: "transparent",
+            fontSize: 15, lineHeight: 1.55,
+            fontFamily: "inherit",
+            color: "var(--color-text-primary)",
+            resize: "none",
           }}
         />
-        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+        <div style={{
+          display: "flex", gap: 4, justifyContent: "flex-end",
+          alignItems: "center",
+          fontSize: 11, color: "var(--color-text-tertiary)",
+        }}>
+          <span style={{ marginRight: "auto" }}>
+            ⌘↵ to send
+          </span>
           <button
             onClick={cancel}
             style={{
-              padding: "6px 12px", borderRadius: 8,
-              background: "transparent", border: "1px solid var(--color-border)",
-              color: "var(--color-text-secondary)",
+              padding: "4px 10px", borderRadius: 6,
+              background: "transparent", border: "none",
+              color: "var(--color-text-tertiary)",
               fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
             }}
           >Cancel</button>
@@ -1077,28 +1088,28 @@ function MentionComposer({
             onClick={() => send(true)}
             disabled={busy || !text.trim()}
             style={{
-              padding: "6px 12px", borderRadius: 8,
-              background: "rgba(0,113,227,0.1)", border: "1px solid var(--color-accent)",
+              padding: "4px 10px", borderRadius: 6,
+              background: "transparent", border: "none",
               color: "var(--color-accent)",
               fontSize: 12, fontWeight: 600,
               cursor: busy || !text.trim() ? "not-allowed" : "pointer",
-              opacity: busy || !text.trim() ? 0.6 : 1,
+              opacity: busy || !text.trim() ? 0.5 : 1,
               fontFamily: "inherit",
             }}
-          >Send as to-do</button>
+          >To-do</button>
           <button
             onClick={() => send(false)}
             disabled={busy || !text.trim()}
             style={{
-              padding: "6px 12px", borderRadius: 8,
+              padding: "4px 12px", borderRadius: 6,
               background: "var(--color-accent)", border: "none",
               color: "white",
               fontSize: 12, fontWeight: 600,
               cursor: busy || !text.trim() ? "not-allowed" : "pointer",
-              opacity: busy || !text.trim() ? 0.6 : 1,
+              opacity: busy || !text.trim() ? 0.5 : 1,
               fontFamily: "inherit",
             }}
-          >Send as comment</button>
+          >Send</button>
         </div>
       </div>
     </>
