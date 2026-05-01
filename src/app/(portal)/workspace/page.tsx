@@ -424,14 +424,15 @@ function CompaniesGrid({ companies, onNew }: { companies: CompanyRow[]; onNew: (
 
 /* ── My tasks (bucketed by due window) ── */
 
-type BucketKey = "today" | "thisWeek" | "nextWeek" | "sometime" | "completed";
+type BucketKey = "today" | "thisWeek" | "nextWeek" | "later" | "sometime" | "completed";
 
 const BUCKETS: { key: BucketKey; label: string; emptyHint: string }[] = [
-  { key: "today",     label: "Do Today",     emptyHint: "Nothing due today." },
-  { key: "thisWeek",  label: "Do This Week", emptyHint: "Nothing else due this week." },
-  { key: "nextWeek",  label: "Do Next Week", emptyHint: "Nothing scheduled for next week." },
-  { key: "sometime",  label: "Do Sometime",  emptyHint: "No undated or further-future tasks." },
-  { key: "completed", label: "Completed",    emptyHint: "No completed tasks yet." },
+  { key: "today",     label: "Do Today",          emptyHint: "Nothing due today." },
+  { key: "thisWeek",  label: "Do This Week",      emptyHint: "Nothing else due this week." },
+  { key: "nextWeek",  label: "Do Next Week",      emptyHint: "Nothing scheduled for next week." },
+  { key: "later",     label: "Do Later · Scheduled", emptyHint: "Nothing scheduled further out." },
+  { key: "sometime",  label: "Do Sometime",       emptyHint: "Nothing undated." },
+  { key: "completed", label: "Completed",         emptyHint: "No completed tasks yet." },
 ];
 
 function todayStart() { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }
@@ -558,7 +559,7 @@ function TasksBuckets({
     const nextWeekStartMs = thisWeekEndMs + 1;
     const nextWeekEndMs = endOfWeek(new Date(nextWeekStartMs + 24 * 3600 * 1000)).getTime();
 
-    const out: Record<BucketKey, DashboardTask[]> = { today: [], thisWeek: [], nextWeek: [], sometime: [], completed: [] };
+    const out: Record<BucketKey, DashboardTask[]> = { today: [], thisWeek: [], nextWeek: [], later: [], sometime: [], completed: [] };
     for (const t of data.tasks) {
       if (t.parentTaskId) continue;
       if (!predicate(t)) continue;
@@ -568,7 +569,7 @@ function TasksBuckets({
       else if (due <= todayEndMs) out.today.push(t);
       else if (due <= thisWeekEndMs) out.thisWeek.push(t);
       else if (due >= nextWeekStartMs && due <= nextWeekEndMs) out.nextWeek.push(t);
-      else out.sometime.push(t);
+      else out.later.push(t);
     }
     const sortByDue = (a: DashboardTask, b: DashboardTask) => {
       const da = endDateMs(a.endDate) ?? Number.POSITIVE_INFINITY;
@@ -578,6 +579,7 @@ function TasksBuckets({
     out.today.sort(sortByDue);
     out.thisWeek.sort(sortByDue);
     out.nextWeek.sort(sortByDue);
+    out.later.sort(sortByDue);
     out.sometime.sort(sortByDue);
     out.completed.sort((a, b) => {
       const da = a.completedAt ? new Date(a.completedAt).getTime() : 0;
@@ -616,10 +618,11 @@ function BucketCard({
     variant === "today" ? "#DC2626" :
     variant === "thisWeek" ? "#0071E3" :
     variant === "nextWeek" ? "#A855F7" :
+    variant === "later" ? "#6366F1" :
     variant === "sometime" ? "#94A3B8" :
     "#10B981";
   const todayMs = todayStart().getTime();
-  const [open, setOpen] = useState(variant !== "completed" && variant !== "sometime");
+  const [open, setOpen] = useState(variant !== "completed" && variant !== "sometime" && variant !== "later");
 
   return (
     <div style={{ background: "var(--bg-card)", borderRadius: 18, boxShadow: "var(--shadow-card)", overflow: "hidden" }}>
