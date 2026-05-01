@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { meetingNotes, noteAccess } from "@/db/schema";
+import { meetingNotes, noteAccess, noteTags } from "@/db/schema";
 import { requireUser, canSeeNote } from "@/lib/workspace-auth";
 
 interface Params {
@@ -24,7 +24,12 @@ export async function GET(request: NextRequest, { params }: Params) {
     note.accessMode === "restricted"
       ? await db.select().from(noteAccess).where(eq(noteAccess.noteId, id))
       : [];
-  return Response.json({ ...note, accessUsers: accessRows.map((r) => r.userEmail) });
+  const tagRows = await db.select().from(noteTags).where(eq(noteTags.noteId, id));
+  return Response.json({
+    ...note,
+    accessUsers: accessRows.map((r) => r.userEmail),
+    tagIds: tagRows.map((r) => r.tagId),
+  });
 }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
@@ -44,6 +49,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     meetingDate?: string | null;
     accessMode?: "everyone" | "restricted";
     setAccessUsers?: string[];
+    setTagIds?: string[];
   };
   let body: Body;
   try {
@@ -69,6 +75,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       .filter(Boolean)
       .map((userEmail) => ({ noteId: id, userEmail }));
     if (rows.length) await db.insert(noteAccess).values(rows).onConflictDoNothing();
+  }
+
+  if (Array.isArray(body.setTagIds)) {
+    await db.delete(noteTags).where(eq(noteTags.noteId, id));
+    const rows = body.setTagIds
+      .filter((tagId): tagId is string => typeof tagId === "string" && tagId.length > 0)
+      .map((tagId) => ({ noteId: id, tagId }));
+    if (rows.length) await db.insert(noteTags).values(rows).onConflictDoNothing();
   }
 
   return Response.json({ ok: true });

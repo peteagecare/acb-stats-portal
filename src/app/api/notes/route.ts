@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { desc, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
-import { meetingNotes, noteAccess } from "@/db/schema";
+import { meetingNotes, noteAccess, noteTags } from "@/db/schema";
 import { requireUser, visibleNoteIds } from "@/lib/workspace-auth";
 
 export async function GET(request: NextRequest) {
@@ -29,8 +29,23 @@ export async function GET(request: NextRequest) {
     usersByNote.set(r.noteId, list);
   }
 
+  const allIds = rows.map((r) => r.id);
+  const tagRows = allIds.length
+    ? await db.select().from(noteTags).where(inArray(noteTags.noteId, allIds))
+    : [];
+  const tagsByNote = new Map<string, string[]>();
+  for (const r of tagRows) {
+    const list = tagsByNote.get(r.noteId) ?? [];
+    list.push(r.tagId);
+    tagsByNote.set(r.noteId, list);
+  }
+
   return Response.json({
-    notes: rows.map((r) => ({ ...r, accessUsers: usersByNote.get(r.id) ?? [] })),
+    notes: rows.map((r) => ({
+      ...r,
+      accessUsers: usersByNote.get(r.id) ?? [],
+      tagIds: tagsByNote.get(r.id) ?? [],
+    })),
   });
 }
 

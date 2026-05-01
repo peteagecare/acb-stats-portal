@@ -8,6 +8,7 @@ import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import { createSlashCommand } from "./_slash";
 import { ResizableImageExtension } from "./_image";
+import { TagPicker, TagPillList, useTags } from "../workspace/_tags";
 
 const LinkedTaskItem = TaskItem.extend({
   addAttributes() {
@@ -54,6 +55,7 @@ interface Note {
   authorEmail: string;
   accessMode: "everyone" | "restricted";
   accessUsers?: string[];
+  tagIds?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -254,38 +256,12 @@ export default function NotesPage() {
             </div>
           )}
           {filtered && filtered.map((n) => (
-            <button
+            <NoteListItem
               key={n.id}
-              onClick={() => { setSelectedId(n.id); }}
-              style={{
-                display: "block", width: "100%", textAlign: "left",
-                padding: "10px 12px", marginBottom: 2,
-                borderRadius: 10, border: "none", cursor: "pointer",
-                background: selectedId === n.id ? "rgba(0,113,227,0.1)" : "transparent",
-                fontFamily: "inherit",
-                transition: "background 100ms var(--ease-apple)",
-              }}
-              onMouseEnter={(e) => { if (selectedId !== n.id) e.currentTarget.style.background = "rgba(0,0,0,0.035)"; }}
-              onMouseLeave={(e) => { if (selectedId !== n.id) e.currentTarget.style.background = "transparent"; }}
-            >
-              <div style={{
-                fontSize: 14, fontWeight: 600, marginBottom: 2,
-                color: selectedId === n.id ? "var(--color-accent)" : "var(--color-text-primary)",
-                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-              }}>
-                {n.title || "Untitled"}
-              </div>
-              <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginBottom: 4 }}>
-                {formatListDate(n.meetingDate ?? n.updatedAt)}
-              </div>
-              <div style={{
-                fontSize: 12, color: "var(--color-text-secondary)",
-                display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
-                overflow: "hidden", lineHeight: 1.4,
-              }}>
-                {plainTextSnippet(n.body) || <span style={{ fontStyle: "italic" }}>No content yet.</span>}
-              </div>
-            </button>
+              note={n}
+              selected={selectedId === n.id}
+              onSelect={() => setSelectedId(n.id)}
+            />
           ))}
         </div>
       </aside>
@@ -393,6 +369,54 @@ function plainTextSnippet(html: string): string {
   const div = document.createElement("div");
   div.innerHTML = html;
   return (div.textContent || "").trim();
+}
+
+function NoteListItem({
+  note, selected, onSelect,
+}: {
+  note: Note;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const allTags = useTags();
+  return (
+    <button
+      onClick={onSelect}
+      style={{
+        display: "block", width: "100%", textAlign: "left",
+        padding: "10px 12px", marginBottom: 2,
+        borderRadius: 10, border: "none", cursor: "pointer",
+        background: selected ? "rgba(0,113,227,0.1)" : "transparent",
+        fontFamily: "inherit",
+        transition: "background 100ms var(--ease-apple)",
+      }}
+      onMouseEnter={(e) => { if (!selected) e.currentTarget.style.background = "rgba(0,0,0,0.035)"; }}
+      onMouseLeave={(e) => { if (!selected) e.currentTarget.style.background = "transparent"; }}
+    >
+      <div style={{
+        fontSize: 14, fontWeight: 600, marginBottom: 2,
+        color: selected ? "var(--color-accent)" : "var(--color-text-primary)",
+        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+      }}>
+        {note.title || "Untitled"}
+      </div>
+      <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginBottom: 4 }}>
+        {formatListDate(note.meetingDate ?? note.updatedAt)}
+      </div>
+      <div style={{
+        fontSize: 12, color: "var(--color-text-secondary)",
+        display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+        overflow: "hidden", lineHeight: 1.4,
+      }}>
+        {plainTextSnippet(note.body) || <span style={{ fontStyle: "italic" }}>No content yet.</span>}
+      </div>
+      {note.tagIds && note.tagIds.length > 0 && (
+        <div style={{ marginTop: 6 }}>
+          <TagPillList tagIds={note.tagIds} allTags={allTags} max={4} size="xs" />
+        </div>
+      )}
+    </button>
+  );
 }
 
 function formatListDate(iso: string | null): string {
@@ -680,6 +704,7 @@ function NoteEditor({
           }}
         />
         <NoteAccessControl note={note} onChange={onChange} />
+        <NoteTagsControl note={note} onChange={onChange} />
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
           {savedAt ? `Saved ${savedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Auto-saves"}
@@ -876,6 +901,73 @@ function NoteAccessControl({ note, onChange }: { note: Note; onChange: (patch: P
               Visible to everyone with workspace access.
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NoteTagsControl({ note, onChange }: { note: Note; onChange: (patch: Partial<Note>) => void }) {
+  const allTags = useTags();
+  const [open, setOpen] = useState(false);
+  const [tagIds, setTagIds] = useState<string[]>(note.tagIds ?? []);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => { setTagIds(note.tagIds ?? []); }, [note.id, note.tagIds]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
+
+  async function setSelection(next: string[]) {
+    setTagIds(next);
+    onChange({ tagIds: next });
+    await fetch(`/api/notes/${note.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ setTagIds: next }),
+    });
+  }
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 6,
+          padding: "5px 10px", borderRadius: 8,
+          border: "1px solid var(--color-border)",
+          background: "transparent",
+          color: "var(--color-text-secondary)",
+          fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
+        }}
+        title="Tag this note"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" />
+          <line x1="7" y1="7" x2="7.01" y2="7" />
+        </svg>
+        {tagIds.length > 0 ? (
+          <TagPillList tagIds={tagIds} allTags={allTags} max={3} size="xs" />
+        ) : (
+          <span>Tags</span>
+        )}
+      </button>
+
+      {open && (
+        <div
+          style={{
+            position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 30,
+            background: "white", borderRadius: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+            padding: 14, minWidth: 320, border: "1px solid var(--color-border)",
+          }}
+        >
+          <TagPicker selected={tagIds} onChange={setSelection} />
         </div>
       )}
     </div>

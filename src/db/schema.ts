@@ -223,6 +223,19 @@ export const taskTags = pgTable(
   (t) => [primaryKey({ columns: [t.taskId, t.tagId] })],
 );
 
+export const noteTags = pgTable(
+  "note_tags",
+  {
+    noteId: uuid("note_id")
+      .notNull()
+      .references(() => meetingNotes.id, { onDelete: "cascade" }),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.noteId, t.tagId] })],
+);
+
 export const projectLinks = pgTable("project_links", {
   id: uuid("id").defaultRandom().primaryKey(),
   projectId: uuid("project_id")
