@@ -1088,11 +1088,15 @@ function CalendarView({
   for (let i = 1; i <= daysInMonth; i++) {
     cells.push({ d: new Date(view.getFullYear(), view.getMonth(), i), otherMonth: false });
   }
-  while (cells.length < 42) {
+  // Pad to a multiple of 7 — only as many weeks as we actually need (5 or 6).
+  while (cells.length % 7 !== 0) {
     const last = cells[cells.length - 1].d;
     cells.push({ d: new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1), otherMonth: true });
   }
+  const weekRows = cells.length / 7;
   const today = todayStart();
+  // Mon-Fri equal, Sat/Sun narrower (Pete: keep weekend small).
+  const COLUMN_TEMPLATE = "repeat(5, 1.2fr) 0.65fr 0.65fr";
 
   function isoFor(d: Date): string {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -1102,11 +1106,16 @@ function CalendarView({
     <div style={{
       background: "var(--bg-card)", borderRadius: 14,
       boxShadow: "var(--shadow-card)", overflow: "hidden",
+      display: "flex", flexDirection: "column",
+      // Aim to fit the full month on a normal-height screen without page scroll.
+      height: "calc(100vh - 220px)",
+      minHeight: 520,
     }}>
       <div style={{
         display: "flex", alignItems: "center", gap: 8,
         padding: "12px 16px",
         borderBottom: "1px solid var(--color-border)",
+        flexShrink: 0,
       }}>
         <button
           onClick={() => setView((v) => new Date(v.getFullYear(), v.getMonth() - 1, 1))}
@@ -1136,7 +1145,10 @@ function CalendarView({
         >Today</button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: "1px solid var(--color-border)" }}>
+      <div style={{
+        display: "grid", gridTemplateColumns: COLUMN_TEMPLATE,
+        borderBottom: "1px solid var(--color-border)", flexShrink: 0,
+      }}>
         {CAL_WEEKDAYS.map((w) => (
           <div key={w} style={{
             padding: "8px 10px", fontSize: 11, fontWeight: 600,
@@ -1146,32 +1158,42 @@ function CalendarView({
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: COLUMN_TEMPLATE,
+        gridTemplateRows: `repeat(${weekRows}, minmax(96px, 1fr))`,
+        flex: 1, minHeight: 0,
+      }}>
         {cells.map(({ d, otherMonth }, i) => {
           const iso = isoFor(d);
           const dayTasks = tasksByDay.get(iso) ?? [];
           const isToday = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
+          const lastRow = Math.floor(i / 7) === weekRows - 1;
           return (
             <div
               key={i}
               style={{
-                minHeight: 140,
-                padding: "8px 8px 10px",
+                padding: "6px 6px 8px",
                 borderRight: (i + 1) % 7 === 0 ? "none" : "1px solid var(--color-border)",
-                borderBottom: i < 35 ? "1px solid var(--color-border)" : "none",
+                borderBottom: lastRow ? "none" : "1px solid var(--color-border)",
                 background: otherMonth ? "rgba(0,0,0,0.015)" : "transparent",
+                minWidth: 0, minHeight: 0, overflow: "hidden",
+                display: "flex", flexDirection: "column",
               }}
             >
               <div style={{
                 display: "inline-flex", alignItems: "center", justifyContent: "center",
-                minWidth: 24, height: 24, borderRadius: 999,
-                fontSize: 13, fontWeight: isToday ? 700 : 500,
+                minWidth: 22, height: 22, borderRadius: 999,
+                fontSize: 12, fontWeight: isToday ? 700 : 500,
                 color: isToday ? "white" : otherMonth ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
                 background: isToday ? "var(--color-accent)" : "transparent",
-                marginBottom: 6,
-                padding: "0 7px",
+                marginBottom: 4,
+                padding: "0 7px", alignSelf: "flex-start", flexShrink: 0,
               }}>{d.getDate()}</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <div style={{
+                display: "flex", flexDirection: "column", gap: 2,
+                flex: 1, minHeight: 0, overflow: "hidden",
+              }}>
                 {dayTasks.slice(0, 4).map((t) => (
                   <CalendarTaskChip key={t.id} task={t} users={users} onClick={() => router.push(`/workspace/${t.companyId}/${t.projectId}?task=${t.id}`)} />
                 ))}
