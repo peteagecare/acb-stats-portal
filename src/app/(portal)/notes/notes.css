@@ -191,3 +191,16 @@
 .note-mention.note-mention-flash {
   animation: mention-flash 2s ease-out;
 }
+
+.note-mention.note-mention-pending {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(0, 113, 227, 0.08),
+    rgba(0, 113, 227, 0.08) 4px,
+    rgba(0, 113, 227, 0.16) 4px,
+    rgba(0, 113, 227, 0.16) 8px
+  );
+  outline: 1px dashed var(--color-accent);
+  outline-offset: -1px;
+  opacity: 0.85;
+}

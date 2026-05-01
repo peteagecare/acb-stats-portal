@@ -33,10 +33,14 @@ export async function POST(request: NextRequest, { params }: Params) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
-  let body: { title?: string };
+  let body: { title?: string; ownerEmail?: string | null };
   try { body = await request.json(); } catch { return Response.json({ error: "Invalid JSON" }, { status: 400 }); }
   const title = (body.title ?? "").trim();
   if (!title) return Response.json({ error: "Title required" }, { status: 400 });
+  const ownerEmail =
+    typeof body.ownerEmail === "string" && body.ownerEmail.trim()
+      ? body.ownerEmail.trim().toLowerCase()
+      : null;
 
   const [last] = await db
     .select({ order: meetingNoteTasks.order })
@@ -48,7 +52,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const [created] = await db
     .insert(meetingNoteTasks)
-    .values({ noteId: id, title, order: nextOrder })
+    .values({ noteId: id, title, ownerEmail, order: nextOrder })
     .returning();
   return Response.json(created);
 }

@@ -113,21 +113,56 @@ const MentionList = forwardRef<
 });
 MentionList.displayName = "MentionList";
 
-// We piggy-back on Mention's built-in `id` (email — unique) and `label` (display name).
-// HTML render uses both as data-* so the server can extract mentions from saved HTML.
-export const UserMention = Mention.configure({
+// Dispatched on `window` after a freshly-inserted (pending) mention chip is placed.
+// The notes editor listens for this and opens a composer popover anchored to the chip.
+export type MentionPendingDetail = {
+  pendingId: string;
+  email: string;
+  label: string;
+  rect: { left: number; top: number; right: number; bottom: number };
+};
+
+export const UserMention = Mention.extend({
+  addAttributes() {
+    const parent = this.parent?.() ?? {};
+    return {
+      ...parent,
+      pendingId: {
+        default: null,
+        parseHTML: (el) => (el as HTMLElement).getAttribute("data-pending-id"),
+        renderHTML: (attrs) =>
+          attrs.pendingId ? { "data-pending-id": attrs.pendingId } : {},
+      },
+      committed: {
+        default: true,
+        // Treat absent or "true" as committed; only "false" means pending.
+        // This way mentions written before this feature stay committed.
+        parseHTML: (el) =>
+          (el as HTMLElement).getAttribute("data-committed") !== "false",
+        renderHTML: (attrs) => ({
+          "data-committed": attrs.committed === false ? "false" : "true",
+        }),
+      },
+    };
+  },
+}).configure({
   HTMLAttributes: { class: "note-mention" },
   renderText({ node }) {
     return `@${node.attrs.label ?? node.attrs.id ?? ""}`;
   },
   renderHTML({ options, node }) {
+    const isPending = node.attrs.committed === false;
+    const baseClass = (options.HTMLAttributes.class as string | undefined) ?? "";
+    const cls = isPending ? `${baseClass} note-mention-pending`.trim() : baseClass;
+    const extra: Record<string, string> = {
+      "data-mention-email": node.attrs.id ?? "",
+      "data-mention-label": node.attrs.label ?? "",
+      "data-committed": isPending ? "false" : "true",
+    };
+    if (node.attrs.pendingId) extra["data-pending-id"] = node.attrs.pendingId;
     return [
       "span",
-      {
-        ...options.HTMLAttributes,
-        "data-mention-email": node.attrs.id ?? "",
-        "data-mention-label": node.attrs.label ?? "",
-      },
+      { ...options.HTMLAttributes, ...extra, class: cls },
       `@${node.attrs.label ?? node.attrs.id ?? ""}`,
     ];
   },
@@ -142,17 +177,43 @@ export const UserMention = Mention.configure({
       return filtered.slice(0, 8);
     },
     command: ({ editor, range, props }) => {
-      // We pack the user via { id: email, label } onto the suggestion command
       const id = String(props.id ?? "");
       const label = String(props.label ?? id);
+      const pendingId = (typeof crypto !== "undefined" && "randomUUID" in crypto)
+        ? crypto.randomUUID()
+        : `mp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const insertAt = range.from;
+
       editor
         .chain()
         .focus()
         .insertContentAt(range, [
-          { type: "mention", attrs: { id, label } },
+          { type: "mention", attrs: { id, label, pendingId, committed: false } },
           { type: "text", text: " " },
         ])
         .run();
+
+      // After the chip is in the doc, get its screen coords and tell the page
+      // to open a composer anchored to it.
+      requestAnimationFrame(() => {
+        let rect: { left: number; top: number; right: number; bottom: number };
+        try {
+          const coords = editor.view.coordsAtPos(insertAt);
+          rect = {
+            left: coords.left,
+            top: coords.top,
+            right: coords.left,
+            bottom: coords.bottom,
+          };
+        } catch {
+          rect = { left: 0, top: 0, right: 0, bottom: 0 };
+        }
+        window.dispatchEvent(
+          new CustomEvent<MentionPendingDetail>("mention-pending", {
+            detail: { pendingId, email: id, label, rect },
+          }),
+        );
+      });
     },
     render: () => {
       let container: HTMLDivElement | null = null;

@@ -9,7 +9,7 @@ import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import { createSlashCommand } from "./_slash";
 import { ResizableImageExtension } from "./_image";
-import { UserMention } from "./_mention";
+import { UserMention, type MentionPendingDetail } from "./_mention";
 import { TagFilterChips, TagPicker, TagPillList, useTags } from "../workspace/_tags";
 
 const LinkedTaskItem = TaskItem.extend({
@@ -537,6 +537,7 @@ function NoteEditor({
   const [title, setTitle] = useState(note.title);
   const [meetingDate, setMeetingDate] = useState(note.meetingDate ?? "");
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [mentionPending, setMentionPending] = useState<MentionPendingDetail | null>(null);
   const titleSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bodySaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -706,6 +707,21 @@ function NoteEditor({
     taskSyncRef.current = scanLinkedTasks(editor);
   }, [editor, note.id]);
 
+  // Listen for newly-inserted (pending) mention chips → open composer
+  useEffect(() => {
+    function onPending(e: Event) {
+      const detail = (e as CustomEvent<MentionPendingDetail>).detail;
+      if (detail) setMentionPending(detail);
+    }
+    window.addEventListener("mention-pending", onPending);
+    return () => window.removeEventListener("mention-pending", onPending);
+  }, []);
+
+  // Cancel any pending mention when switching to a different note
+  useEffect(() => {
+    setMentionPending(null);
+  }, [note.id]);
+
   // Deep-link: scroll to a specific @mention when arriving from a notification
   useEffect(() => {
     if (!editor || !scrollToMention) return;
@@ -849,8 +865,247 @@ function NoteEditor({
       <div className="tiptap-wrap">
         <EditorContent editor={editor} />
       </div>
+
+      {editor && mentionPending && (
+        <MentionComposer
+          key={mentionPending.pendingId}
+          editor={editor}
+          noteId={note.id}
+          detail={mentionPending}
+          onClose={() => setMentionPending(null)}
+        />
+      )}
     </div>
   );
+}
+
+function MentionComposer({
+  editor, noteId, detail, onClose,
+}: {
+  editor: Editor;
+  noteId: string;
+  detail: MentionPendingDetail;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    taRef.current?.focus();
+  }, []);
+
+  function findChip(): { pos: number; size: number } | null {
+    let found: { pos: number; size: number } | null = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (found) return false;
+      if (
+        node.type.name === "mention" &&
+        node.attrs.pendingId === detail.pendingId
+      ) {
+        found = { pos, size: node.nodeSize };
+      }
+      return !found;
+    });
+    return found;
+  }
+
+  function commitChip(): { pos: number; size: number } | null {
+    const found = findChip();
+    if (!found) return null;
+    editor.chain().focus().command(({ tr }) => {
+      const node = tr.doc.nodeAt(found.pos);
+      if (!node) return false;
+      tr.setNodeMarkup(found.pos, undefined, {
+        ...node.attrs,
+        committed: true,
+        pendingId: null,
+      });
+      return true;
+    }).run();
+    return found;
+  }
+
+  function notifyTaskAdded() {
+    window.dispatchEvent(new CustomEvent("note-task-changed", { detail: { noteId } }));
+  }
+
+  async function send(asTask: boolean) {
+    if (busy) return;
+    const message = text.trim();
+    if (!message) return;
+    setBusy(true);
+    try {
+      if (asTask) {
+        // Create a task in the rail with the message as title and the
+        // mentioned user as owner. Then mark the chip committed and
+        // wrap chip+message in an inline task list item so the body
+        // mirrors the rail.
+        const res = await fetch(`/api/notes/${noteId}/tasks`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: message, ownerEmail: detail.email }),
+        });
+        if (!res.ok) { setBusy(false); return; }
+        const created = (await res.json()) as { id: string };
+
+        const found = commitChip();
+        if (!found) { setBusy(false); onClose(); return; }
+        const after = found.pos + found.size + 1; // skip the trailing space
+        // Insert the message text right after the chip, then convert the
+        // surrounding paragraph into a task-list item.
+        editor.chain().focus()
+          .insertContentAt(after, message)
+          .setTextSelection(after + message.length)
+          .run();
+        // Wrap the current paragraph as a task list. Tiptap's toggleTaskList
+        // works on the current selection — we just placed the cursor in the
+        // mention's paragraph above.
+        editor.chain().focus().toggleList("taskList", "taskItem").run();
+        // Stamp the freshly-created task item with the rail task id so
+        // toggling it later syncs to the rail.
+        const liPos = findEnclosingTaskItemPos(editor);
+        if (liPos != null) {
+          editor.chain().focus().command(({ tr }) => {
+            const li = tr.doc.nodeAt(liPos);
+            if (!li) return false;
+            tr.setNodeMarkup(liPos, undefined, { ...li.attrs, taskId: created.id });
+            return true;
+          }).run();
+        }
+        notifyTaskAdded();
+      } else {
+        // Comment: just append the message after the chip in the same paragraph.
+        const found = commitChip();
+        if (!found) { setBusy(false); onClose(); return; }
+        const after = found.pos + found.size + 1; // skip trailing space
+        editor.chain().focus().insertContentAt(after, message).run();
+      }
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function cancel() {
+    const found = findChip();
+    if (found) {
+      // Delete the chip + its trailing space
+      editor
+        .chain()
+        .focus()
+        .deleteRange({ from: found.pos, to: found.pos + found.size + 1 })
+        .run();
+    }
+    onClose();
+  }
+
+  // Position the popover under the chip, clamped to the viewport
+  const W = 360;
+  const left =
+    typeof window !== "undefined"
+      ? Math.max(8, Math.min(detail.rect.left, window.innerWidth - W - 8))
+      : detail.rect.left;
+  const top = detail.rect.bottom + 6;
+
+  return (
+    <>
+      {/* Backdrop closes (cancels) on click */}
+      <div
+        onClick={cancel}
+        style={{
+          position: "fixed", inset: 0, zIndex: 1099,
+          background: "transparent",
+        }}
+      />
+      <div
+        style={{
+          position: "fixed", top, left, zIndex: 1100,
+          width: W,
+          background: "white", borderRadius: 12,
+          border: "1px solid var(--color-border)",
+          boxShadow: "0 12px 36px rgba(0,0,0,0.18)",
+          padding: 12,
+          display: "flex", flexDirection: "column", gap: 8,
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+          Replying to{" "}
+          <span style={{ color: "var(--color-accent)", fontWeight: 600 }}>@{detail.label}</span>
+        </div>
+        <textarea
+          ref={taRef}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") { e.preventDefault(); cancel(); }
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              send(false);
+            }
+          }}
+          placeholder={`Write a message for ${detail.label}…`}
+          rows={4}
+          style={{
+            width: "100%", padding: "8px 10px",
+            border: "1px solid var(--color-border)",
+            borderRadius: 8,
+            fontSize: 13, fontFamily: "inherit",
+            outline: "none", resize: "vertical",
+          }}
+        />
+        <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+          <button
+            onClick={cancel}
+            style={{
+              padding: "6px 12px", borderRadius: 8,
+              background: "transparent", border: "1px solid var(--color-border)",
+              color: "var(--color-text-secondary)",
+              fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
+            }}
+          >Cancel</button>
+          <button
+            onClick={() => send(true)}
+            disabled={busy || !text.trim()}
+            style={{
+              padding: "6px 12px", borderRadius: 8,
+              background: "rgba(0,113,227,0.1)", border: "1px solid var(--color-accent)",
+              color: "var(--color-accent)",
+              fontSize: 12, fontWeight: 600,
+              cursor: busy || !text.trim() ? "not-allowed" : "pointer",
+              opacity: busy || !text.trim() ? 0.6 : 1,
+              fontFamily: "inherit",
+            }}
+          >Send as to-do</button>
+          <button
+            onClick={() => send(false)}
+            disabled={busy || !text.trim()}
+            style={{
+              padding: "6px 12px", borderRadius: 8,
+              background: "var(--color-accent)", border: "none",
+              color: "white",
+              fontSize: 12, fontWeight: 600,
+              cursor: busy || !text.trim() ? "not-allowed" : "pointer",
+              opacity: busy || !text.trim() ? 0.6 : 1,
+              fontFamily: "inherit",
+            }}
+          >Send as comment</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function findEnclosingTaskItemPos(editor: Editor): number | null {
+  const $from = editor.state.selection.$from;
+  for (let depth = $from.depth; depth >= 0; depth--) {
+    const node = $from.node(depth);
+    if (node.type.name === "taskItem") {
+      return $from.before(depth);
+    }
+  }
+  return null;
 }
 
 function NoteAccessControl({ note, onChange }: { note: Note; onChange: (patch: Partial<Note>) => void }) {
