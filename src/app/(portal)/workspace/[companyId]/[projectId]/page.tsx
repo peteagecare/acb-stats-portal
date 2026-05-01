@@ -39,6 +39,7 @@ import {
 import { RecurrenceRule, formatRecurrence } from "@/lib/recurrence";
 import { RecurrencePicker } from "../../_recurrence-picker";
 import { TagFilterChips, TagPicker, TagPillList, useTags } from "../../_tags";
+import { DatePicker, EnumPicker, UserPicker } from "@/app/components/Pickers";
 
 type ProjectStatus = "planning" | "active" | "on_hold" | "done" | "archived";
 type TaskStatus = "todo" | "doing" | "blocked" | "done";
@@ -1639,22 +1640,40 @@ function TaskPanel({
           </div>
 
           <PanelLabel>Start date</PanelLabel>
-          <input
-            className="task-panel-control"
-            type="date"
-            value={task.startDate ?? ""}
-            onChange={(e) => patch({ startDate: e.target.value || null })}
-            style={panelControlStyle}
-          />
+          <DatePicker
+            value={task.startDate}
+            onChange={(iso) => patch({ startDate: iso })}
+          >
+            {({ onClick, ref }) => (
+              <button
+                ref={ref}
+                onClick={onClick}
+                type="button"
+                className="task-panel-control"
+                style={{ ...panelControlStyle, textAlign: "left" }}
+              >
+                {task.startDate ? formatPanelDate(task.startDate) : <span style={{ color: "var(--color-text-tertiary)" }}>—</span>}
+              </button>
+            )}
+          </DatePicker>
 
           <PanelLabel>End date</PanelLabel>
-          <input
-            className="task-panel-control"
-            type="date"
-            value={task.endDate ?? ""}
-            onChange={(e) => patch({ endDate: e.target.value || null })}
-            style={panelControlStyle}
-          />
+          <DatePicker
+            value={task.endDate}
+            onChange={(iso) => patch({ endDate: iso })}
+          >
+            {({ onClick, ref }) => (
+              <button
+                ref={ref}
+                onClick={onClick}
+                type="button"
+                className="task-panel-control"
+                style={{ ...panelControlStyle, textAlign: "left" }}
+              >
+                {task.endDate ? formatPanelDate(task.endDate) : <span style={{ color: "var(--color-text-tertiary)" }}>—</span>}
+              </button>
+            )}
+          </DatePicker>
 
           <PanelLabel>Priority</PanelLabel>
           <PillSelect
@@ -1693,15 +1712,26 @@ function TaskPanel({
           />
 
           <PanelLabel>Section</PanelLabel>
-          <select
-            className="task-panel-control"
-            value={task.sectionId ?? ""}
-            onChange={(e) => patch({ sectionId: e.target.value || null })}
-            style={panelControlStyle}
+          <EnumPicker
+            selected={task.sectionId ?? ""}
+            options={[
+              { value: "", label: "Unsectioned" },
+              ...sections.map((s) => ({ value: s.id, label: s.name })),
+            ]}
+            onChange={(v) => patch({ sectionId: v || null })}
           >
-            <option value="">Unsectioned</option>
-            {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
+            {({ onClick, ref }) => (
+              <button
+                ref={ref}
+                onClick={onClick}
+                type="button"
+                className="task-panel-control"
+                style={{ ...panelControlStyle, textAlign: "left" }}
+              >
+                {sections.find((s) => s.id === task.sectionId)?.name ?? <span style={{ color: "var(--color-text-tertiary)" }}>Unsectioned</span>}
+              </button>
+            )}
+          </EnumPicker>
 
           <PanelLabel topAlign>Repeats</PanelLabel>
           <div style={{ padding: "4px 0" }}>
@@ -1782,6 +1812,20 @@ function userInitial(label: string): string {
   return (label || "?").trim().slice(0, 1).toUpperCase();
 }
 
+function formatPanelDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return iso;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (isNaN(d.getTime())) return iso;
+  const today = new Date();
+  return d.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: d.getFullYear() === today.getFullYear() ? undefined : "numeric",
+  });
+}
+
 function OwnerSelect({
   value, users, onChange,
 }: {
@@ -1791,49 +1835,43 @@ function OwnerSelect({
 }) {
   const owner = users.find((u) => u.email === value) ?? null;
   return (
-    <label
-      className="task-panel-control"
-      style={{
-        ...panelControlStyle,
-        display: "inline-flex", alignItems: "center", gap: 8,
-        position: "relative",
-      }}
-    >
-      {owner ? (
-        <>
-          <span style={{
-            width: 22, height: 22, borderRadius: "50%",
-            background: owner.color, color: "white",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 11, fontWeight: 700, flexShrink: 0,
-          }}>{userInitial(owner.label)}</span>
-          <span style={{ fontSize: 14 }}>{owner.label}</span>
-        </>
-      ) : (
-        <>
-          <span style={{
-            width: 22, height: 22, borderRadius: "50%",
-            border: "1px dashed var(--color-border)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            color: "var(--color-text-tertiary)", flexShrink: 0,
-            fontSize: 13,
-          }}>+</span>
-          <span style={{ fontSize: 14, color: "var(--color-text-tertiary)" }}>Unassigned</span>
-        </>
+    <UserPicker selected={value} users={users} onChange={onChange}>
+      {({ onClick, ref }) => (
+        <button
+          ref={ref}
+          onClick={onClick}
+          type="button"
+          className="task-panel-control"
+          style={{
+            ...panelControlStyle,
+            display: "inline-flex", alignItems: "center", gap: 8,
+          }}
+        >
+          {owner ? (
+            <>
+              <span style={{
+                width: 22, height: 22, borderRadius: "50%",
+                background: owner.color, color: "white",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 11, fontWeight: 700, flexShrink: 0,
+              }}>{userInitial(owner.label)}</span>
+              <span style={{ fontSize: 14 }}>{owner.label}</span>
+            </>
+          ) : (
+            <>
+              <span style={{
+                width: 22, height: 22, borderRadius: "50%",
+                border: "1px dashed var(--color-border)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: "var(--color-text-tertiary)", flexShrink: 0,
+                fontSize: 13,
+              }}>+</span>
+              <span style={{ fontSize: 14, color: "var(--color-text-tertiary)" }}>Unassigned</span>
+            </>
+          )}
+        </button>
       )}
-      <select
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value || null)}
-        style={{
-          position: "absolute", inset: 0,
-          opacity: 0, cursor: "pointer", border: "none", background: "transparent",
-          fontFamily: "inherit",
-        }}
-      >
-        <option value="">Unassigned</option>
-        {users.map((u) => <option key={u.email} value={u.email}>{u.label}</option>)}
-      </select>
-    </label>
+    </UserPicker>
   );
 }
 
@@ -1845,39 +1883,39 @@ function PillSelect({
   onChange: (next: string) => void;
 }) {
   const current = options.find((o) => o.value === value) ?? options[0];
+  const enumOptions = options.map((o) => ({
+    value: o.value,
+    label: o.label,
+    color: o.bg === "transparent" ? undefined : o.color,
+  }));
   return (
-    <label
-      className="task-panel-control"
-      style={{
-        ...panelControlStyle,
-        display: "inline-flex", alignItems: "center", gap: 6,
-        position: "relative",
-        padding: "4px 8px",
-      }}
-    >
-      <span
-        style={{
-          display: "inline-flex", alignItems: "center",
-          padding: "3px 10px", borderRadius: 999,
-          fontSize: 12, fontWeight: 600,
-          background: current.bg, color: current.color,
-          border: current.bg === "transparent" ? "1px solid var(--color-border)" : "none",
-        }}
-      >
-        {current.label}
-      </span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          position: "absolute", inset: 0,
-          opacity: 0, cursor: "pointer", border: "none", background: "transparent",
-          fontFamily: "inherit",
-        }}
-      >
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </label>
+    <EnumPicker selected={value} options={enumOptions} onChange={onChange}>
+      {({ onClick, ref }) => (
+        <button
+          ref={ref}
+          onClick={onClick}
+          type="button"
+          className="task-panel-control"
+          style={{
+            ...panelControlStyle,
+            display: "inline-flex", alignItems: "center", gap: 6,
+            padding: "4px 8px",
+          }}
+        >
+          <span
+            style={{
+              display: "inline-flex", alignItems: "center",
+              padding: "3px 10px", borderRadius: 999,
+              fontSize: 12, fontWeight: 600,
+              background: current.bg, color: current.color,
+              border: current.bg === "transparent" ? "1px solid var(--color-border)" : "none",
+            }}
+          >
+            {current.label}
+          </span>
+        </button>
+      )}
+    </EnumPicker>
   );
 }
 
