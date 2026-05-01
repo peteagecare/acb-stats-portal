@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 type NavItem = { href: string; label: string; icon: React.ReactNode };
@@ -189,6 +189,9 @@ const KNOWN_USERS = [
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const dashboardView = searchParams.get("view") === "team" ? "team" : "mine";
+  const onTaskDashboard = pathname === "/workspace";
   const [mobileOpen, setMobileOpen] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
@@ -369,10 +372,24 @@ export default function Sidebar() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 2, marginLeft: 16, marginTop: 2, marginBottom: 2 }}>
                   <SidebarLink
                     item={{ href: "/workspace", label: "Task Dashboard", icon: Icon.dashboard }}
-                    active={pathname === "/workspace"}
+                    active={onTaskDashboard}
                     onClick={() => setMobileOpen(false)}
                     subdued
                   />
+                  {onTaskDashboard && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 1, marginLeft: 16, marginBottom: 2 }}>
+                      <Link
+                        href="/workspace"
+                        onClick={() => setMobileOpen(false)}
+                        style={dashboardSubLinkStyle(dashboardView === "mine")}
+                      >My tasks</Link>
+                      <Link
+                        href="/workspace?view=team"
+                        onClick={() => setMobileOpen(false)}
+                        style={dashboardSubLinkStyle(dashboardView === "team")}
+                      >Team tasks</Link>
+                    </div>
+                  )}
                   {companies.map((c) => {
                     const isOpen = expanded.has(c.id);
                     const isActiveCompany = pathname === `/workspace/${c.id}` || pathname.startsWith(`/workspace/${c.id}/`);
@@ -567,6 +584,20 @@ export default function Sidebar() {
       </aside>
     </>
   );
+}
+
+function dashboardSubLinkStyle(active: boolean): React.CSSProperties {
+  return {
+    display: "block",
+    padding: "4px 10px",
+    borderRadius: 7,
+    fontSize: 11,
+    color: active ? "var(--color-accent)" : "var(--color-text-tertiary)",
+    background: active ? "rgba(0,113,227,0.08)" : "transparent",
+    fontWeight: active ? 600 : 400,
+    textDecoration: "none",
+    whiteSpace: "nowrap",
+  };
 }
 
 function SidebarLink({ item, active, onClick, subdued }: { item: NavItem; active: boolean; onClick: () => void; subdued?: boolean }) {

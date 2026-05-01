@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Avatar,
   DirectoryUser,
@@ -144,7 +144,7 @@ export default function WorkspacePage() {
             />
           )}
           <CompaniesGrid companies={companies} onNew={() => setCreatingCompany(true)} />
-          <MyTasksBuckets data={data} users={users} />
+          <TasksTabs data={data} users={users} />
           <AssignedByMe data={data} users={users} />
           <PeopleWidget tasks={data.tasks} users={users} />
         </div>
@@ -451,9 +451,108 @@ function endDateMs(iso?: string | null) {
   return new Date(y, m - 1, d).getTime();
 }
 
-function MyTasksBuckets({ data, users }: { data: { me: string; tasks: DashboardTask[] }; users: DirectoryUser[] }) {
+function TasksTabs({ data, users }: { data: { me: string; tasks: DashboardTask[] }; users: DirectoryUser[] }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const view = searchParams.get("view") === "team" ? "team" : "mine";
+  const [filterAssignee, setFilterAssignee] = useState<string>("");
+
+  function setView(v: "mine" | "team") {
+    const sp = new URLSearchParams(searchParams.toString());
+    if (v === "mine") sp.delete("view");
+    else sp.set("view", "team");
+    router.replace(`/workspace${sp.toString() ? "?" + sp.toString() : ""}`, { scroll: false });
+  }
+
+  const teammates = useMemo(() => users.filter((u) => u.email !== data.me), [users, data.me]);
+
+  const predicate = useMemo(() => {
+    if (view === "mine") {
+      return (t: DashboardTask) => t.ownerEmail === data.me || t.collaborators.includes(data.me);
+    }
+    return (t: DashboardTask) => {
+      if (!t.ownerEmail || t.ownerEmail === data.me) return false;
+      if (filterAssignee && t.ownerEmail !== filterAssignee) return false;
+      return true;
+    };
+  }, [view, data.me, filterAssignee]);
+
+  return (
+    <section>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 12, borderBottom: "1px solid var(--color-border)" }}>
+        <TasksTab label="My tasks" active={view === "mine"} onClick={() => setView("mine")} />
+        <TasksTab label="Team tasks" active={view === "team"} onClick={() => setView("team")} />
+      </div>
+
+      {view === "team" && teammates.length > 0 && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+          <PersonChip label="Everyone" active={filterAssignee === ""} onClick={() => setFilterAssignee("")} />
+          {teammates.map((u) => (
+            <PersonChip
+              key={u.email}
+              label={u.label}
+              color={u.color}
+              active={filterAssignee === u.email}
+              onClick={() => setFilterAssignee(u.email)}
+            />
+          ))}
+        </div>
+      )}
+
+      <TasksBuckets data={data} users={users} predicate={predicate} />
+    </section>
+  );
+}
+
+function TasksTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: "10px 14px",
+        background: "transparent",
+        border: "none",
+        borderBottom: active ? "2px solid var(--color-accent)" : "2px solid transparent",
+        color: active ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+        fontWeight: active ? 600 : 500,
+        fontSize: 13,
+        cursor: "pointer",
+        fontFamily: "inherit",
+        marginBottom: -1,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function PersonChip({ label, color, active, onClick }: { label: string; color?: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 6,
+        padding: "5px 11px", borderRadius: 999,
+        border: `1px solid ${active ? "var(--color-accent)" : "var(--color-border)"}`,
+        background: active ? "rgba(0,113,227,0.08)" : "transparent",
+        color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
+        fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
+      }}
+    >
+      {color && <span style={{ width: 7, height: 7, borderRadius: "50%", background: color }} />}
+      {label}
+    </button>
+  );
+}
+
+function TasksBuckets({
+  data, users, predicate,
+}: {
+  data: { me: string; tasks: DashboardTask[] };
+  users: DirectoryUser[];
+  predicate: (t: DashboardTask) => boolean;
+}) {
   const buckets = useMemo<Record<BucketKey, DashboardTask[]>>(() => {
-    const me = data.me;
     const todayEndMs = todayEnd().getTime();
     const thisWeekEndMs = endOfWeek(new Date()).getTime();
     const nextWeekStartMs = thisWeekEndMs + 1;
@@ -462,7 +561,7 @@ function MyTasksBuckets({ data, users }: { data: { me: string; tasks: DashboardT
     const out: Record<BucketKey, DashboardTask[]> = { today: [], thisWeek: [], nextWeek: [], sometime: [], completed: [] };
     for (const t of data.tasks) {
       if (t.parentTaskId) continue;
-      if (t.ownerEmail !== me && !t.collaborators.includes(me)) continue;
+      if (!predicate(t)) continue;
       if (t.completed) { out.completed.push(t); continue; }
       const due = endDateMs(t.endDate);
       if (due == null) out.sometime.push(t);
@@ -486,26 +585,21 @@ function MyTasksBuckets({ data, users }: { data: { me: string; tasks: DashboardT
       return db - da;
     });
     return out;
-  }, [data]);
+  }, [data, predicate]);
 
   return (
-    <section>
-      <h2 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 10px", textTransform: "uppercase", letterSpacing: 0.5, color: "var(--color-text-secondary)" }}>
-        My tasks
-      </h2>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {BUCKETS.map((b) => (
-          <BucketCard
-            key={b.key}
-            label={b.label}
-            tasks={buckets[b.key]}
-            users={users}
-            emptyHint={b.emptyHint}
-            variant={b.key}
-          />
-        ))}
-      </div>
-    </section>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {BUCKETS.map((b) => (
+        <BucketCard
+          key={b.key}
+          label={b.label}
+          tasks={buckets[b.key]}
+          users={users}
+          emptyHint={b.emptyHint}
+          variant={b.key}
+        />
+      ))}
+    </div>
   );
 }
 
