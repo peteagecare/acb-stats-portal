@@ -170,3 +170,15 @@
   color: var(--color-text-tertiary);
   text-decoration: line-through;
 }
+
+.note-mention {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  margin: 0 1px;
+  border-radius: 6px;
+  background: rgba(0, 113, 227, 0.1);
+  color: var(--color-accent);
+  font-weight: 500;
+  font-size: 0.95em;
+}

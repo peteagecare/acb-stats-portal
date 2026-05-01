@@ -188,6 +188,10 @@ export default function SettingsPage() {
         <TagsManager />
       </Section>
 
+      <Section title="Notifications" description="Choose what should ping you in-app and by email when other people @-mention you in meeting notes.">
+        <NotificationPrefs />
+      </Section>
+
       <div style={{ marginTop: 28, fontSize: 12, color: "var(--color-text-tertiary)" }}>
         Manage people who can access this portal on the{" "}
         <a href="/users" style={{ color: "var(--color-accent)", textDecoration: "none" }}>
@@ -196,6 +200,93 @@ export default function SettingsPage() {
         page.
       </div>
     </div>
+  );
+}
+
+interface NotifPrefs {
+  mentionsEmail: boolean;
+  mentionsInApp: boolean;
+  taskAssignEmail: boolean;
+  taskAssignInApp: boolean;
+}
+
+function NotificationPrefs() {
+  const [prefs, setPrefs] = useState<NotifPrefs | null>(null);
+
+  useEffect(() => {
+    fetch("/api/notification-prefs", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: NotifPrefs | null) => {
+        if (j) {
+          setPrefs({
+            mentionsEmail: j.mentionsEmail ?? true,
+            mentionsInApp: j.mentionsInApp ?? true,
+            taskAssignEmail: j.taskAssignEmail ?? true,
+            taskAssignInApp: j.taskAssignInApp ?? true,
+          });
+        }
+      });
+  }, []);
+
+  async function update(patch: Partial<NotifPrefs>) {
+    setPrefs((p) => (p ? { ...p, ...patch } : p));
+    await fetch("/api/notification-prefs", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+  }
+
+  if (!prefs) return <div style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>Loading…</div>;
+
+  const Row = ({ label, hint, inAppKey, emailKey }: {
+    label: string; hint: string;
+    inAppKey: keyof NotifPrefs; emailKey: keyof NotifPrefs;
+  }) => (
+    <div style={{
+      display: "grid", gridTemplateColumns: "1fr auto auto",
+      alignItems: "center", gap: 16,
+      padding: "10px 0",
+      borderTop: "1px solid var(--color-border)",
+    }}>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-primary)" }}>{label}</div>
+        <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 2 }}>{hint}</div>
+      </div>
+      <Toggle label="In-app" checked={prefs[inAppKey]} onChange={(v) => update({ [inAppKey]: v } as Partial<NotifPrefs>)} />
+      <Toggle label="Email" checked={prefs[emailKey]} onChange={(v) => update({ [emailKey]: v } as Partial<NotifPrefs>)} />
+    </div>
+  );
+
+  return (
+    <div>
+      <Row
+        label="@mentions"
+        hint="Someone tags you in a meeting note."
+        inAppKey="mentionsInApp"
+        emailKey="mentionsEmail"
+      />
+      <Row
+        label="Task assignments"
+        hint="A to-do in a meeting note gets assigned to you."
+        inAppKey="taskAssignInApp"
+        emailKey="taskAssignEmail"
+      />
+    </div>
+  );
+}
+
+function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12, color: "var(--color-text-secondary)" }}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        style={{ width: 16, height: 16, cursor: "pointer" }}
+      />
+      {label}
+    </label>
   );
 }
 

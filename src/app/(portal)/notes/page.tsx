@@ -8,6 +8,7 @@ import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import { createSlashCommand } from "./_slash";
 import { ResizableImageExtension } from "./_image";
+import { UserMention } from "./_mention";
 import { TagFilterChips, TagPicker, TagPillList, useTags } from "../workspace/_tags";
 
 const LinkedTaskItem = TaskItem.extend({
@@ -613,7 +614,8 @@ function NoteEditor({
       ResizableImageExtension,
       TaskList,
       LinkedTaskItem.configure({ nested: true }),
-      Placeholder.configure({ placeholder: "Type ‘/’ for blocks · start your meeting notes…" }),
+      UserMention,
+      Placeholder.configure({ placeholder: "Type ‘/’ for blocks · ‘@’ to mention · start your meeting notes…" }),
       createSlashCommand({
         onPickTodo: async (taskTitle) => {
           const res = await fetch(`/api/notes/${note.id}/tasks`, {

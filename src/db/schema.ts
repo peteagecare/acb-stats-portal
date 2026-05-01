@@ -236,6 +236,38 @@ export const noteTags = pgTable(
   (t) => [primaryKey({ columns: [t.noteId, t.tagId] })],
 );
 
+export const noteMentions = pgTable(
+  "note_mentions",
+  {
+    noteId: uuid("note_id")
+      .notNull()
+      .references(() => meetingNotes.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.noteId, t.email] })],
+);
+
+export const notificationPrefs = pgTable("notification_prefs", {
+  userEmail: text("user_email").primaryKey(),
+  mentionsEmail: boolean("mentions_email").notNull().default(true),
+  mentionsInApp: boolean("mentions_in_app").notNull().default(true),
+  taskAssignEmail: boolean("task_assign_email").notNull().default(true),
+  taskAssignInApp: boolean("task_assign_in_app").notNull().default(true),
+});
+
+export const notifications = pgTable("notifications", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  recipientEmail: text("recipient_email").notNull(),
+  kind: text("kind").notNull(),
+  noteId: uuid("note_id").references(() => meetingNotes.id, { onDelete: "cascade" }),
+  taskId: uuid("task_id"),
+  actorEmail: text("actor_email").notNull(),
+  payload: jsonb("payload"),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const projectLinks = pgTable("project_links", {
   id: uuid("id").defaultRandom().primaryKey(),
   projectId: uuid("project_id")

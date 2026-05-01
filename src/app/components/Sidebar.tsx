@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import NotificationsBell from "./NotificationsBell";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -339,26 +340,30 @@ export default function Sidebar() {
           overflowY: "auto",
         }}
       >
-        <Link
-          href="/"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "4px 10px 14px",
-            textDecoration: "none",
-            color: "var(--color-text-primary)",
-          }}
-          onClick={() => setMobileOpen(false)}
-        >
-          <div style={{ width: 28, height: 28, borderRadius: 8, background: "var(--color-accent)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700, fontSize: 13 }}>
-            A
-          </div>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.1 }}>Age Care</div>
-            <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>Marketing Hub</div>
-          </div>
-        </Link>
+        <div style={{ display: "flex", alignItems: "center", padding: "4px 6px 14px 10px", gap: 8 }}>
+          <Link
+            href="/"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flex: 1,
+              minWidth: 0,
+              textDecoration: "none",
+              color: "var(--color-text-primary)",
+            }}
+            onClick={() => setMobileOpen(false)}
+          >
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: "var(--color-accent)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
+              A
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.1 }}>Age Care</div>
+              <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>Marketing Hub</div>
+            </div>
+          </Link>
+          <NotificationsBell />
+        </div>
 
         <nav style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 4 }}>
           {NAV.map((item) => (
