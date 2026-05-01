@@ -170,6 +170,8 @@ function UnsortedNotes({
   companies: CompanyWithProjects[];
   onChanged: () => void;
 }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = tasks.find((t) => t.id === selectedId) ?? null;
   async function assign(task: UnsortedNoteTask, projectId: string) {
     const res = await fetch(`/api/notes/${task.noteId}/tasks/${task.id}/promote`, {
       method: "POST",
@@ -231,15 +233,252 @@ function UnsortedNotes({
             onComplete={() => complete(t)}
             onDelete={() => remove(t)}
             onSetField={(patch) => setField(t, patch)}
+            onOpen={() => setSelectedId(t.id)}
           />
         ))}
       </div>
+
+      {selected && (
+        <UnsortedTaskPanel
+          task={selected}
+          users={users}
+          companies={companies}
+          onClose={() => setSelectedId(null)}
+          onAssign={(projectId) => assign(selected, projectId)}
+          onComplete={() => complete(selected)}
+          onDelete={() => { remove(selected); setSelectedId(null); }}
+          onSetField={(patch) => setField(selected, patch)}
+          onSetTitle={async (title) => {
+            const res = await fetch(`/api/notes/${selected.noteId}/tasks/${selected.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ title }),
+            });
+            if (res.ok) onChanged();
+          }}
+        />
+      )}
     </section>
   );
 }
 
+function UnsortedTaskPanel({
+  task, users, companies, onClose, onAssign, onComplete, onDelete, onSetField, onSetTitle,
+}: {
+  task: UnsortedNoteTask;
+  users: DirectoryUser[];
+  companies: CompanyWithProjects[];
+  onClose: () => void;
+  onAssign: (projectId: string) => void;
+  onComplete: () => void;
+  onDelete: () => void;
+  onSetField: (patch: { ownerEmail?: string | null; endDate?: string | null }) => void;
+  onSetTitle: (title: string) => Promise<void>;
+}) {
+  const [title, setTitle] = useState(task.title);
+  useEffect(() => { setTitle(task.title); }, [task.id, task.title]);
+  const owner = users.find((u) => u.email === task.ownerEmail) ?? null;
+
+  async function commitTitle() {
+    const v = title.trim();
+    if (!v || v === task.title) { setTitle(task.title); return; }
+    await onSetTitle(v);
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.2)", zIndex: 60,
+        display: "flex", justifyContent: "flex-end",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 480, height: "100%",
+          background: "white", boxShadow: "var(--shadow-modal)",
+          padding: "20px 24px 24px", overflowY: "auto",
+          animation: "slideIn 220ms var(--ease-apple)",
+          display: "flex", flexDirection: "column",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
+          <button
+            onClick={() => { onComplete(); onClose(); }}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "5px 12px", borderRadius: 999,
+              background: task.completed ? "#D1FAE5" : "transparent",
+              border: `1px solid ${task.completed ? "#10B981" : "var(--color-border)"}`,
+              color: task.completed ? "#065F46" : "var(--color-text-secondary)",
+              fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><polyline points="4,12 9,17 20,6" /></svg>
+            {task.completed ? "Completed" : "Mark complete"}
+          </button>
+          <button
+            onClick={onClose}
+            style={{
+              marginLeft: "auto",
+              background: "transparent", border: "none", cursor: "pointer",
+              padding: 6, color: "var(--color-text-secondary)", display: "flex",
+            }}
+            aria-label="Close"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={commitTitle}
+          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+          style={{
+            width: "100%", fontSize: 22, fontWeight: 600,
+            border: "none", outline: "none", padding: "4px 0 12px",
+            color: "var(--color-text-primary)", fontFamily: "inherit",
+            background: "transparent",
+          }}
+        />
+
+        <div style={{
+          fontSize: 12, color: "var(--color-text-tertiary)",
+          padding: "0 0 14px",
+          borderBottom: "1px solid var(--color-border)",
+          marginBottom: 14,
+        }}>
+          From{" "}
+          <Link href={`/notes?id=${task.noteId}`} style={{ color: "var(--color-accent)", textDecoration: "none" }}>
+            {task.noteTitle || "Untitled meeting"}
+          </Link>
+          {task.noteMeetingDate && ` · ${fmtDate(task.noteMeetingDate)}`}
+        </div>
+
+        <div style={{
+          display: "grid", gridTemplateColumns: "120px 1fr",
+          rowGap: 4, columnGap: 12, alignItems: "center",
+          fontSize: 13,
+        }}>
+          <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>Assignee</span>
+          <UserPicker
+            selected={task.ownerEmail}
+            users={users}
+            onChange={(v) => onSetField({ ownerEmail: v })}
+          >
+            {({ onClick, ref }) => (
+              <button
+                ref={ref}
+                onClick={onClick}
+                type="button"
+                className="task-panel-control"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 8,
+                  padding: "6px 8px", borderRadius: 8, border: "1px solid transparent",
+                  background: "transparent", cursor: "pointer", fontFamily: "inherit",
+                  width: "100%", textAlign: "left",
+                }}
+              >
+                {owner ? (
+                  <>
+                    <span style={{
+                      width: 22, height: 22, borderRadius: "50%",
+                      background: owner.color, color: "white",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 11, fontWeight: 700,
+                    }}>{(owner.label || "?").trim().slice(0, 1).toUpperCase()}</span>
+                    <span style={{ fontSize: 14 }}>{owner.label}</span>
+                  </>
+                ) : (
+                  <>
+                    <span style={{
+                      width: 22, height: 22, borderRadius: "50%",
+                      border: "1px dashed var(--color-border)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--color-text-tertiary)", fontSize: 13,
+                    }}>+</span>
+                    <span style={{ fontSize: 14, color: "var(--color-text-tertiary)" }}>Unassigned</span>
+                  </>
+                )}
+              </button>
+            )}
+          </UserPicker>
+
+          <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>Due date</span>
+          <DatePicker
+            value={task.endDate}
+            onChange={(iso) => onSetField({ endDate: iso })}
+          >
+            {({ onClick, ref }) => (
+              <button
+                ref={ref}
+                onClick={onClick}
+                type="button"
+                className="task-panel-control"
+                style={{
+                  padding: "6px 8px", borderRadius: 8, border: "1px solid transparent",
+                  background: "transparent", cursor: "pointer", fontFamily: "inherit",
+                  width: "100%", textAlign: "left", fontSize: 14,
+                  color: task.endDate ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
+                }}
+              >
+                {task.endDate ? fmtDate(task.endDate) : "—"}
+              </button>
+            )}
+          </DatePicker>
+
+          <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>Project</span>
+          <ProjectPicker
+            selected={null}
+            companies={companies}
+            onChange={(v) => { if (v) { onAssign(v); onClose(); } }}
+          >
+            {({ onClick, ref }) => (
+              <button
+                ref={ref}
+                onClick={onClick}
+                type="button"
+                className="task-panel-control"
+                style={{
+                  padding: "6px 8px", borderRadius: 8, border: "1px solid transparent",
+                  background: "transparent", cursor: "pointer", fontFamily: "inherit",
+                  width: "100%", textAlign: "left", fontSize: 14,
+                  color: "var(--color-accent)",
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                Add to project
+              </button>
+            )}
+          </ProjectPicker>
+        </div>
+
+        <div style={{ flex: 1 }} />
+
+        <button
+          onClick={onDelete}
+          style={{
+            marginTop: 18, padding: "8px 14px", borderRadius: 10,
+            background: "transparent", border: "1px solid #FCA5A5",
+            color: "#B91C1C", fontSize: 13, fontWeight: 500,
+            cursor: "pointer", fontFamily: "inherit", alignSelf: "flex-start",
+          }}
+        >
+          Delete task
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function UnsortedRow({
-  task, users, companies, onAssign, onComplete, onDelete, onSetField,
+  task, users, companies, onAssign, onComplete, onDelete, onSetField, onOpen,
 }: {
   task: UnsortedNoteTask;
   users: DirectoryUser[];
@@ -248,6 +487,7 @@ function UnsortedRow({
   onComplete: () => void;
   onDelete: () => void;
   onSetField: (patch: { ownerEmail?: string | null; endDate?: string | null }) => void;
+  onOpen: () => void;
 }) {
   const owner = users.find((u) => u.email === task.ownerEmail) ?? null;
   return (
@@ -267,17 +507,36 @@ function UnsortedRow({
           marginRight: 6,
         }}
       />
-      <div style={{ flex: 1, minWidth: 200 }}>
+      <button
+        onClick={onOpen}
+        type="button"
+        title="Open task"
+        style={{
+          flex: 1, minWidth: 200,
+          padding: "4px 6px", borderRadius: 6,
+          border: "none", background: "transparent",
+          textAlign: "left", cursor: "pointer", fontFamily: "inherit",
+          transition: "background 100ms var(--ease-apple)",
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.background = "rgba(0,0,0,0.035)"}
+        onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+      >
         <div style={{ fontSize: 14, color: "var(--color-text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {task.title}
         </div>
         <div style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
-          From: <Link href="/notes" style={{ color: "inherit", textDecoration: "underline" }}>
-            {task.noteTitle || "Untitled meeting"}
-          </Link>
+          From:{" "}
+          <span
+            onClick={(e) => e.stopPropagation()}
+            style={{ display: "inline" }}
+          >
+            <Link href={`/notes?id=${task.noteId}`} style={{ color: "inherit", textDecoration: "underline" }}>
+              {task.noteTitle || "Untitled meeting"}
+            </Link>
+          </span>
           {task.noteMeetingDate && ` · ${fmtDate(task.noteMeetingDate)}`}
         </div>
-      </div>
+      </button>
 
       {/* Assignee — avatar pill */}
       <UserPicker
