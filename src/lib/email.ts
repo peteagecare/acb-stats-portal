@@ -98,6 +98,48 @@ export async function sendMentionEmail(opts: {
   }).catch(() => {});
 }
 
+export async function sendTaskAssignedEmail(opts: {
+  to: string;
+  actorLabel: string;
+  taskTitle: string;
+  projectName: string;
+  companyName: string;
+  taskUrl: string;
+}): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.LOGIN_EMAIL_FROM ?? "Age Care Marketing Hub <onboarding@resend.dev>";
+  if (!apiKey) return;
+
+  const subject = `${opts.actorLabel} assigned you a task: "${opts.taskTitle}"`;
+  const breadcrumb = `${opts.companyName} › ${opts.projectName}`;
+  const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#0F172A">
+      <h2 style="margin:0 0 6px;font-size:18px">${escape(subject)}</h2>
+      <div style="margin:0 0 16px;font-size:12px;color:#64748B">${escape(breadcrumb)}</div>
+      <p style="margin:0 0 20px">
+        <a href="${escape(opts.taskUrl)}"
+           style="display:inline-block;background:#2563eb;color:#fff;
+                  text-decoration:none;font-weight:600;padding:10px 20px;
+                  border-radius:10px;font-size:14px">
+          Open task
+        </a>
+      </p>
+      <p style="margin:0;font-size:12px;color:#94A3B8">
+        Marketing Hub · You're receiving this because you were assigned a task.
+      </p>
+    </div>
+  `;
+
+  await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ from, to: opts.to, subject, html }),
+  }).catch(() => {});
+}
+
 function escape(s: string): string {
   return s
     .replace(/&/g, "&amp;")

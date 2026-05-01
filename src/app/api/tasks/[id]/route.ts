@@ -10,6 +10,7 @@ import {
   parseISODate,
   validateRecurrenceRule,
 } from "@/lib/recurrence";
+import { notifyWorkspaceTaskAssigned } from "@/lib/notify-task";
 
 const DONE_SECTION_NAMES = new Set(["done", "completed", "finished", "complete"]);
 
@@ -220,6 +221,24 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   }
 
   const [updated] = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);
+
+  // If the owner just changed to a new person, notify them.
+  if (
+    updated &&
+    body.ownerEmail !== undefined &&
+    updated.ownerEmail &&
+    updated.ownerEmail !== task.ownerEmail
+  ) {
+    notifyWorkspaceTaskAssigned({
+      taskId: updated.id,
+      taskTitle: updated.title,
+      projectId: updated.projectId,
+      recipientEmail: updated.ownerEmail,
+      actorEmail: user.email,
+      origin: new URL(request.url).origin,
+    }).catch(() => {});
+  }
+
   return Response.json(updated);
 }
 

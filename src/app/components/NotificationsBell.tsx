@@ -11,7 +11,16 @@ interface Notification {
   noteId: string | null;
   taskId: string | null;
   actorEmail: string;
-  payload: { noteTitle?: string; actorLabel?: string; excerpt?: string | null } | null;
+  payload: {
+    noteTitle?: string;
+    actorLabel?: string;
+    excerpt?: string | null;
+    taskTitle?: string;
+    projectId?: string;
+    projectName?: string;
+    companyId?: string;
+    companyName?: string;
+  } | null;
   readAt: string | null;
   createdAt: string;
 }
@@ -168,13 +177,29 @@ function clampLeft(x: number, width: number): number {
 }
 
 function NotifRow({ n, onClose }: { n: Notification; onClose: () => void }) {
-  const isAssign = n.kind === "task_assigned";
   const actor = n.payload?.actorLabel ?? n.actorEmail;
-  const noteTitle = n.payload?.noteTitle ?? "a meeting note";
   const excerpt = n.payload?.excerpt ?? null;
-  const text = isAssign
-    ? `${actor} assigned you a task in "${noteTitle}"`
-    : `${actor} mentioned you in "${noteTitle}"`;
+
+  let text: string;
+  let href: string | null = null;
+  if (n.kind === "workspace_task_assigned") {
+    const taskTitle = n.payload?.taskTitle ?? "a task";
+    const projectName = n.payload?.projectName;
+    text = projectName
+      ? `${actor} assigned you "${taskTitle}" in ${projectName}`
+      : `${actor} assigned you "${taskTitle}"`;
+    if (n.payload?.companyId && n.payload?.projectId && n.taskId) {
+      href = `/workspace/${n.payload.companyId}/${n.payload.projectId}?task=${n.taskId}`;
+    }
+  } else if (n.kind === "task_assigned") {
+    const noteTitle = n.payload?.noteTitle ?? "a meeting note";
+    text = `${actor} assigned you a task in "${noteTitle}"`;
+    if (n.noteId) href = `/notes?id=${n.noteId}&mention=${encodeURIComponent(n.recipientEmail)}`;
+  } else {
+    const noteTitle = n.payload?.noteTitle ?? "a meeting note";
+    text = `${actor} mentioned you in "${noteTitle}"`;
+    if (n.noteId) href = `/notes?id=${n.noteId}&mention=${encodeURIComponent(n.recipientEmail)}`;
+  }
 
   const inner = (
     <div style={{
@@ -212,8 +237,7 @@ function NotifRow({ n, onClose }: { n: Notification; onClose: () => void }) {
     </div>
   );
 
-  if (n.noteId) {
-    const href = `/notes?id=${n.noteId}&mention=${encodeURIComponent(n.recipientEmail)}`;
+  if (href) {
     return (
       <Link href={href} onClick={onClose} style={{ textDecoration: "none", color: "inherit", display: "block" }}>
         {inner}

@@ -208,6 +208,8 @@ interface NotifPrefs {
   mentionsInApp: boolean;
   taskAssignEmail: boolean;
   taskAssignInApp: boolean;
+  workspaceTaskAssignEmail: boolean;
+  workspaceTaskAssignInApp: boolean;
 }
 
 function NotificationPrefs() {
@@ -223,6 +225,8 @@ function NotificationPrefs() {
             mentionsInApp: j.mentionsInApp ?? true,
             taskAssignEmail: j.taskAssignEmail ?? true,
             taskAssignInApp: j.taskAssignInApp ?? true,
+            workspaceTaskAssignEmail: j.workspaceTaskAssignEmail ?? true,
+            workspaceTaskAssignInApp: j.workspaceTaskAssignInApp ?? true,
           });
         }
       });
@@ -271,6 +275,12 @@ function NotificationPrefs() {
         hint="A to-do in a meeting note gets assigned to you."
         inAppKey="taskAssignInApp"
         emailKey="taskAssignEmail"
+      />
+      <Row
+        label="Workspace task assignments"
+        hint="A workspace task is assigned to you (created by someone else, or re-assigned)."
+        inAppKey="workspaceTaskAssignInApp"
+        emailKey="workspaceTaskAssignEmail"
       />
     </div>
   );

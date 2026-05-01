@@ -4,6 +4,7 @@ import { db } from "@/db/client";
 import { tasks, taskCollaborators, taskTags } from "@/db/schema";
 import { requireUser, canSeeProject } from "@/lib/workspace-auth";
 import { validateRecurrenceRule } from "@/lib/recurrence";
+import { notifyWorkspaceTaskAssigned } from "@/lib/notify-task";
 
 export async function POST(request: NextRequest) {
   const user = requireUser(request);
@@ -90,6 +91,17 @@ export async function POST(request: NextRequest) {
       .filter((id): id is string => typeof id === "string" && id.length > 0)
       .map((tagId) => ({ taskId: created.id, tagId }));
     if (rows.length) await db.insert(taskTags).values(rows).onConflictDoNothing();
+  }
+
+  if (created.ownerEmail) {
+    notifyWorkspaceTaskAssigned({
+      taskId: created.id,
+      taskTitle: created.title,
+      projectId: created.projectId,
+      recipientEmail: created.ownerEmail,
+      actorEmail: user.email,
+      origin: new URL(request.url).origin,
+    }).catch(() => {});
   }
 
   return Response.json(created);

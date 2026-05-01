@@ -254,6 +254,8 @@ export const notificationPrefs = pgTable("notification_prefs", {
   mentionsInApp: boolean("mentions_in_app").notNull().default(true),
   taskAssignEmail: boolean("task_assign_email").notNull().default(true),
   taskAssignInApp: boolean("task_assign_in_app").notNull().default(true),
+  workspaceTaskAssignEmail: boolean("workspace_task_assign_email").notNull().default(true),
+  workspaceTaskAssignInApp: boolean("workspace_task_assign_in_app").notNull().default(true),
 });
 
 export const notifications = pgTable("notifications", {

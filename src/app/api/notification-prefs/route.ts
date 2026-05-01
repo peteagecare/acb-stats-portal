@@ -9,6 +9,8 @@ const DEFAULTS = {
   mentionsInApp: true,
   taskAssignEmail: true,
   taskAssignInApp: true,
+  workspaceTaskAssignEmail: true,
+  workspaceTaskAssignInApp: true,
 };
 
 export async function GET(request: NextRequest) {
