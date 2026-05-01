@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { eq, desc } from "drizzle-orm";
 import { db } from "@/db/client";
-import { tasks, taskCollaborators } from "@/db/schema";
+import { tasks, taskCollaborators, taskTags } from "@/db/schema";
 import { requireUser, canSeeProject } from "@/lib/workspace-auth";
 import { validateRecurrenceRule } from "@/lib/recurrence";
 
@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
     expectedOutcome?: string;
     recurrence?: unknown;
     collaborators?: string[];
+    tagIds?: string[];
   };
   let body: Body;
   try {
@@ -82,6 +83,13 @@ export async function POST(request: NextRequest) {
       .map((userEmail) => ({ taskId: created.id, userEmail }));
     if (rows.length)
       await db.insert(taskCollaborators).values(rows).onConflictDoNothing();
+  }
+
+  if (Array.isArray(body.tagIds) && body.tagIds.length) {
+    const rows = body.tagIds
+      .filter((id): id is string => typeof id === "string" && id.length > 0)
+      .map((tagId) => ({ taskId: created.id, tagId }));
+    if (rows.length) await db.insert(taskTags).values(rows).onConflictDoNothing();
   }
 
   return Response.json(created);

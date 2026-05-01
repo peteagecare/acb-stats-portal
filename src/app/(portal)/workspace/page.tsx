@@ -16,6 +16,7 @@ import {
   useUsers,
   userMeta,
 } from "./_shared";
+import { TagPillList, useTags } from "./_tags";
 
 interface DashboardTask {
   id: string;
@@ -35,6 +36,7 @@ interface DashboardTask {
   companyId: string;
   companyName: string;
   collaborators: string[];
+  tagIds: string[];
 }
 
 interface CompanyRow {
@@ -664,6 +666,7 @@ function BucketCard({
 
 function BucketTaskRow({ task, users, todayMs }: { task: DashboardTask; users: DirectoryUser[]; todayMs: number }) {
   const router = useRouter();
+  const allTags = useTags();
   const projectColor = colorForEmail(task.projectId);
   const due = endDateMs(task.endDate);
   const overdue = due != null && due < todayMs && !task.completed;
@@ -712,6 +715,9 @@ function BucketTaskRow({ task, users, todayMs }: { task: DashboardTask; users: D
       }}>
         {task.title}
       </span>
+      {task.tagIds.length > 0 && (
+        <TagPillList tagIds={task.tagIds} allTags={allTags} max={3} size="xs" />
+      )}
       {task.priority && (
         <span style={{
           fontSize: 11, fontWeight: 600,
@@ -837,6 +843,7 @@ function AssignedByMe({ data, users }: { data: { me: string; tasks: DashboardTas
 
 function AssignedRow({ task, users, me }: { task: DashboardTask; users: DirectoryUser[]; me: string }) {
   const router = useRouter();
+  const allTags = useTags();
   const projectColor = colorForEmail(task.projectId);
   const due = endDateMs(task.endDate);
   const todayMs = todayStart().getTime();
@@ -864,6 +871,9 @@ function AssignedRow({ task, users, me }: { task: DashboardTask; users: Director
       }}>
         {task.title}
       </span>
+      {task.tagIds.length > 0 && (
+        <TagPillList tagIds={task.tagIds} allTags={allTags} max={3} size="xs" />
+      )}
       <span
         title={`${task.companyName} › ${task.projectName}`}
         style={{

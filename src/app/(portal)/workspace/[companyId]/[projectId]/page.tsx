@@ -37,6 +37,7 @@ import {
 } from "@/lib/tracker";
 import { RecurrenceRule, formatRecurrence } from "@/lib/recurrence";
 import { RecurrencePicker } from "../../_recurrence-picker";
+import { TagFilterChips, TagPicker, TagPillList, useTags } from "../../_tags";
 
 type ProjectStatus = "planning" | "active" | "on_hold" | "done" | "archived";
 type TaskStatus = "todo" | "doing" | "blocked" | "done";
@@ -72,6 +73,7 @@ interface Task {
   createdAt: string;
   createdByEmail: string;
   collaborators: string[];
+  tagIds: string[];
 }
 
 type ProjectType = "quarterly" | "initiative" | "ongoing";
@@ -144,6 +146,7 @@ export default function ProjectPage({
   }
   const [filterAssignee, setFilterAssignee] = useState<string | "all">("all");
   const [trackerFilter, setTrackerFilter] = useState<TrackerStatus | "all">("all");
+  const [tagFilter, setTagFilter] = useState<Set<string>>(new Set());
   const [showCompleted, setShowCompleted] = useState(true);
   const [editingProject, setEditingProject] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -210,6 +213,11 @@ export default function ProjectPage({
         });
         if (tr.status !== trackerFilter) continue;
       }
+      if (tagFilter.size > 0) {
+        // require at least one matching tag
+        const hasMatch = t.tagIds.some((id) => tagFilter.has(id));
+        if (!hasMatch) continue;
+      }
       const key = t.sectionId ?? "unsectioned";
       if (!grouped[key]) grouped[key] = [];
       grouped[key].push(t);
@@ -230,7 +238,7 @@ export default function ProjectPage({
       });
     }
     return grouped;
-  }, [data, filterAssignee, showCompleted, trackerFilter, childrenByParent]);
+  }, [data, filterAssignee, showCompleted, trackerFilter, tagFilter, childrenByParent]);
 
   const allProjectTasks = useMemo(() => (data ? data.tasks : ([] as Task[])), [data]);
 
@@ -355,7 +363,7 @@ export default function ProjectPage({
           </div>
 
           {rollup && rollup.total > 0 && (
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 18 }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
               <TrackerChip label="All" active={trackerFilter === "all"} count={rollup.total} onClick={() => setTrackerFilter("all")} />
               {(["overdue", "behind", "on_track", "ahead", "upcoming", "unscheduled"] as const).map((s) => {
                 const count = rollup[s];
@@ -373,6 +381,16 @@ export default function ProjectPage({
               })}
             </div>
           )}
+
+          {(() => {
+            const tagsInProject = new Set<string>();
+            for (const t of data.tasks) for (const id of t.tagIds) tagsInProject.add(id);
+            return (
+              <div style={{ marginBottom: 18 }}>
+                <TagFilterChips allTagIds={tagsInProject} active={tagFilter} onChange={setTagFilter} />
+              </div>
+            );
+          })()}
 
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {data.sections.map((section) => (
@@ -896,6 +914,7 @@ function TaskRow({
   allProjectTasks: Task[];
   depth?: number;
 }) {
+  const allTags = useTags();
   const owner = userMeta(task.ownerEmail, users);
   const dStat = dueState(task.endDate);
   const dueLabel = fmtDate(task.endDate);
@@ -1038,6 +1057,10 @@ function TaskRow({
           </svg>
           Repeats
         </span>
+      )}
+
+      {task.tagIds.length > 0 && (
+        <TagPillList tagIds={task.tagIds} allTags={allTags} max={3} size="xs" />
       )}
 
       {task.priority && (
@@ -1654,6 +1677,12 @@ function TaskPanel({
           <RecurrencePicker
             value={task.recurrence}
             onChange={(next) => patch({ recurrence: next })}
+          />
+
+          <span style={{ color: "var(--color-text-secondary)", alignSelf: "start", paddingTop: 8 }}>Tags</span>
+          <TagPicker
+            selected={task.tagIds}
+            onChange={(next) => patch({ setTagIds: next })}
           />
         </div>
 

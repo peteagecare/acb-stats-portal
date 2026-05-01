@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
-import { tasks, projects } from "@/db/schema";
+import { tasks, projects, taskTags } from "@/db/schema";
 import { canSeeCompany, requireUser, visibleProjectIds } from "@/lib/workspace-auth";
 
 interface Params {
@@ -43,5 +43,18 @@ export async function GET(request: NextRequest, { params }: Params) {
       inArray(tasks.projectId, [...visible]),
     ));
 
-  return Response.json({ tasks: rows });
+  const taskIds = rows.map((r) => r.id);
+  const tagRows = taskIds.length
+    ? await db.select().from(taskTags).where(inArray(taskTags.taskId, taskIds))
+    : [];
+  const tagsByTask = new Map<string, string[]>();
+  for (const t of tagRows) {
+    const list = tagsByTask.get(t.taskId) ?? [];
+    list.push(t.tagId);
+    tagsByTask.set(t.taskId, list);
+  }
+
+  return Response.json({
+    tasks: rows.map((r) => ({ ...r, tagIds: tagsByTask.get(r.id) ?? [] })),
+  });
 }

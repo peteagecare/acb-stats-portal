@@ -1,12 +1,15 @@
 import { NextRequest } from "next/server";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
 import { meetingNotes, meetingNoteTasks } from "@/db/schema";
-import { requireUser } from "@/lib/workspace-auth";
+import { requireUser, visibleNoteIds } from "@/lib/workspace-auth";
 
 export async function GET(request: NextRequest) {
   const user = requireUser(request);
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  const noteIds = await visibleNoteIds(user.email);
+  if (noteIds.size === 0) return Response.json({ tasks: [] });
 
   const rows = await db
     .select({
@@ -23,7 +26,7 @@ export async function GET(request: NextRequest) {
     .from(meetingNoteTasks)
     .innerJoin(meetingNotes, eq(meetingNoteTasks.noteId, meetingNotes.id))
     .where(and(
-      eq(meetingNotes.authorEmail, user.email),
+      inArray(meetingNotes.id, [...noteIds]),
       isNull(meetingNoteTasks.projectId),
       eq(meetingNoteTasks.completed, false),
     ))

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { tasks, taskCollaborators, sections } from "@/db/schema";
+import { tasks, taskCollaborators, sections, taskTags } from "@/db/schema";
 import { requireUser, canSeeProject } from "@/lib/workspace-auth";
 import {
   RecurrenceRule,
@@ -48,6 +48,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     parentTaskId?: string | null;
     order?: number;
     setCollaborators?: string[];
+    setTagIds?: string[];
     recurrence?: unknown;
   };
   let body: Body;
@@ -186,6 +187,18 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           .values(carryCollabs.map((c) => ({ taskId: spawned.id, userEmail: c.userEmail })))
           .onConflictDoNothing();
       }
+
+      // Carry tags over too
+      const carryTags = await db
+        .select()
+        .from(taskTags)
+        .where(eq(taskTags.taskId, id));
+      if (carryTags.length) {
+        await db
+          .insert(taskTags)
+          .values(carryTags.map((t) => ({ taskId: spawned.id, tagId: t.tagId })))
+          .onConflictDoNothing();
+      }
     }
   }
 
@@ -196,6 +209,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       .filter(Boolean)
       .map((userEmail) => ({ taskId: id, userEmail }));
     if (rows.length) await db.insert(taskCollaborators).values(rows).onConflictDoNothing();
+  }
+
+  if (Array.isArray(body.setTagIds)) {
+    await db.delete(taskTags).where(eq(taskTags.taskId, id));
+    const rows = body.setTagIds
+      .filter((tagId): tagId is string => typeof tagId === "string" && tagId.length > 0)
+      .map((tagId) => ({ taskId: id, tagId }));
+    if (rows.length) await db.insert(taskTags).values(rows).onConflictDoNothing();
   }
 
   const [updated] = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1);

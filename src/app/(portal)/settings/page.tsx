@@ -184,6 +184,10 @@ export default function SettingsPage() {
         </Grid>
       </Section>
 
+      <Section title="Tasks" description="Workspace-wide tags for categorising tasks (e.g. Facebook, SEO, Brochure).">
+        <TagsManager />
+      </Section>
+
       <div style={{ marginTop: 28, fontSize: 12, color: "var(--color-text-tertiary)" }}>
         Manage people who can access this portal on the{" "}
         <a href="/users" style={{ color: "var(--color-accent)", textDecoration: "none" }}>
@@ -191,6 +195,153 @@ export default function SettingsPage() {
         </a>{" "}
         page.
       </div>
+    </div>
+  );
+}
+
+interface TagRow { id: string; name: string; color: string; createdByEmail: string; createdAt: string; }
+
+function TagsManager() {
+  const [tags, setTags] = useState<TagRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+
+  const refresh = async () => {
+    setLoading(true);
+    const res = await fetch("/api/tags", { cache: "no-store" });
+    if (res.ok) {
+      const json = (await res.json()) as { tags: TagRow[] };
+      setTags(json.tags);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  async function create() {
+    const name = newName.trim();
+    if (!name || creating) return;
+    setCreating(true);
+    try {
+      const res = await fetch("/api/tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) { setNewName(""); await refresh(); }
+    } finally { setCreating(false); }
+  }
+  async function rename(id: string, name: string) {
+    const res = await fetch(`/api/tags/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (res.ok) refresh();
+  }
+  async function recolor(id: string, color: string) {
+    await fetch(`/api/tags/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ color }),
+    });
+    refresh();
+  }
+  async function remove(id: string, name: string) {
+    if (!confirm(`Delete tag "${name}"? It will be removed from every task.`)) return;
+    const res = await fetch(`/api/tags/${id}`, { method: "DELETE" });
+    if (res.ok) refresh();
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") create(); }}
+          placeholder="New tag name (e.g. Facebook)"
+          style={{
+            flex: 1, border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-button)", padding: "8px 12px",
+            fontSize: 14, color: "var(--color-text-primary)",
+            background: "white", outline: "none", fontFamily: "inherit",
+          }}
+        />
+        <button
+          onClick={create}
+          disabled={creating || !newName.trim()}
+          style={{
+            background: "var(--color-accent)", color: "white", border: "none",
+            padding: "8px 16px", borderRadius: "var(--radius-button)",
+            fontSize: 13, fontWeight: 600, cursor: creating ? "wait" : "pointer",
+            opacity: creating || !newName.trim() ? 0.6 : 1,
+          }}
+        >
+          {creating ? "Adding…" : "Add tag"}
+        </button>
+      </div>
+
+      {loading ? (
+        <div style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>Loading…</div>
+      ) : tags.length === 0 ? (
+        <div style={{ fontSize: 13, color: "var(--color-text-tertiary)", fontStyle: "italic" }}>No tags yet.</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {tags.map((t) => <TagRowEdit key={t.id} tag={t} onRename={rename} onRecolor={recolor} onRemove={remove} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TagRowEdit({
+  tag, onRename, onRecolor, onRemove,
+}: {
+  tag: TagRow;
+  onRename: (id: string, name: string) => void;
+  onRecolor: (id: string, color: string) => void;
+  onRemove: (id: string, name: string) => void;
+}) {
+  const [name, setName] = useState(tag.name);
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 10,
+      padding: "8px 10px", borderRadius: 10,
+      background: "white", border: "1px solid var(--color-border)",
+    }}>
+      <input
+        type="color"
+        value={tag.color}
+        onChange={(e) => onRecolor(tag.id, e.target.value)}
+        style={{ width: 28, height: 28, padding: 0, border: "none", background: "transparent", cursor: "pointer" }}
+      />
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onBlur={() => { if (name.trim() && name !== tag.name) onRename(tag.id, name.trim()); else setName(tag.name); }}
+        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+        style={{
+          flex: 1, border: "1px solid transparent",
+          borderRadius: 8, padding: "6px 8px", fontSize: 13,
+          fontFamily: "inherit", color: "var(--color-text-primary)",
+          background: "transparent", outline: "none",
+        }}
+        onFocus={(e) => (e.currentTarget.style.borderColor = "var(--color-border)")}
+      />
+      <button
+        onClick={() => onRemove(tag.id, tag.name)}
+        style={{
+          background: "transparent", border: "none",
+          color: "var(--color-text-tertiary)", cursor: "pointer", padding: 6, display: "flex",
+        }}
+        aria-label="Delete tag"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M3 6h18" /><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+        </svg>
+      </button>
     </div>
   );
 }

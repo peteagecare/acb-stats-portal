@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { meetingNotes, meetingNoteTasks, sections, tasks } from "@/db/schema";
-import { canSeeProject, requireUser } from "@/lib/workspace-auth";
+import { meetingNoteTasks, sections, tasks } from "@/db/schema";
+import { canSeeNote, canSeeProject, requireUser } from "@/lib/workspace-auth";
 
 interface Params {
   params: Promise<{ id: string; taskId: string }>;
@@ -14,12 +14,9 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const { id, taskId } = await params;
 
-  const [note] = await db
-    .select()
-    .from(meetingNotes)
-    .where(and(eq(meetingNotes.id, id), eq(meetingNotes.authorEmail, user.email)))
-    .limit(1);
-  if (!note) return Response.json({ error: "Not found" }, { status: 404 });
+  if (!(await canSeeNote(user.email, id))) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
 
   const [noteTask] = await db
     .select()

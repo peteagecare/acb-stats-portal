@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
-import { tasks, projects, companies, taskCollaborators } from "@/db/schema";
+import { tasks, projects, companies, taskCollaborators, taskTags } from "@/db/schema";
 import { requireUser, visibleProjectIds } from "@/lib/workspace-auth";
 
 export async function GET(request: NextRequest) {
@@ -55,9 +55,20 @@ export async function GET(request: NextRequest) {
     collabsByTask.set(c.taskId, list);
   }
 
+  const tagJoinRows = taskIds.length
+    ? await db.select().from(taskTags).where(inArray(taskTags.taskId, taskIds))
+    : [];
+  const tagsByTask = new Map<string, string[]>();
+  for (const t of tagJoinRows) {
+    const list = tagsByTask.get(t.taskId) ?? [];
+    list.push(t.tagId);
+    tagsByTask.set(t.taskId, list);
+  }
+
   const enriched = rows.map((r) => ({
     ...r,
     collaborators: collabsByTask.get(r.id) ?? [],
+    tagIds: tagsByTask.get(r.id) ?? [],
   }));
 
   return Response.json({

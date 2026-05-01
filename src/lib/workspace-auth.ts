@@ -8,6 +8,8 @@ import {
   companyAccess,
   projectAccess,
   tasks,
+  meetingNotes,
+  noteAccess,
 } from "@/db/schema";
 
 export function requireUser(request: NextRequest) {
@@ -89,6 +91,42 @@ export async function canSeeProject(email: string, projectId: string): Promise<b
     .select({ userEmail: projectAccess.userEmail })
     .from(projectAccess)
     .where(and(eq(projectAccess.projectId, projectId), eq(projectAccess.userEmail, email)))
+    .limit(1);
+  return !!grant;
+}
+
+/** Returns the set of meeting note IDs visible to this user. */
+export async function visibleNoteIds(email: string): Promise<Set<string>> {
+  const all = await db
+    .select({ id: meetingNotes.id, accessMode: meetingNotes.accessMode, authorEmail: meetingNotes.authorEmail })
+    .from(meetingNotes);
+  const grants = await db
+    .select({ noteId: noteAccess.noteId })
+    .from(noteAccess)
+    .where(eq(noteAccess.userEmail, email));
+  const grantedIds = new Set(grants.map((g) => g.noteId));
+  const visible = new Set<string>();
+  for (const n of all) {
+    if (n.accessMode === "everyone" || n.authorEmail === email || grantedIds.has(n.id)) {
+      visible.add(n.id);
+    }
+  }
+  return visible;
+}
+
+export async function canSeeNote(email: string, noteId: string): Promise<boolean> {
+  const [n] = await db
+    .select({ accessMode: meetingNotes.accessMode, authorEmail: meetingNotes.authorEmail })
+    .from(meetingNotes)
+    .where(eq(meetingNotes.id, noteId))
+    .limit(1);
+  if (!n) return false;
+  if (n.accessMode === "everyone") return true;
+  if (n.authorEmail === email) return true;
+  const [grant] = await db
+    .select({ userEmail: noteAccess.userEmail })
+    .from(noteAccess)
+    .where(and(eq(noteAccess.noteId, noteId), eq(noteAccess.userEmail, email)))
     .limit(1);
   return !!grant;
 }

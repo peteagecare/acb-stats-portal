@@ -1,20 +1,11 @@
 import { NextRequest } from "next/server";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { meetingNotes, meetingNoteTasks } from "@/db/schema";
-import { requireUser } from "@/lib/workspace-auth";
+import { meetingNoteTasks } from "@/db/schema";
+import { requireUser, canSeeNote } from "@/lib/workspace-auth";
 
 interface Params {
   params: Promise<{ id: string }>;
-}
-
-async function ownNote(noteId: string, email: string) {
-  const [n] = await db
-    .select()
-    .from(meetingNotes)
-    .where(and(eq(meetingNotes.id, noteId), eq(meetingNotes.authorEmail, email)))
-    .limit(1);
-  return n ?? null;
 }
 
 export async function GET(request: NextRequest, { params }: Params) {
@@ -22,7 +13,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  if (!(await ownNote(id, user.email))) {
+  if (!(await canSeeNote(user.email, id))) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
   const rows = await db
@@ -38,7 +29,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  if (!(await ownNote(id, user.email))) {
+  if (!(await canSeeNote(user.email, id))) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 

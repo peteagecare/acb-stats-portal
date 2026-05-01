@@ -1,20 +1,37 @@
 import { NextRequest } from "next/server";
-import { desc, eq } from "drizzle-orm";
+import { desc, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
-import { meetingNotes } from "@/db/schema";
-import { requireUser } from "@/lib/workspace-auth";
+import { meetingNotes, noteAccess } from "@/db/schema";
+import { requireUser, visibleNoteIds } from "@/lib/workspace-auth";
 
 export async function GET(request: NextRequest) {
   const user = requireUser(request);
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
+  const ids = await visibleNoteIds(user.email);
+  if (ids.size === 0) return Response.json({ notes: [] });
+
   const rows = await db
     .select()
     .from(meetingNotes)
-    .where(eq(meetingNotes.authorEmail, user.email))
+    .where(inArray(meetingNotes.id, [...ids]))
     .orderBy(desc(meetingNotes.updatedAt));
 
-  return Response.json({ notes: rows });
+  // Fetch access lists for restricted notes (so the UI can pre-fill the picker)
+  const restrictedIds = rows.filter((r) => r.accessMode === "restricted").map((r) => r.id);
+  const accessRows = restrictedIds.length
+    ? await db.select().from(noteAccess).where(inArray(noteAccess.noteId, restrictedIds))
+    : [];
+  const usersByNote = new Map<string, string[]>();
+  for (const r of accessRows) {
+    const list = usersByNote.get(r.noteId) ?? [];
+    list.push(r.userEmail);
+    usersByNote.set(r.noteId, list);
+  }
+
+  return Response.json({
+    notes: rows.map((r) => ({ ...r, accessUsers: usersByNote.get(r.id) ?? [] })),
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -36,6 +53,7 @@ export async function POST(request: NextRequest) {
       body: body.body ?? "",
       meetingDate: body.meetingDate || null,
       authorEmail: user.email,
+      // accessMode defaults to "everyone" so the team sees it immediately
     })
     .returning();
 

@@ -22,6 +22,7 @@ import {
 } from "../_shared";
 import { useRouter } from "next/navigation";
 import { TRACKER_STYLE, computeTracker } from "@/lib/tracker";
+import { TagPillList, useTags } from "../_tags";
 
 type ProjectStatus = "planning" | "active" | "on_hold" | "done" | "archived";
 type ProjectType = "quarterly" | "initiative" | "ongoing";
@@ -77,6 +78,7 @@ interface CompanyTask {
   parentTaskId: string | null;
   projectId: string;
   projectName: string;
+  tagIds: string[];
 }
 
 export default function CompanyPage({ params }: { params: Promise<{ companyId: string }> }) {
@@ -368,6 +370,7 @@ function FilterSelect({
 
 function CompanyTaskRow({ task, users, companyId }: { task: CompanyTask; users: DirectoryUser[]; companyId: string }) {
   const router = useRouter();
+  const allTags = useTags();
   const owner = userMeta(task.ownerEmail, users);
   const projectColor = colorForEmail(task.projectId);
   const todayMs = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
@@ -402,6 +405,9 @@ function CompanyTaskRow({ task, users, companyId }: { task: CompanyTask; users: 
       }}>
         {task.title}
       </span>
+      {task.tagIds.length > 0 && (
+        <TagPillList tagIds={task.tagIds} allTags={allTags} max={3} size="xs" />
+      )}
       {task.priority && (
         <span style={{
           fontSize: 11, fontWeight: 600,

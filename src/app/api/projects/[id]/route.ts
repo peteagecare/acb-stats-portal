@@ -8,6 +8,7 @@ import {
   sections,
   tasks,
   taskCollaborators,
+  taskTags,
 } from "@/db/schema";
 import { requireUser, canSeeProject } from "@/lib/workspace-auth";
 
@@ -45,6 +46,16 @@ export async function GET(request: NextRequest, { params }: Params) {
     collabsByTask.set(c.taskId, list);
   }
 
+  const tagJoinRows = taskIds.length
+    ? await db.select().from(taskTags).where(inArray(taskTags.taskId, taskIds))
+    : [];
+  const tagsByTask = new Map<string, string[]>();
+  for (const t of tagJoinRows) {
+    const list = tagsByTask.get(t.taskId) ?? [];
+    list.push(t.tagId);
+    tagsByTask.set(t.taskId, list);
+  }
+
   return Response.json({
     project: {
       ...project,
@@ -55,6 +66,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     tasks: taskRows.map((t) => ({
       ...t,
       collaborators: collabsByTask.get(t.id) ?? [],
+      tagIds: tagsByTask.get(t.id) ?? [],
     })),
   });
 }

@@ -52,6 +52,8 @@ interface Note {
   body: string;
   meetingDate: string | null;
   authorEmail: string;
+  accessMode: "everyone" | "restricted";
+  accessUsers?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -677,6 +679,7 @@ function NoteEditor({
             outline: "none",
           }}
         />
+        <NoteAccessControl note={note} onChange={onChange} />
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
           {savedAt ? `Saved ${savedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Auto-saves"}
@@ -714,6 +717,167 @@ function NoteEditor({
       <div className="tiptap-wrap">
         <EditorContent editor={editor} />
       </div>
+    </div>
+  );
+}
+
+function NoteAccessControl({ note, onChange }: { note: Note; onChange: (patch: Partial<Note>) => void }) {
+  const [open, setOpen] = useState(false);
+  const [users, setUsers] = useState<{ email: string; label: string }[]>([]);
+  const [accessUsers, setAccessUsers] = useState<string[]>(note.accessUsers ?? []);
+  const [saving, setSaving] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => { setAccessUsers(note.accessUsers ?? []); }, [note.id, note.accessUsers]);
+
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/users", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { users?: { email: string; label: string }[] } | null) => {
+        if (j?.users) setUsers(j.users);
+      })
+      .catch(() => {});
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
+
+  async function setMode(mode: "everyone" | "restricted") {
+    setSaving(true);
+    try {
+      await fetch(`/api/notes/${note.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accessMode: mode,
+          ...(mode === "restricted" ? { setAccessUsers: accessUsers } : {}),
+        }),
+      });
+      onChange({ accessMode: mode, accessUsers: mode === "restricted" ? accessUsers : [] });
+    } finally { setSaving(false); }
+  }
+
+  async function toggleUser(email: string) {
+    const next = accessUsers.includes(email) ? accessUsers.filter((e) => e !== email) : [...accessUsers, email];
+    setAccessUsers(next);
+    await fetch(`/api/notes/${note.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accessMode: "restricted", setAccessUsers: next }),
+    });
+    onChange({ accessMode: "restricted", accessUsers: next });
+  }
+
+  const isRestricted = note.accessMode === "restricted";
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        disabled={saving}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 6,
+          padding: "5px 10px", borderRadius: 8,
+          border: "1px solid var(--color-border)",
+          background: isRestricted ? "#FFF8E7" : "#D1FAE5",
+          color: isRestricted ? "#92400E" : "#065F46",
+          fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+        }}
+        title={isRestricted ? `Restricted to ${accessUsers.length} ${accessUsers.length === 1 ? "person" : "people"}` : "Visible to everyone in the workspace"}
+      >
+        {isRestricted ? (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+            <rect x="3" y="11" width="18" height="11" rx="2" />
+            <path d="M7 11V7a5 5 0 0110 0v4" />
+          </svg>
+        ) : (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" />
+            <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+          </svg>
+        )}
+        {isRestricted ? `Restricted (${accessUsers.length})` : "Everyone"}
+      </button>
+
+      {open && (
+        <div
+          style={{
+            position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 30,
+            background: "white", borderRadius: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+            padding: 14, minWidth: 280, border: "1px solid var(--color-border)",
+          }}
+        >
+          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+            <button
+              onClick={() => setMode("everyone")}
+              style={{
+                flex: 1, padding: "7px 10px", borderRadius: 8,
+                border: `1px solid ${!isRestricted ? "var(--color-accent)" : "var(--color-border)"}`,
+                background: !isRestricted ? "rgba(0,113,227,0.08)" : "transparent",
+                color: !isRestricted ? "#0071E3" : "var(--color-text-primary)",
+                fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
+              }}
+            >Everyone</button>
+            <button
+              onClick={() => setMode("restricted")}
+              style={{
+                flex: 1, padding: "7px 10px", borderRadius: 8,
+                border: `1px solid ${isRestricted ? "var(--color-accent)" : "var(--color-border)"}`,
+                background: isRestricted ? "rgba(0,113,227,0.08)" : "transparent",
+                color: isRestricted ? "#0071E3" : "var(--color-text-primary)",
+                fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
+              }}
+            >Restricted</button>
+          </div>
+
+          {isRestricted ? (
+            <>
+              <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginBottom: 6 }}>
+                Pick who can see this note (the author always can):
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 240, overflowY: "auto" }}>
+                {users.length === 0 && (
+                  <div style={{ fontSize: 12, color: "var(--color-text-tertiary)", fontStyle: "italic" }}>Loading…</div>
+                )}
+                {users.map((u) => {
+                  const checked = accessUsers.includes(u.email);
+                  const isAuthor = u.email === note.authorEmail;
+                  return (
+                    <label
+                      key={u.email}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8,
+                        padding: "6px 8px", borderRadius: 6,
+                        cursor: isAuthor ? "default" : "pointer",
+                        opacity: isAuthor ? 0.6 : 1,
+                        fontSize: 12,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked || isAuthor}
+                        onChange={() => !isAuthor && toggleUser(u.email)}
+                        disabled={isAuthor}
+                      />
+                      {u.label} <span style={{ color: "var(--color-text-tertiary)", fontSize: 11 }}>{isAuthor ? "(author)" : ""}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+              Visible to everyone with workspace access.
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

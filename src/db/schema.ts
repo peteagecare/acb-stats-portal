@@ -171,9 +171,21 @@ export const meetingNotes = pgTable("meeting_notes", {
   body: text("body").notNull().default(""),
   meetingDate: date("meeting_date"),
   authorEmail: text("author_email").notNull(),
+  accessMode: accessModeEnum("access_mode").notNull().default("everyone"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const noteAccess = pgTable(
+  "note_access",
+  {
+    noteId: uuid("note_id")
+      .notNull()
+      .references(() => meetingNotes.id, { onDelete: "cascade" }),
+    userEmail: text("user_email").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.noteId, t.userEmail] })],
+);
 
 export const meetingNoteTasks = pgTable("meeting_note_tasks", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -189,6 +201,27 @@ export const meetingNoteTasks = pgTable("meeting_note_tasks", {
   order: integer("order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const tags = pgTable("tags", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  color: text("color").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  createdByEmail: text("created_by_email").notNull(),
+});
+
+export const taskTags = pgTable(
+  "task_tags",
+  {
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.taskId, t.tagId] })],
+);
 
 export const projectLinks = pgTable("project_links", {
   id: uuid("id").defaultRandom().primaryKey(),

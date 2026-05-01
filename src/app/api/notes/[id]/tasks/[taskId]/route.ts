@@ -1,27 +1,18 @@
 import { NextRequest } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { meetingNotes, meetingNoteTasks } from "@/db/schema";
-import { requireUser } from "@/lib/workspace-auth";
+import { meetingNoteTasks } from "@/db/schema";
+import { requireUser, canSeeNote } from "@/lib/workspace-auth";
 
 interface Params {
   params: Promise<{ id: string; taskId: string }>;
-}
-
-async function ownNote(noteId: string, email: string) {
-  const [n] = await db
-    .select()
-    .from(meetingNotes)
-    .where(and(eq(meetingNotes.id, noteId), eq(meetingNotes.authorEmail, email)))
-    .limit(1);
-  return n ?? null;
 }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
   const user = requireUser(request);
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const { id, taskId } = await params;
-  if (!(await ownNote(id, user.email))) return Response.json({ error: "Not found" }, { status: 404 });
+  if (!(await canSeeNote(user.email, id))) return Response.json({ error: "Not found" }, { status: 404 });
 
   type Body = {
     title?: string;
@@ -55,7 +46,7 @@ export async function DELETE(request: NextRequest, { params }: Params) {
   const user = requireUser(request);
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const { id, taskId } = await params;
-  if (!(await ownNote(id, user.email))) return Response.json({ error: "Not found" }, { status: 404 });
+  if (!(await canSeeNote(user.email, id))) return Response.json({ error: "Not found" }, { status: 404 });
 
   await db
     .delete(meetingNoteTasks)
