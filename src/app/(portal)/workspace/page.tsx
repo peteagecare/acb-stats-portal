@@ -248,10 +248,11 @@ function UnsortedRow({
   onDelete: () => void;
   onSetField: (patch: { ownerEmail?: string | null; endDate?: string | null }) => void;
 }) {
+  const owner = users.find((u) => u.email === task.ownerEmail) ?? null;
   return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
-      padding: "10px 4px", borderTop: "1px solid var(--color-border)",
+    <div className="unsorted-row" style={{
+      display: "flex", alignItems: "center", gap: 4,
+      padding: "6px 4px", borderTop: "1px solid var(--color-border)",
     }}>
       <button
         onClick={onComplete}
@@ -262,6 +263,7 @@ function UnsortedRow({
           border: "1.5px solid var(--color-text-tertiary)",
           background: "transparent",
           cursor: "pointer", padding: 0, flexShrink: 0,
+          marginRight: 6,
         }}
       />
       <div style={{ flex: 1, minWidth: 200 }}>
@@ -275,71 +277,146 @@ function UnsortedRow({
           {task.noteMeetingDate && ` · ${fmtDate(task.noteMeetingDate)}`}
         </div>
       </div>
-      <select
-        value={task.ownerEmail ?? ""}
-        onChange={(e) => onSetField({ ownerEmail: e.target.value || null })}
-        title="Assignee"
+
+      {/* Assignee — avatar pill */}
+      <label
+        className="task-panel-control"
+        title={owner ? `Assigned to ${owner.label}` : "Assign…"}
         style={{
-          padding: "5px 9px",
-          border: "1px solid var(--color-border)",
-          borderRadius: 8,
-          fontSize: 12, fontFamily: "inherit",
-          background: "var(--bg-card)",
-          color: task.ownerEmail ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
+          position: "relative",
+          display: "inline-flex", alignItems: "center", gap: 6,
+          padding: "4px 8px", borderRadius: 999,
+          minWidth: owner ? undefined : 28, height: 28,
           cursor: "pointer",
-          maxWidth: 140,
+          fontSize: 12, fontFamily: "inherit",
         }}
       >
-        <option value="">Assignee…</option>
-        {users.map((u) => (
-          <option key={u.email} value={u.email}>{u.label}</option>
-        ))}
-      </select>
-      <input
-        type="date"
-        value={task.endDate ?? ""}
-        onChange={(e) => onSetField({ endDate: e.target.value || null })}
-        title="Deadline"
+        {owner ? (
+          <>
+            <span style={{
+              width: 20, height: 20, borderRadius: "50%",
+              background: owner.color, color: "white",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 10, fontWeight: 700,
+            }}>{(owner.label || "?").trim().slice(0, 1).toUpperCase()}</span>
+            <span style={{ color: "var(--color-text-primary)" }}>{owner.label}</span>
+          </>
+        ) : (
+          <span style={{
+            width: 20, height: 20, borderRadius: "50%",
+            border: "1.5px dashed var(--color-border)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "var(--color-text-tertiary)",
+          }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="8" r="3.5" />
+              <path d="M5 21c0-3.5 3-6 7-6s7 2.5 7 6" />
+            </svg>
+          </span>
+        )}
+        <select
+          value={task.ownerEmail ?? ""}
+          onChange={(e) => onSetField({ ownerEmail: e.target.value || null })}
+          style={{
+            position: "absolute", inset: 0,
+            opacity: 0, cursor: "pointer", border: "none", background: "transparent",
+            fontFamily: "inherit",
+          }}
+        >
+          <option value="">Unassigned</option>
+          {users.map((u) => (
+            <option key={u.email} value={u.email}>{u.label}</option>
+          ))}
+        </select>
+      </label>
+
+      {/* Due date — calendar icon when empty, icon + date when set */}
+      <label
+        className="task-panel-control"
+        title={task.endDate ? `Due ${fmtDate(task.endDate)}` : "Set due date"}
         style={{
-          padding: "5px 9px",
-          border: "1px solid var(--color-border)",
-          borderRadius: 8,
+          position: "relative",
+          display: "inline-flex", alignItems: "center", gap: 6,
+          padding: "4px 8px", borderRadius: 999,
+          height: 28, cursor: "pointer",
           fontSize: 12, fontFamily: "inherit",
-          background: "var(--bg-card)",
           color: task.endDate ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
-          outline: "none",
-        }}
-      />
-      <select
-        value=""
-        onChange={(e) => { if (e.target.value) onAssign(e.target.value); }}
-        style={{
-          padding: "5px 9px",
-          border: "1px solid var(--color-border)",
-          borderRadius: 8,
-          fontSize: 12, fontFamily: "inherit",
-          background: "var(--bg-card)",
-          color: "var(--color-text-secondary)",
-          cursor: "pointer",
         }}
       >
-        <option value="">Add to project…</option>
-        {companies.map((c) => (
-          <optgroup key={c.id} label={c.name}>
-            {c.projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
+        <span style={{
+          width: 20, height: 20, borderRadius: "50%",
+          border: task.endDate ? "1.5px solid var(--color-text-tertiary)" : "1.5px dashed var(--color-border)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="5" width="18" height="16" rx="2" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+            <line x1="8" y1="3" x2="8" y2="7" />
+            <line x1="16" y1="3" x2="16" y2="7" />
+          </svg>
+        </span>
+        {task.endDate && <span>{fmtDate(task.endDate)}</span>}
+        <input
+          type="date"
+          value={task.endDate ?? ""}
+          onChange={(e) => onSetField({ endDate: e.target.value || null })}
+          style={{
+            position: "absolute", inset: 0,
+            opacity: 0, cursor: "pointer", border: "none", background: "transparent",
+            fontFamily: "inherit",
+          }}
+        />
+      </label>
+
+      {/* Add-to-project pill */}
+      <label
+        className="task-panel-control"
+        title="Add to project"
+        style={{
+          position: "relative",
+          display: "inline-flex", alignItems: "center", gap: 6,
+          padding: "4px 12px", borderRadius: 999,
+          height: 28, cursor: "pointer",
+          fontSize: 12, fontWeight: 500, fontFamily: "inherit",
+          color: "var(--color-text-secondary)",
+        }}
+      >
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+        Add to project
+        <select
+          value=""
+          onChange={(e) => { if (e.target.value) onAssign(e.target.value); }}
+          style={{
+            position: "absolute", inset: 0,
+            opacity: 0, cursor: "pointer", border: "none", background: "transparent",
+            fontFamily: "inherit",
+          }}
+        >
+          <option value="">Add to project…</option>
+          {companies.map((c) => (
+            <optgroup key={c.id} label={c.name}>
+              {c.projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </label>
+
       <button
         onClick={onDelete}
         aria-label="Delete"
         title="Delete"
+        className="unsorted-row-delete"
         style={{
           background: "transparent", border: "none", cursor: "pointer",
-          color: "var(--color-text-tertiary)", padding: 4,
+          color: "var(--color-text-tertiary)", padding: 6,
           display: "flex", alignItems: "center",
+          opacity: 0,
+          transition: "opacity 100ms var(--ease-apple)",
         }}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

@@ -261,3 +261,7 @@ body {
   border-color: var(--color-accent);
   outline: none;
 }
+
+.unsorted-row:hover .unsorted-row-delete {
+  opacity: 1;
+}
