@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 
 interface Notification {
@@ -10,7 +11,7 @@ interface Notification {
   noteId: string | null;
   taskId: string | null;
   actorEmail: string;
-  payload: { noteTitle?: string; actorLabel?: string } | null;
+  payload: { noteTitle?: string; actorLabel?: string; excerpt?: string | null } | null;
   readAt: string | null;
   createdAt: string;
 }
@@ -19,7 +20,12 @@ export default function NotificationsBell() {
   const [open, setOpen] = useState(false);
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [unread, setUnread] = useState(0);
-  const ref = useRef<HTMLDivElement | null>(null);
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => setMounted(true), []);
 
   const refresh = useCallback(async () => {
     try {
@@ -39,13 +45,26 @@ export default function NotificationsBell() {
     return () => clearInterval(t);
   }, [refresh]);
 
+  // Close on outside click + reposition on resize/scroll while open
   useEffect(() => {
     if (!open) return;
     function onClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (buttonRef.current?.contains(t)) return;
+      if (panelRef.current?.contains(t)) return;
+      setOpen(false);
+    }
+    function reposition() {
+      if (buttonRef.current) setAnchor(buttonRef.current.getBoundingClientRect());
     }
     document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
   }, [open]);
 
   async function markAllRead() {
@@ -60,17 +79,18 @@ export default function NotificationsBell() {
   function togglePanel() {
     setOpen((v) => {
       const next = !v;
-      if (next && unread > 0) {
-        // Mark read in the background when opening
-        markAllRead();
+      if (next) {
+        if (buttonRef.current) setAnchor(buttonRef.current.getBoundingClientRect());
+        if (unread > 0) markAllRead();
       }
       return next;
     });
   }
 
   return (
-    <div ref={ref} style={{ position: "relative" }}>
+    <>
       <button
+        ref={buttonRef}
         onClick={togglePanel}
         aria-label="Notifications"
         style={{
@@ -95,30 +115,37 @@ export default function NotificationsBell() {
             background: "#EF4444", color: "white",
             fontSize: 10, fontWeight: 700,
             display: "flex", alignItems: "center", justifyContent: "center",
-            border: "2px solid var(--bg-card, white)",
+            border: "2px solid white",
           }}>{unread > 99 ? "99+" : unread}</span>
         )}
       </button>
 
-      {open && (
+      {mounted && open && anchor && createPortal(
         <div
+          ref={panelRef}
           style={{
-            position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 40,
-            width: 340,
+            position: "fixed",
+            top: anchor.bottom + 6,
+            left: clampLeft(anchor.left, 360),
+            zIndex: 1000,
+            width: 360,
+            maxHeight: "min(70vh, 520px)",
             background: "white", borderRadius: 12,
-            boxShadow: "0 10px 32px rgba(0,0,0,0.16)",
+            boxShadow: "0 10px 32px rgba(0,0,0,0.18)",
             border: "1px solid var(--color-border)",
             overflow: "hidden",
+            display: "flex", flexDirection: "column",
           }}
         >
           <div style={{
             display: "flex", alignItems: "center",
             padding: "10px 14px",
             borderBottom: "1px solid var(--color-border)",
+            flexShrink: 0,
           }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>Notifications</div>
           </div>
-          <div style={{ maxHeight: 380, overflowY: "auto" }}>
+          <div style={{ flex: 1, overflowY: "auto" }}>
             {notifs.length === 0 ? (
               <div style={{ padding: "24px 16px", textAlign: "center", fontSize: 12, color: "var(--color-text-tertiary)" }}>
                 Nothing yet.
@@ -127,16 +154,24 @@ export default function NotificationsBell() {
               notifs.map((n) => <NotifRow key={n.id} n={n} onClose={() => setOpen(false)} />)
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   );
+}
+
+function clampLeft(x: number, width: number): number {
+  if (typeof window === "undefined") return x;
+  const margin = 8;
+  return Math.max(margin, Math.min(x, window.innerWidth - width - margin));
 }
 
 function NotifRow({ n, onClose }: { n: Notification; onClose: () => void }) {
   const isAssign = n.kind === "task_assigned";
   const actor = n.payload?.actorLabel ?? n.actorEmail;
   const noteTitle = n.payload?.noteTitle ?? "a meeting note";
+  const excerpt = n.payload?.excerpt ?? null;
   const text = isAssign
     ? `${actor} assigned you a task in "${noteTitle}"`
     : `${actor} mentioned you in "${noteTitle}"`;
@@ -149,7 +184,7 @@ function NotifRow({ n, onClose }: { n: Notification; onClose: () => void }) {
       borderBottom: "1px solid var(--color-border)",
     }}>
       <span style={{
-        flexShrink: 0, marginTop: 3,
+        flexShrink: 0, marginTop: 5,
         width: 8, height: 8, borderRadius: "50%",
         background: n.readAt === null ? "var(--color-accent)" : "transparent",
       }} />
@@ -157,7 +192,20 @@ function NotifRow({ n, onClose }: { n: Notification; onClose: () => void }) {
         <span style={{ display: "block", fontSize: 13, color: "var(--color-text-primary)", lineHeight: 1.4 }}>
           {text}
         </span>
-        <span style={{ display: "block", fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 2 }}>
+        {excerpt && (
+          <span style={{
+            fontSize: 12, color: "var(--color-text-secondary)",
+            marginTop: 4, padding: "6px 8px",
+            background: "rgba(0,0,0,0.04)", borderRadius: 6,
+            borderLeft: "2px solid var(--color-accent)",
+            lineHeight: 1.4,
+            display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+          }}>
+            {excerpt}
+          </span>
+        )}
+        <span style={{ display: "block", fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 4 }}>
           {formatTime(n.createdAt)}
         </span>
       </span>
@@ -165,8 +213,9 @@ function NotifRow({ n, onClose }: { n: Notification; onClose: () => void }) {
   );
 
   if (n.noteId) {
+    const href = `/notes?id=${n.noteId}&mention=${encodeURIComponent(n.recipientEmail)}`;
     return (
-      <Link href={`/notes`} onClick={onClose} style={{ textDecoration: "none", color: "inherit", display: "block" }}>
+      <Link href={href} onClick={onClose} style={{ textDecoration: "none", color: "inherit", display: "block" }}>
         {inner}
       </Link>
     );

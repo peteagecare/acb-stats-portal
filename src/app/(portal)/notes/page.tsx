@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -79,6 +80,9 @@ interface CompanyWithProjects {
 }
 
 export default function NotesPage() {
+  const sp = useSearchParams();
+  const queryNoteId = sp.get("id");
+  const queryMention = sp.get("mention");
   const [notes, setNotes] = useState<Note[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -112,13 +116,14 @@ export default function NotesPage() {
       setNotes(json.notes);
       setError(null);
       setSelectedId((prev) => {
+        if (queryNoteId && json.notes.find((n) => n.id === queryNoteId)) return queryNoteId;
         if (prev && json.notes.find((n) => n.id === prev)) return prev;
         return json.notes[0]?.id ?? null;
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     }
-  }, []);
+  }, [queryNoteId]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -304,6 +309,7 @@ export default function NotesPage() {
             note={selected}
             onChange={(patch) => patchLocal(selected.id, patch)}
             onDelete={() => deleteNote(selected.id)}
+            scrollToMention={queryNoteId === selected.id ? queryMention : null}
           />
         )}
       </main>
@@ -513,11 +519,12 @@ function formatListDate(iso: string | null): string {
 /* ─── Editor ─── */
 
 function NoteEditor({
-  note, onChange, onDelete,
+  note, onChange, onDelete, scrollToMention,
 }: {
   note: Note;
   onChange: (patch: Partial<Note>) => void;
   onDelete: () => void;
+  scrollToMention?: string | null;
 }) {
   const [title, setTitle] = useState(note.title);
   const [meetingDate, setMeetingDate] = useState(note.meetingDate ?? "");
@@ -690,6 +697,23 @@ function NoteEditor({
     if (!editor) return;
     taskSyncRef.current = scanLinkedTasks(editor);
   }, [editor, note.id]);
+
+  // Deep-link: scroll to a specific @mention when arriving from a notification
+  useEffect(() => {
+    if (!editor || !scrollToMention) return;
+    // Wait one frame for the editor DOM to be in place
+    const t = setTimeout(() => {
+      const safe = scrollToMention.replace(/"/g, '\\"');
+      const el = document.querySelector<HTMLElement>(
+        `.tiptap-wrap [data-mention-email="${safe}"]`,
+      );
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("note-mention-flash");
+      setTimeout(() => el.classList.remove("note-mention-flash"), 2200);
+    }, 120);
+    return () => clearTimeout(t);
+  }, [editor, note.id, scrollToMention]);
 
   // React to rail-side changes (delete / toggle) by mutating the editor doc
   useEffect(() => {

@@ -32,3 +32,39 @@ export function extractTaskAssignments(
   }
   return out;
 }
+
+const BLOCK_TYPES = ["p", "li", "h1", "h2", "h3", "blockquote"] as const;
+
+/** Find the first block (p, li, h1-3, blockquote) that contains the given
+ *  mention, and return its plain-text content (stripped of all tags),
+ *  truncated to ~240 chars. Returns null if no enclosing block found. */
+export function extractExcerptForMention(html: string, email: string): string | null {
+  const needle = `data-mention-email="${email}"`;
+  for (const tag of BLOCK_TYPES) {
+    const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "g");
+    for (const m of html.matchAll(re)) {
+      const inner = m[1];
+      if (!inner.includes(needle)) continue;
+      const text = stripTags(inner);
+      if (!text) continue;
+      return truncate(text, 240);
+    }
+  }
+  return null;
+}
+
+function stripTags(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max - 1).trimEnd() + "…" : s;
+}

@@ -11,7 +11,7 @@ import {
   notifications,
 } from "@/db/schema";
 import { requireUser, canSeeNote } from "@/lib/workspace-auth";
-import { extractMentionEmails, extractTaskAssignments } from "@/lib/mentions";
+import { extractExcerptForMention, extractMentionEmails, extractTaskAssignments } from "@/lib/mentions";
 import { sendMentionEmail } from "@/lib/email";
 import { loadUsers } from "@/lib/users";
 
@@ -184,6 +184,7 @@ async function processMentions(opts: {
   for (const email of newMentions) {
     const assignedTaskId = taskAssignments.find((a) => a.email === email)?.taskId ?? null;
     const isAssignment = !!assignedTaskId;
+    const excerpt = extractExcerptForMention(html, email);
     const p = prefsByEmail.get(email);
     const inApp = isAssignment ? (p?.taskAssignInApp ?? true) : (p?.mentionsInApp ?? true);
     const wantEmail = isAssignment ? (p?.taskAssignEmail ?? true) : (p?.mentionsEmail ?? true);
@@ -195,7 +196,7 @@ async function processMentions(opts: {
         noteId,
         taskId: assignedTaskId,
         actorEmail,
-        payload: { noteTitle, actorLabel },
+        payload: { noteTitle, actorLabel, excerpt },
       });
     }
     if (wantEmail) {
@@ -203,7 +204,8 @@ async function processMentions(opts: {
         to: email,
         actorLabel,
         noteTitle,
-        noteUrl: `${origin}/notes`,
+        noteUrl: `${origin}/notes?id=${noteId}&mention=${encodeURIComponent(email)}`,
+        excerpt: excerpt ?? undefined,
         isAssignment,
       }).catch(() => {});
     }
