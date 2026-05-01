@@ -8,7 +8,7 @@ import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import { createSlashCommand } from "./_slash";
 import { ResizableImageExtension } from "./_image";
-import { TagPicker, TagPillList, useTags } from "../workspace/_tags";
+import { TagFilterChips, TagPicker, TagPillList, useTags } from "../workspace/_tags";
 
 const LinkedTaskItem = TaskItem.extend({
   addAttributes() {
@@ -82,6 +82,7 @@ export default function NotesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [activeTagIds, setActiveTagIds] = useState<Set<string>>(new Set());
   const [companiesWithProjects, setCompaniesWithProjects] = useState<CompanyWithProjects[]>([]);
   const [listOpen, setListOpen] = useState(true);
   const [tasksOpen, setTasksOpen] = useState(true);
@@ -171,11 +172,23 @@ export default function NotesPage() {
   const filtered = useMemo(() => {
     if (!notes) return null;
     const q = search.trim().toLowerCase();
-    if (!q) return notes;
-    return notes.filter((n) =>
-      n.title.toLowerCase().includes(q) || n.body.toLowerCase().includes(q),
-    );
-  }, [notes, search]);
+    return notes.filter((n) => {
+      if (q && !(n.title.toLowerCase().includes(q) || n.body.toLowerCase().includes(q))) return false;
+      if (activeTagIds.size > 0) {
+        const ids = n.tagIds ?? [];
+        for (const id of activeTagIds) {
+          if (!ids.includes(id)) return false;
+        }
+      }
+      return true;
+    });
+  }, [notes, search, activeTagIds]);
+
+  const allTagIdsInScope = useMemo(() => {
+    const s = new Set<string>();
+    for (const n of notes ?? []) for (const id of n.tagIds ?? []) s.add(id);
+    return s;
+  }, [notes]);
 
   const selected = useMemo(
     () => notes?.find((n) => n.id === selectedId) ?? null,
@@ -243,6 +256,15 @@ export default function NotesPage() {
               background: "var(--bg-page)", outline: "none",
             }}
           />
+          {allTagIdsInScope.size > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <TagFilterChips
+                allTagIds={allTagIdsInScope}
+                active={activeTagIds}
+                onChange={setActiveTagIds}
+              />
+            </div>
+          )}
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: "0 8px 12px" }}>
           {error && (
