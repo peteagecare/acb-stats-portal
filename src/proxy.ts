@@ -15,6 +15,8 @@ const PUBLIC_PATHS = new Set<string>([
 function isPublic(pathname: string): boolean {
   if (PUBLIC_PATHS.has(pathname)) return true;
   if (pathname.startsWith("/_next/")) return true;
+  // Cron endpoints handle their own auth via CRON_SECRET / admin-session check
+  if (pathname.startsWith("/api/cron/")) return true;
   return false;
 }
 

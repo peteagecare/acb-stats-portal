@@ -20,6 +20,14 @@ interface Notification {
     projectName?: string;
     companyId?: string;
     companyName?: string;
+    itemTitle?: string;
+    itemKind?: string;
+    itemUrl?: string;
+    newStatus?: string;
+    rejectionNote?: string | null;
+    summary?: string;
+    parentTitle?: string;
+    parentUrl?: string;
   } | null;
   readAt: string | null;
   createdAt: string;
@@ -191,10 +199,42 @@ function NotifRow({ n, onClose }: { n: Notification; onClose: () => void }) {
     if (n.payload?.companyId && n.payload?.projectId && n.taskId) {
       href = `/workspace/${n.payload.companyId}/${n.payload.projectId}?task=${n.taskId}`;
     }
+  } else if (n.kind === "workspace_task_completed") {
+    const taskTitle = n.payload?.taskTitle ?? "a task";
+    text = `${actor} completed "${taskTitle}"`;
+    if (n.payload?.companyId && n.payload?.projectId && n.taskId) {
+      href = `/workspace/${n.payload.companyId}/${n.payload.projectId}?task=${n.taskId}`;
+    }
   } else if (n.kind === "task_assigned") {
     const noteTitle = n.payload?.noteTitle ?? "a meeting note";
     text = `${actor} assigned you a task in "${noteTitle}"`;
     if (n.noteId) href = `/notes?id=${n.noteId}&mention=${encodeURIComponent(n.recipientEmail)}`;
+  } else if (n.kind === "finance_approval_step") {
+    const itemTitle = n.payload?.itemTitle ?? "an item";
+    text = `${actor} approved "${itemTitle}" — your turn`;
+    href = (n.payload?.itemUrl as string | undefined) ?? "/financial-approvals";
+  } else if (n.kind === "finance_approval_rejected") {
+    const itemTitle = n.payload?.itemTitle ?? "an item";
+    text = `${actor} sent "${itemTitle}" back for changes`;
+    href = (n.payload?.itemUrl as string | undefined) ?? "/financial-approvals";
+  } else if (n.kind === "comment_added") {
+    const parentTitle = (n.payload?.parentTitle as string | undefined) ?? "an item";
+    text = `${actor} commented on "${parentTitle}"`;
+    href = (n.payload?.parentUrl as string | undefined) ?? null;
+  } else if (n.kind === "note_shared") {
+    const noteTitle = (n.payload?.noteTitle as string | undefined) ?? "a meeting note";
+    text = `${actor} shared "${noteTitle}" with you`;
+    if (n.noteId) href = `/notes?id=${n.noteId}`;
+  } else if (n.kind === "review_received") {
+    const platform = (n.payload?.itemKind as string | undefined) ?? "a platform";
+    const delta = (n.payload?.summary as string | undefined) ?? "";
+    text = `${platform} review activity${delta ? ` — ${delta}` : ""}`;
+    href = "/reviews-social";
+  } else if (n.kind === "calendar_status") {
+    const itemTitle = n.payload?.itemTitle ?? "a content piece";
+    const newStatus = n.payload?.newStatus ?? "updated";
+    text = `${actor} moved "${itemTitle}" to ${newStatus}`;
+    href = (n.payload?.itemUrl as string | undefined) ?? "/content-calendar";
   } else {
     const noteTitle = n.payload?.noteTitle ?? "a meeting note";
     text = `${actor} mentioned you in "${noteTitle}"`;

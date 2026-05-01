@@ -3,6 +3,7 @@ import { and, eq, asc } from "drizzle-orm";
 import { db } from "@/db/client";
 import { comments } from "@/db/schema";
 import { requireUser, canSeeParent, ParentType } from "@/lib/workspace-auth";
+import { notifyComment } from "@/lib/notify-comment";
 
 function isParentType(v: unknown): v is ParentType {
   return v === "project" || v === "task";
@@ -60,5 +61,14 @@ export async function POST(request: NextRequest) {
       authorEmail: user.email,
     })
     .returning();
+
+  notifyComment({
+    parentType: body.parentType,
+    parentId: body.parentId,
+    commentBody: text,
+    actorEmail: user.email,
+    origin: new URL(request.url).origin,
+  }).catch((e) => console.error("[notify-comment] failed:", e));
+
   return Response.json(created);
 }

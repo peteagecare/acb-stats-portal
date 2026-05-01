@@ -10,6 +10,7 @@ import TaskItem from "@tiptap/extension-task-item";
 import { createSlashCommand } from "./_slash";
 import { ResizableImageExtension } from "./_image";
 import { UserMention, type MentionPendingDetail } from "./_mention";
+import { MeetingRecorder } from "./_recorder";
 import { TagFilterChips, TagPicker, TagPillList, useTags } from "../workspace/_tags";
 import { ConfirmDialog } from "@/app/components/ConfirmDialog";
 
@@ -54,6 +55,7 @@ interface Note {
   id: string;
   title: string;
   body: string;
+  transcript?: string;
   meetingDate: string | null;
   authorEmail: string;
   accessMode: "everyone" | "restricted";
@@ -597,6 +599,10 @@ function NoteEditor({
   const taskSyncRef = useRef<Map<string, boolean>>(new Map());
   // Ref to the live editor so async drop/paste handlers can insert via the editor API
   const editorRef = useRef<Editor | null>(null);
+  /** Position in the editor's doc where the current recording's live transcript started.
+   *  Used on Apply to delete that range and replace it with the summary HTML. */
+  const transcriptStartPosRef = useRef<number | null>(null);
+  const [showTranscriptModal, setShowTranscriptModal] = useState(false);
 
   function notifyTaskAdded() {
     window.dispatchEvent(new CustomEvent("note-task-changed", { detail: { noteId: note.id } }));
@@ -884,6 +890,20 @@ function NoteEditor({
         <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
           {savedAt ? `Saved ${savedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Auto-saves"}
         </span>
+        {note.transcript && note.transcript.trim().length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowTranscriptModal(true)}
+            title="Show the full transcript captured during this meeting"
+            style={{
+              padding: "5px 12px",
+              border: "1px solid var(--color-border)", color: "var(--color-text-secondary)",
+              borderRadius: 8, background: "transparent",
+              fontSize: 12, fontWeight: 500, cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >📝 View transcript</button>
+        )}
         <button
           onClick={onDelete}
           style={{
@@ -894,6 +914,49 @@ function NoteEditor({
             fontFamily: "inherit",
           }}
         >Delete</button>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
+        <MeetingRecorder
+          noteId={note.id}
+          onLiveStart={() => {
+            const ed = editorRef.current;
+            if (ed) {
+              // Capture the doc size as the position where live transcript starts.
+              // On Apply we'll delete from here to docEnd and replace with the summary.
+              transcriptStartPosRef.current = ed.state.doc.content.size;
+            }
+          }}
+          onLiveChunk={(text) => {
+            const ed = editorRef.current;
+            if (!ed || !text) return;
+            const safe = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            ed.chain().focus("end").insertContent(`<p>${safe}</p>`).run();
+          }}
+          onApply={({ summaryHtml, fullTranscript, createdTaskIds }) => {
+            const ed = editorRef.current;
+            if (ed) {
+              const startPos = transcriptStartPosRef.current;
+              const endPos = ed.state.doc.content.size;
+              if (startPos !== null && startPos < endPos) {
+                // Wipe the live-written transcript paragraphs, then insert the summary
+                ed.chain().focus().deleteRange({ from: startPos, to: endPos }).insertContent(summaryHtml).run();
+              } else {
+                ed.chain().focus("end").insertContent(summaryHtml).run();
+              }
+              transcriptStartPosRef.current = null;
+            }
+            // Persist the full transcript on the note so the View transcript button can show it
+            if (fullTranscript.trim()) {
+              fetch(`/api/notes/${note.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ transcript: fullTranscript }),
+              }).then(() => onChange({ transcript: fullTranscript })).catch(() => {});
+            }
+            if (createdTaskIds.length > 0) notifyTaskAdded();
+          }}
+        />
       </div>
 
       <input
@@ -926,6 +989,52 @@ function NoteEditor({
           detail={mentionPending}
           onClose={() => setMentionPending(null)}
         />
+      )}
+
+      {showTranscriptModal && (
+        <div
+          onClick={() => setShowTranscriptModal(false)}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 100, padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "white", borderRadius: 16, boxShadow: "var(--shadow-modal, 0 20px 40px rgba(0,0,0,0.2))",
+              width: "100%", maxWidth: 720, maxHeight: "85vh",
+              display: "flex", flexDirection: "column", overflow: "hidden",
+            }}
+          >
+            <header style={{ display: "flex", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid var(--color-border)" }}>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Full transcript</h2>
+              <button
+                onClick={() => setShowTranscriptModal(false)}
+                aria-label="Close"
+                style={{ marginLeft: "auto", background: "transparent", border: "none", cursor: "pointer", padding: 4, color: "var(--color-text-secondary)", display: "flex" }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </header>
+            <div style={{ padding: "16px 20px", overflowY: "auto", flex: 1, fontSize: 14, lineHeight: 1.6, color: "var(--color-text-primary)", whiteSpace: "pre-wrap" }}>
+              {note.transcript}
+            </div>
+            <footer style={{ display: "flex", justifyContent: "flex-end", gap: 8, padding: "12px 20px", borderTop: "1px solid var(--color-border)" }}>
+              <button
+                onClick={() => { navigator.clipboard.writeText(note.transcript ?? ""); }}
+                style={{ padding: "7px 14px", borderRadius: 999, background: "transparent", border: "1px solid var(--color-border)", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}
+              >Copy to clipboard</button>
+              <button
+                onClick={() => setShowTranscriptModal(false)}
+                style={{ padding: "7px 14px", borderRadius: 999, background: "var(--color-accent)", border: "none", color: "white", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+              >Done</button>
+            </footer>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -146,6 +146,20 @@ export default function FinancialApprovalsPage() {
   const [waitingFilter, setWaitingFilter] = useState<ApprovalRole | "all">("all");
   const [activeTab, setActiveTab] = useState<ActiveTab>("emails");
   const [contentModal, setContentModal] = useState<ContentModalState | null>(null);
+  const [calendarPending, setCalendarPending] = useState<number>(0);
+
+  useEffect(() => {
+    fetch("/api/content-calendar", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { items?: { needsFinanceApproval?: boolean; status?: string }[] } | null) => {
+        if (!data?.items) return;
+        const count = data.items.filter(
+          (i) => i.needsFinanceApproval === true && i.status !== "Approved" && i.status !== "Cancelled" && i.status !== "Live",
+        ).length;
+        setCalendarPending(count);
+      })
+      .catch(() => {});
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -186,6 +200,14 @@ export default function FinancialApprovalsPage() {
     loadData();
   }, [loadData]);
 
+  function describeItem(emailId: string): { itemTitle: string; itemKind: string; itemUrl: string } {
+    const email = emails.find((e) => e.id === emailId);
+    if (email) return { itemTitle: email.subject || email.name || "Email", itemKind: "Email", itemUrl: "/financial-approvals" };
+    const ci = contentItems.find((c) => c.id === emailId);
+    if (ci) return { itemTitle: ci.title, itemKind: ci.type.charAt(0).toUpperCase() + ci.type.slice(1), itemUrl: "/financial-approvals" };
+    return { itemTitle: "an item", itemKind: "Approval", itemUrl: "/financial-approvals" };
+  }
+
   async function toggleApproval(emailId: string, role: AnyApprovalKey, next: boolean, override?: boolean) {
     const saveKey = `${emailId}:${role}`;
     setSavingKey(saveKey);
@@ -219,7 +241,7 @@ export default function FinancialApprovalsPage() {
       const res = await fetch("/api/approvals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emailId, role, approved: next, override: isOverride || undefined }),
+        body: JSON.stringify({ emailId, role, approved: next, override: isOverride || undefined, ...describeItem(emailId) }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -265,7 +287,7 @@ export default function FinancialApprovalsPage() {
       const res = await fetch("/api/approvals", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emailId, role, note }),
+        body: JSON.stringify({ emailId, role, note, ...describeItem(emailId) }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -607,6 +629,31 @@ export default function FinancialApprovalsPage() {
       </header>
 
       <main style={{ maxWidth: "1600px", margin: "0 auto", padding: "16px" }}>
+        {calendarPending > 0 && (
+          <Link
+            href="/content-calendar"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              padding: "12px 16px",
+              marginBottom: 16,
+              background: "#fef3c7",
+              border: "1px solid #fcd34d",
+              borderRadius: 12,
+              color: "#78350f",
+              fontSize: 13,
+              fontWeight: 600,
+              textDecoration: "none",
+            }}
+          >
+            <span>
+              📅 {calendarPending} content calendar {calendarPending === 1 ? "piece needs" : "pieces need"} financial approval
+            </span>
+            <span style={{ fontSize: 12 }}>Open Content Calendar →</span>
+          </Link>
+        )}
         {/* Type tabs */}
         {!loading && !error && (
           <div

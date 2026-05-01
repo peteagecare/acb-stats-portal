@@ -14,6 +14,7 @@ import { requireUser, canSeeNote } from "@/lib/workspace-auth";
 import { extractExcerptForMention, extractMentionEmails, extractTaskAssignments } from "@/lib/mentions";
 import { sendMentionEmail } from "@/lib/email";
 import { loadUsers } from "@/lib/users";
+import { notifyNoteShared } from "@/lib/notify-note";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -57,6 +58,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   type Body = {
     title?: string;
     body?: string;
+    transcript?: string;
     meetingDate?: string | null;
     accessMode?: "everyone" | "restricted";
     setAccessUsers?: string[];
@@ -72,6 +74,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const updates: Partial<typeof meetingNotes.$inferInsert> = { updatedAt: new Date() };
   if (typeof body.title === "string") updates.title = body.title;
   if (typeof body.body === "string") updates.body = body.body;
+  if (typeof body.transcript === "string") updates.transcript = body.transcript;
   if (body.meetingDate !== undefined) updates.meetingDate = body.meetingDate || null;
   if (body.accessMode === "everyone" || body.accessMode === "restricted") {
     updates.accessMode = body.accessMode;
@@ -80,12 +83,26 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   await db.update(meetingNotes).set(updates).where(eq(meetingNotes.id, id));
 
   if (Array.isArray(body.setAccessUsers)) {
+    const previousRows = await db.select({ userEmail: noteAccess.userEmail }).from(noteAccess).where(eq(noteAccess.noteId, id));
+    const previousSet = new Set(previousRows.map((r) => r.userEmail.toLowerCase()));
+
     await db.delete(noteAccess).where(eq(noteAccess.noteId, id));
-    const rows = body.setAccessUsers
+    const cleaned = body.setAccessUsers
       .map((e) => e.trim().toLowerCase())
-      .filter(Boolean)
-      .map((userEmail) => ({ noteId: id, userEmail }));
+      .filter(Boolean);
+    const rows = cleaned.map((userEmail) => ({ noteId: id, userEmail }));
     if (rows.length) await db.insert(noteAccess).values(rows).onConflictDoNothing();
+
+    // Newly-added users (in the new list but not the previous one) get a "shared with you" ping.
+    const newlyAdded = cleaned.filter((e) => !previousSet.has(e));
+    if (newlyAdded.length > 0 && updates.accessMode !== "everyone") {
+      notifyNoteShared({
+        noteId: id,
+        newRecipientEmails: newlyAdded,
+        actorEmail: user.email,
+        origin: new URL(request.url).origin,
+      }).catch((e) => console.error("[notify-note] failed:", e));
+    }
   }
 
   if (Array.isArray(body.setTagIds)) {

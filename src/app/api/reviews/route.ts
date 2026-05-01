@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { loadJson, saveJson } from "@/lib/blob-store";
+import { notifyReviewReceived } from "@/lib/notify-review";
 
 const KEY = "reviews.json";
 const FALLBACK = "./reviews.json";
@@ -132,6 +133,8 @@ export async function GET(request: NextRequest) {
     if (p.name === "Facebook") scraped = fb;
 
     if (scraped && scraped.count > 0) {
+      const oldCount = p.current;
+      const oldRating = p.rating;
       // Snapshot history before updating
       if (p.current > 0 && p.current !== scraped.count) {
         if (!p.history.find((h) => h.date === today)) {
@@ -140,6 +143,21 @@ export async function GET(request: NextRequest) {
       }
       p.current = scraped.count;
       p.rating = scraped.rating;
+
+      // Notify if the count went up or the rating dropped (skip cold-start where oldCount === 0).
+      const delta = scraped.count - oldCount;
+      const ratingDropped = oldRating > 0 && scraped.rating > 0 && scraped.rating < oldRating - 0.05;
+      if (oldCount > 0 && (delta > 0 || ratingDropped)) {
+        notifyReviewReceived({
+          platformName: p.name,
+          delta,
+          newCount: scraped.count,
+          oldCount,
+          newRating: scraped.rating,
+          oldRating,
+          origin: request.nextUrl.origin,
+        }).catch((e) => console.error("[notify-review] failed:", e));
+      }
     }
   }
 

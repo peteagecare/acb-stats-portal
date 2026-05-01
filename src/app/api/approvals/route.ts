@@ -1,7 +1,25 @@
 import { NextRequest } from "next/server";
 import { parseSessionToken, AUTH_COOKIE_NAME } from "@/lib/auth";
 import { loadJson, saveJson } from "@/lib/blob-store";
-import { AnyApprovalKey, canApproveAny, isValidApprovalKey } from "@/lib/approval-roles";
+import { AnyApprovalKey, ApprovalState, canApproveAny, isValidApprovalKey } from "@/lib/approval-roles";
+import { notifyApprovalStep } from "@/lib/notify-approval";
+
+function getOrigin(request: NextRequest): string {
+  const url = new URL(request.url);
+  return `${url.protocol}//${url.host}`;
+}
+
+function recordToState(rec: EmailApprovals | undefined): ApprovalState {
+  return {
+    pete: !!rec?.pete?.approved,
+    chris: !!rec?.chris?.approved,
+    sam: !!rec?.sam?.approved,
+    outside: !!rec?.outside?.approved,
+    dnna_pete: !!rec?.dnna_pete?.approved,
+    dnna_chris: !!rec?.dnna_chris?.approved,
+    rejected: !!rec?.rejection,
+  };
+}
 
 const KEY = "approvals.json";
 const FALLBACK = "./approvals.json";
@@ -49,7 +67,16 @@ export async function POST(request: NextRequest) {
   const user = parseSessionToken(token);
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
-  let body: { emailId?: string; role?: string; approved?: boolean; label?: string; override?: boolean };
+  let body: {
+    emailId?: string;
+    role?: string;
+    approved?: boolean;
+    label?: string;
+    override?: boolean;
+    itemTitle?: string;
+    itemKind?: string;
+    itemUrl?: string;
+  };
   try {
     body = await request.json();
   } catch {
@@ -107,6 +134,20 @@ export async function POST(request: NextRequest) {
 
   await writeStore(store);
 
+  if (approved) {
+    notifyApprovalStep({
+      emailId,
+      itemTitle: body.itemTitle?.trim() || "an item",
+      itemKind: body.itemKind?.trim() || "Approval",
+      itemUrl: body.itemUrl?.trim() || "/financial-approvals",
+      actorEmail: user.email,
+      actorLabel: userLabel,
+      state: recordToState(store[emailId]),
+      action: "approve",
+      origin: getOrigin(request),
+    }).catch((e) => console.error("[notify-approval] failed:", e));
+  }
+
   return Response.json({
     ok: true,
     emailId,
@@ -125,7 +166,15 @@ export async function DELETE(request: NextRequest) {
   const user = parseSessionToken(token);
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
-  let body: { emailId?: string; role?: string; note?: string; label?: string };
+  let body: {
+    emailId?: string;
+    role?: string;
+    note?: string;
+    label?: string;
+    itemTitle?: string;
+    itemKind?: string;
+    itemUrl?: string;
+  };
   try {
     body = await request.json();
   } catch {
@@ -158,6 +207,19 @@ export async function DELETE(request: NextRequest) {
   // Reset: clear every prior approval + DNNA; keep only the rejection record.
   store[emailId] = { rejection };
   await writeStore(store);
+
+  notifyApprovalStep({
+    emailId,
+    itemTitle: body.itemTitle?.trim() || "an item",
+    itemKind: body.itemKind?.trim() || "Approval",
+    itemUrl: body.itemUrl?.trim() || "/financial-approvals",
+    actorEmail: user.email,
+    actorLabel: rejection.userLabel,
+    state: recordToState(store[emailId]),
+    action: "reject",
+    rejectionNote: trimmedNote,
+    origin: getOrigin(request),
+  }).catch((e) => console.error("[notify-approval] failed:", e));
 
   return Response.json({ ok: true, emailId, rejection });
 }

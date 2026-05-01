@@ -3,6 +3,20 @@
 import Link from "next/link";
 import KpiTile from "../components/KpiTile";
 import { MonthlyTargets, TeamRace, ContactsTrend } from "../components/DashboardStats";
+import {
+  MyTasks,
+  OutstandingApprovals,
+  ContentToCheck,
+  LatestMeetingNotes,
+  LatestTeamChanges,
+  ReviewSummary,
+  ChannelPerformance,
+  ConversionFunnel,
+  ThisWeeksContent,
+  OutreachFeedbackSummary,
+  LifecycleBreakdown,
+  PipelineValue,
+} from "./_dashboard-widgets";
 
 function currentMonthRange() {
   const now = new Date();
@@ -21,6 +35,52 @@ function gbp(v: number | string): string {
   if (n >= 1000) return `£${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
   return `£${Math.round(n).toLocaleString()}`;
 }
+
+const QUICK_LINKS: { group: string; items: { href: string; label: string }[] }[] = [
+  {
+    group: "Tasks & notes",
+    items: [
+      { href: "/workspace", label: "Tasks" },
+      { href: "/notes", label: "Meeting Notes" },
+    ],
+  },
+  {
+    group: "Analytics & Reporting",
+    items: [
+      { href: "/funnel", label: "Customer Funnel" },
+      { href: "/teams", label: "Contacts Per Team" },
+      { href: "/trends", label: "Trends & Lifecycle" },
+      { href: "/lead-timeline", label: "Lead Timeline" },
+    ],
+  },
+  {
+    group: "Operations",
+    items: [
+      { href: "/site-visits", label: "Site Visits" },
+      { href: "/installs", label: "Installs" },
+      { href: "/team-changes", label: "Team Changes" },
+      { href: "/financial-approvals", label: "Financial Approvals" },
+    ],
+  },
+  {
+    group: "Marketing & CRM",
+    items: [
+      { href: "/content-calendar", label: "Content Calendar" },
+      { href: "/automation-map", label: "Journeys & Automations" },
+      { href: "/feedback", label: "Outreach Feedback" },
+      { href: "/reviews-social", label: "Reviews & Social" },
+      { href: "/subscriptions", label: "Subscriptions" },
+    ],
+  },
+  {
+    group: "Admin",
+    items: [
+      { href: "/settings", label: "Settings" },
+      { href: "/users", label: "Users" },
+      { href: "/overview", label: "Full Overview" },
+    ],
+  },
+];
 
 export default function DashboardPage() {
   const { from, to, monthLabel } = currentMonthRange();
@@ -52,10 +112,62 @@ export default function DashboardPage() {
         </Link>
       </div>
 
+      {/* Action items: things that need attention */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+          gap: 14,
+          marginBottom: 22,
+        }}
+      >
+        <MyTasks />
+        <OutstandingApprovals />
+        <ContentToCheck />
+      </div>
+
+      {/* Activity & references */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+          gap: 14,
+          marginBottom: 28,
+        }}
+      >
+        <LatestMeetingNotes />
+        <LatestTeamChanges />
+        <ReviewSummary />
+      </div>
+
+      {/* Performance & funnel insights */}
+      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>
+        Performance
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+          gap: 14,
+          marginBottom: 28,
+        }}
+      >
+        <ChannelPerformance />
+        <ConversionFunnel />
+        <LifecycleBreakdown />
+        <PipelineValue />
+        <OutreachFeedbackSummary />
+        <ThisWeeksContent />
+      </div>
+
+      {/* KPI tiles */}
+      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>
+        This month at a glance
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
           gap: 14,
         }}
       >
@@ -67,7 +179,6 @@ export default function DashboardPage() {
           subtitle="Right now on acb.co.uk"
           accent="#30A46C"
         />
-
         <KpiTile
           label="Contacts"
           href="/funnel"
@@ -76,7 +187,6 @@ export default function DashboardPage() {
           subtitle="New this month"
           accent="#0071E3"
         />
-
         <KpiTile
           label="Prospects"
           href="/funnel"
@@ -88,7 +198,6 @@ export default function DashboardPage() {
           subtitle="Low-intent enquiries"
           accent="#E8833A"
         />
-
         <KpiTile
           label="Leads"
           href="/funnel"
@@ -100,7 +209,6 @@ export default function DashboardPage() {
           subtitle="High-intent enquiries"
           accent="#8E4EC6"
         />
-
         <KpiTile
           label="Site visits"
           href="/site-visits"
@@ -109,7 +217,6 @@ export default function DashboardPage() {
           subtitle="Home visits this month"
           accent="#D93D42"
         />
-
         <KpiTile
           label="Installs"
           href="/installs"
@@ -122,7 +229,6 @@ export default function DashboardPage() {
           subtitle="Completed this month"
           accent="#30A46C"
         />
-
         <KpiTile
           label="Won jobs"
           href="/funnel"
@@ -131,7 +237,6 @@ export default function DashboardPage() {
           subtitle="Closed / won this month"
           accent="#0071E3"
         />
-
         <KpiTile
           label="Won value"
           href="/funnel"
@@ -140,15 +245,6 @@ export default function DashboardPage() {
           format={gbp}
           subtitle="Revenue booked this month"
           accent="#8E4EC6"
-        />
-
-        <KpiTile
-          label="Reviews"
-          href="/reviews-social"
-          fetchUrl={`/api/reviews?from=${from}&to=${to}`}
-          extract={(d) => (d as { totalReviews?: number } | null)?.totalReviews ?? null}
-          subtitle="New reviews this month"
-          accent="#E8833A"
         />
       </div>
 
@@ -161,35 +257,53 @@ export default function DashboardPage() {
         <ContactsTrend />
       </div>
 
-      <div style={{ marginTop: 28 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>
+      {/* Quick links to every other page in the portal */}
+      <div style={{ marginTop: 32 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
           Quick links
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {[
-            { href: "/automation-map", label: "Journeys & Automations" },
-            { href: "/lead-timeline", label: "Lead Timeline" },
-            { href: "/trends", label: "Trends & Lifecycle" },
-            { href: "/teams", label: "Contacts Per Team" },
-            { href: "/feedback", label: "Outreach Feedback" },
-            { href: "/financial-approvals", label: "Financial Approvals" },
-          ].map((q) => (
-            <Link
-              key={q.href}
-              href={q.href}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 14,
+          }}
+        >
+          {QUICK_LINKS.map((g) => (
+            <div
+              key={g.group}
               style={{
                 background: "var(--bg-card)",
+                borderRadius: 14,
                 boxShadow: "var(--shadow-card)",
-                padding: "8px 14px",
-                borderRadius: "var(--radius-pill)",
-                fontSize: 12,
-                fontWeight: 500,
-                color: "var(--color-text-primary)",
-                textDecoration: "none",
+                padding: "12px 14px",
               }}
             >
-              {q.label}
-            </Link>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+                {g.group}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {g.items.map((q) => (
+                  <Link
+                    key={q.href}
+                    href={q.href}
+                    style={{
+                      display: "block",
+                      padding: "6px 8px",
+                      borderRadius: 8,
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: "var(--color-text-primary)",
+                      textDecoration: "none",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.035)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  >
+                    {q.label} →
+                  </Link>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       </div>

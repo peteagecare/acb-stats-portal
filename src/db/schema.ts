@@ -169,6 +169,10 @@ export const meetingNotes = pgTable("meeting_notes", {
   id: uuid("id").defaultRandom().primaryKey(),
   title: text("title").notNull().default(""),
   body: text("body").notNull().default(""),
+  /** Raw meeting transcript captured by the live recorder. Surfaced in a modal
+   *  via a "View transcript" button on the note; preserved when the body's
+   *  live-transcript paragraphs get replaced by the AI summary. */
+  transcript: text("transcript").notNull().default(""),
   meetingDate: date("meeting_date"),
   authorEmail: text("author_email").notNull(),
   accessMode: accessModeEnum("access_mode").notNull().default("everyone"),
@@ -256,6 +260,28 @@ export const notificationPrefs = pgTable("notification_prefs", {
   taskAssignInApp: boolean("task_assign_in_app").notNull().default(true),
   workspaceTaskAssignEmail: boolean("workspace_task_assign_email").notNull().default(true),
   workspaceTaskAssignInApp: boolean("workspace_task_assign_in_app").notNull().default(true),
+  financeApprovalEmail: boolean("finance_approval_email").notNull().default(true),
+  financeApprovalInApp: boolean("finance_approval_in_app").notNull().default(true),
+  contentCalendarEmail: boolean("content_calendar_email").notNull().default(true),
+  contentCalendarInApp: boolean("content_calendar_in_app").notNull().default(true),
+  taskCompletedEmail: boolean("task_completed_email").notNull().default(true),
+  taskCompletedInApp: boolean("task_completed_in_app").notNull().default(true),
+  commentEmail: boolean("comment_email").notNull().default(true),
+  commentInApp: boolean("comment_in_app").notNull().default(true),
+  noteSharedEmail: boolean("note_shared_email").notNull().default(true),
+  noteSharedInApp: boolean("note_shared_in_app").notNull().default(true),
+  contentGoLiveEmail: boolean("content_go_live_email").notNull().default(true),
+  contentGoLiveInApp: boolean("content_go_live_in_app").notNull().default(true),
+  reviewEmail: boolean("review_email").notNull().default(true),
+  reviewInApp: boolean("review_in_app").notNull().default(true),
+  subscriptionEmail: boolean("subscription_email").notNull().default(true),
+  subscriptionInApp: boolean("subscription_in_app").notNull().default(true),
+  staleApprovalEmail: boolean("stale_approval_email").notNull().default(true),
+  staleApprovalInApp: boolean("stale_approval_in_app").notNull().default(true),
+  digestDailyEmail: boolean("digest_daily_email").notNull().default(true),
+  digestDailyInApp: boolean("digest_daily_in_app").notNull().default(false),
+  digestWeeklyEmail: boolean("digest_weekly_email").notNull().default(true),
+  digestWeeklyInApp: boolean("digest_weekly_in_app").notNull().default(false),
 });
 
 export const notifications = pgTable("notifications", {

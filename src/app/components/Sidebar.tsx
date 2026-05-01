@@ -91,6 +91,14 @@ const Icon = {
       <path d="M9 14l2 2 4-4" />
     </svg>
   ),
+  calendar: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 10h18" />
+      <path d="M8 3v4" />
+      <path d="M16 3v4" />
+    </svg>
+  ),
   subscriptions: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
       <rect x="3" y="5" width="18" height="14" rx="2" />
@@ -157,28 +165,51 @@ const Icon = {
   ),
 };
 
-const NAV: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: Icon.dashboard },
-  { href: "/workspace", label: "Workspace", icon: Icon.workspace },
-  { href: "/notes", label: "Meeting Notes", icon: Icon.notes },
-  { href: "/funnel", label: "Customer Funnel", icon: Icon.funnel },
-  { href: "/teams", label: "Contacts Per Team", icon: Icon.teams },
-  { href: "/trends", label: "Trends & Lifecycle", icon: Icon.trends },
-  { href: "/team-changes", label: "Team Changes", icon: Icon.changes },
-  { href: "/site-visits", label: "Site Visits", icon: Icon.visit },
-  { href: "/installs", label: "Installs", icon: Icon.install },
-  { href: "/feedback", label: "Outreach Feedback", icon: Icon.feedback },
-  { href: "/lead-timeline", label: "Lead Timeline", icon: Icon.timeline },
-  { href: "/reviews-social", label: "Reviews & Social", icon: Icon.reviews },
-  { href: "/automation-map", label: "Journeys & Automations", icon: Icon.automation },
-  { href: "/financial-approvals", label: "Financial Approvals", icon: Icon.approvals },
-  { href: "/subscriptions", label: "Subscriptions", icon: Icon.subscriptions },
-];
+type NavGroup = { label?: string; items: NavItem[] };
 
-const SECONDARY: NavItem[] = [
-  { href: "/settings", label: "Settings", icon: Icon.settings },
-  { href: "/users", label: "Users", icon: Icon.users },
-  { href: "/overview", label: "Full Overview", icon: Icon.overview },
+const NAV_GROUPS: NavGroup[] = [
+  {
+    items: [
+      { href: "/", label: "Dashboard", icon: Icon.dashboard },
+      { href: "/workspace", label: "Tasks", icon: Icon.workspace },
+      { href: "/notes", label: "Meeting Notes", icon: Icon.notes },
+    ],
+  },
+  {
+    label: "Analytics & Reporting",
+    items: [
+      { href: "/funnel", label: "Customer Funnel", icon: Icon.funnel },
+      { href: "/teams", label: "Contacts Per Team", icon: Icon.teams },
+      { href: "/trends", label: "Trends & Lifecycle", icon: Icon.trends },
+      { href: "/lead-timeline", label: "Lead Timeline", icon: Icon.timeline },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { href: "/site-visits", label: "Site Visits", icon: Icon.visit },
+      { href: "/installs", label: "Installs", icon: Icon.install },
+      { href: "/team-changes", label: "Team Changes", icon: Icon.changes },
+      { href: "/financial-approvals", label: "Financial Approvals", icon: Icon.approvals },
+    ],
+  },
+  {
+    label: "Marketing & CRM",
+    items: [
+      { href: "/content-calendar", label: "Content Calendar", icon: Icon.calendar },
+      { href: "/automation-map", label: "Journeys & Automations", icon: Icon.automation },
+      { href: "/feedback", label: "Outreach Feedback", icon: Icon.feedback },
+      { href: "/reviews-social", label: "Reviews & Social", icon: Icon.reviews },
+      { href: "/subscriptions", label: "Subscriptions", icon: Icon.subscriptions },
+    ],
+  },
+  {
+    label: "Admin",
+    items: [
+      { href: "/settings", label: "Settings", icon: Icon.settings },
+      { href: "/users", label: "Users", icon: Icon.users },
+    ],
+  },
 ];
 
 const KNOWN_USERS = [
@@ -201,6 +232,8 @@ export default function Sidebar() {
   const [showViewAs, setShowViewAs] = useState(false);
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [workspaceCollapsed, setWorkspaceCollapsed] = useState<boolean>(true);
+  const [taskDashboardCollapsed, setTaskDashboardCollapsed] = useState<boolean>(true);
   const [projectsByCompany, setProjectsByCompany] = useState<Record<string, { id: string; name: string }[]>>({});
 
   useEffect(() => {
@@ -211,6 +244,13 @@ export default function Sidebar() {
       })
       .catch(() => {});
   }, []);
+
+  // Auto-collapse workspace/task-dashboard unless user is in that section
+  useEffect(() => {
+    const inWorkspace = pathname.startsWith("/workspace");
+    setWorkspaceCollapsed(!inWorkspace);
+    setTaskDashboardCollapsed(pathname !== "/workspace");
+  }, [pathname]);
 
   // Auto-expand company we're currently viewing
   useEffect(() => {
@@ -365,23 +405,44 @@ export default function Sidebar() {
           <NotificationsBell />
         </div>
 
-        <nav style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 4 }}>
-          {NAV.map((item) => (
-            <div key={item.href}>
-              <SidebarLink
-                item={item}
-                active={isActive(item.href)}
-                onClick={() => setMobileOpen(false)}
-              />
-              {item.href === "/workspace" && (
+        {NAV_GROUPS.map((group, gi) => (
+          <div key={group.label ?? `group-${gi}`} style={{ marginTop: gi === 0 ? 4 : 14 }}>
+            {group.label && (
+              <div style={{ padding: "0 10px 6px", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", color: "var(--color-text-tertiary)", textTransform: "uppercase" }}>
+                {group.label}
+              </div>
+            )}
+            <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {group.items.map((item) => (
+                <div key={item.href}>
+                  {item.href === "/workspace" ? (
+                    <CollapsibleNavRow
+                      item={item}
+                      active={isActive(item.href)}
+                      collapsed={workspaceCollapsed}
+                      onToggle={() => setWorkspaceCollapsed((c) => !c)}
+                      onClick={() => setMobileOpen(false)}
+                      chevron={Icon.chevron}
+                    />
+                  ) : (
+                    <SidebarLink
+                      item={item}
+                      active={isActive(item.href)}
+                      onClick={() => setMobileOpen(false)}
+                    />
+                  )}
+                  {item.href === "/workspace" && !workspaceCollapsed && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 2, marginLeft: 16, marginTop: 2, marginBottom: 2 }}>
-                  <SidebarLink
+                  <CollapsibleNavRow
                     item={{ href: "/workspace", label: "Task Dashboard", icon: Icon.dashboard }}
                     active={onTaskDashboard}
+                    collapsed={taskDashboardCollapsed}
+                    onToggle={() => setTaskDashboardCollapsed((c) => !c)}
                     onClick={() => setMobileOpen(false)}
+                    chevron={Icon.chevron}
                     subdued
                   />
-                  {onTaskDashboard && (
+                  {onTaskDashboard && !taskDashboardCollapsed && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 1, marginLeft: 16, marginBottom: 2 }}>
                       <Link
                         href="/workspace"
@@ -449,23 +510,11 @@ export default function Sidebar() {
                   })}
                 </div>
               )}
-            </div>
-          ))}
-        </nav>
-
-        <div style={{ marginTop: 18, padding: "0 10px 6px", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", color: "var(--color-text-tertiary)", textTransform: "uppercase" }}>
-          More
-        </div>
-        <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {SECONDARY.map((item) => (
-            <SidebarLink
-              key={item.href}
-              item={item}
-              active={isActive(item.href)}
-              onClick={() => setMobileOpen(false)}
-            />
-          ))}
-        </nav>
+                </div>
+              ))}
+            </nav>
+          </div>
+        ))}
 
         <div style={{ marginTop: "auto", paddingTop: 16, borderTop: "1px solid var(--color-border)" }}>
           {email && (
@@ -633,6 +682,75 @@ function SidebarLink({ item, active, onClick, subdued }: { item: NavItem; active
       {item.icon}
       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.label}</span>
     </Link>
+  );
+}
+
+function CollapsibleNavRow({
+  item,
+  active,
+  collapsed,
+  onToggle,
+  onClick,
+  chevron,
+  subdued,
+}: {
+  item: NavItem;
+  active: boolean;
+  collapsed: boolean;
+  onToggle: () => void;
+  onClick: () => void;
+  chevron: React.ReactNode;
+  subdued?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        borderRadius: 10,
+        background: active ? "rgba(0,113,227,0.08)" : "transparent",
+        transition: "background 120ms var(--ease-apple)",
+      }}
+      onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "rgba(0,0,0,0.035)"; }}
+      onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
+    >
+      <Link
+        href={item.href}
+        onClick={onClick}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          flex: 1,
+          minWidth: 0,
+          padding: subdued ? "6px 10px" : "9px 10px",
+          color: active ? "var(--color-accent)" : (subdued ? "var(--color-text-secondary)" : "var(--color-text-primary)"),
+          fontWeight: active ? 600 : (subdued ? 400 : 500),
+          fontSize: subdued ? 12 : 13,
+          textDecoration: "none",
+        }}
+      >
+        {item.icon}
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.label}</span>
+      </Link>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={collapsed ? "Expand" : "Collapse"}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "center",
+          width: 26, height: 26, padding: 0, marginRight: 4,
+          background: "transparent", border: "none", cursor: "pointer",
+          color: "var(--color-text-tertiary)",
+          transform: collapsed ? "rotate(0deg)" : "rotate(90deg)",
+          transition: "transform 120ms var(--ease-apple)",
+          flexShrink: 0,
+          borderRadius: 6,
+        }}
+      >
+        {chevron}
+      </button>
+    </div>
   );
 }
 

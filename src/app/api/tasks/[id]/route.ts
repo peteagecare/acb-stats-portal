@@ -10,7 +10,7 @@ import {
   parseISODate,
   validateRecurrenceRule,
 } from "@/lib/recurrence";
-import { notifyWorkspaceTaskAssigned } from "@/lib/notify-task";
+import { notifyWorkspaceTaskAssigned, notifyTaskCompleted } from "@/lib/notify-task";
 
 const DONE_SECTION_NAMES = new Set(["done", "completed", "finished", "complete"]);
 
@@ -254,6 +254,24 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       taskTitle: updated.title,
       projectId: updated.projectId,
       recipientEmail: updated.ownerEmail,
+      actorEmail: user.email,
+      origin: new URL(request.url).origin,
+    }).catch(() => {});
+  }
+
+  // If the task was just completed, notify the creator (if different from actor).
+  if (
+    updated &&
+    body.completed === true &&
+    !task.completed &&
+    task.createdByEmail &&
+    task.createdByEmail.toLowerCase() !== user.email.toLowerCase()
+  ) {
+    notifyTaskCompleted({
+      taskId: updated.id,
+      taskTitle: updated.title,
+      projectId: updated.projectId,
+      recipientEmail: task.createdByEmail,
       actorEmail: user.email,
       origin: new URL(request.url).origin,
     }).catch(() => {});

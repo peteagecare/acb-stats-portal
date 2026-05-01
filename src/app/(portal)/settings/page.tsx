@@ -192,6 +192,10 @@ export default function SettingsPage() {
         <NotificationPrefs />
       </Section>
 
+      <Section title="Test scheduled jobs" description="Fire a cron job manually right now. Useful for previewing the email output without waiting for the schedule.">
+        <CronTriggers />
+      </Section>
+
       <div style={{ marginTop: 28, fontSize: 12, color: "var(--color-text-tertiary)" }}>
         Manage people who can access this portal on the{" "}
         <a href="/users" style={{ color: "var(--color-accent)", textDecoration: "none" }}>
@@ -210,6 +214,28 @@ interface NotifPrefs {
   taskAssignInApp: boolean;
   workspaceTaskAssignEmail: boolean;
   workspaceTaskAssignInApp: boolean;
+  financeApprovalEmail: boolean;
+  financeApprovalInApp: boolean;
+  contentCalendarEmail: boolean;
+  contentCalendarInApp: boolean;
+  taskCompletedEmail: boolean;
+  taskCompletedInApp: boolean;
+  commentEmail: boolean;
+  commentInApp: boolean;
+  noteSharedEmail: boolean;
+  noteSharedInApp: boolean;
+  contentGoLiveEmail: boolean;
+  contentGoLiveInApp: boolean;
+  reviewEmail: boolean;
+  reviewInApp: boolean;
+  subscriptionEmail: boolean;
+  subscriptionInApp: boolean;
+  staleApprovalEmail: boolean;
+  staleApprovalInApp: boolean;
+  digestDailyEmail: boolean;
+  digestDailyInApp: boolean;
+  digestWeeklyEmail: boolean;
+  digestWeeklyInApp: boolean;
 }
 
 function NotificationPrefs() {
@@ -227,6 +253,28 @@ function NotificationPrefs() {
             taskAssignInApp: j.taskAssignInApp ?? true,
             workspaceTaskAssignEmail: j.workspaceTaskAssignEmail ?? true,
             workspaceTaskAssignInApp: j.workspaceTaskAssignInApp ?? true,
+            financeApprovalEmail: j.financeApprovalEmail ?? true,
+            financeApprovalInApp: j.financeApprovalInApp ?? true,
+            contentCalendarEmail: j.contentCalendarEmail ?? true,
+            contentCalendarInApp: j.contentCalendarInApp ?? true,
+            taskCompletedEmail: j.taskCompletedEmail ?? true,
+            taskCompletedInApp: j.taskCompletedInApp ?? true,
+            commentEmail: j.commentEmail ?? true,
+            commentInApp: j.commentInApp ?? true,
+            noteSharedEmail: j.noteSharedEmail ?? true,
+            noteSharedInApp: j.noteSharedInApp ?? true,
+            contentGoLiveEmail: j.contentGoLiveEmail ?? true,
+            contentGoLiveInApp: j.contentGoLiveInApp ?? true,
+            reviewEmail: j.reviewEmail ?? true,
+            reviewInApp: j.reviewInApp ?? true,
+            subscriptionEmail: j.subscriptionEmail ?? true,
+            subscriptionInApp: j.subscriptionInApp ?? true,
+            staleApprovalEmail: j.staleApprovalEmail ?? true,
+            staleApprovalInApp: j.staleApprovalInApp ?? true,
+            digestDailyEmail: j.digestDailyEmail ?? true,
+            digestDailyInApp: j.digestDailyInApp ?? false,
+            digestWeeklyEmail: j.digestWeeklyEmail ?? true,
+            digestWeeklyInApp: j.digestWeeklyInApp ?? false,
           });
         }
       });
@@ -281,6 +329,72 @@ function NotificationPrefs() {
         hint="A workspace task is assigned to you (created by someone else, or re-assigned)."
         inAppKey="workspaceTaskAssignInApp"
         emailKey="workspaceTaskAssignEmail"
+      />
+      <Row
+        label="Finance approval steps"
+        hint="It's your turn to approve, or something was sent back for changes."
+        inAppKey="financeApprovalInApp"
+        emailKey="financeApprovalEmail"
+      />
+      <Row
+        label="Content calendar updates"
+        hint="A content piece you submitted gets approved, sent back, or pulls you in for review."
+        inAppKey="contentCalendarInApp"
+        emailKey="contentCalendarEmail"
+      />
+      <Row
+        label="Task completed"
+        hint="Someone marks a task you assigned as complete."
+        inAppKey="taskCompletedInApp"
+        emailKey="taskCompletedEmail"
+      />
+      <Row
+        label="Comments"
+        hint="A comment is added to a task or project you own or are following."
+        inAppKey="commentInApp"
+        emailKey="commentEmail"
+      />
+      <Row
+        label="Meeting note shared with you"
+        hint="Someone gives you access to a restricted meeting note."
+        inAppKey="noteSharedInApp"
+        emailKey="noteSharedEmail"
+      />
+      <Row
+        label="Content going live today"
+        hint="Morning-of reminder for any calendar entry scheduled today."
+        inAppKey="contentGoLiveInApp"
+        emailKey="contentGoLiveEmail"
+      />
+      <Row
+        label="New review received"
+        hint="A new review appears on Trustpilot, Google, Reviews.io or Facebook."
+        inAppKey="reviewInApp"
+        emailKey="reviewEmail"
+      />
+      <Row
+        label="Subscription expiry"
+        hint="A subscription is renewing in the next 7 days."
+        inAppKey="subscriptionInApp"
+        emailKey="subscriptionEmail"
+      />
+      <Row
+        label="Stale approvals"
+        hint="An approval has been waiting on someone for more than 5 days."
+        inAppKey="staleApprovalInApp"
+        emailKey="staleApprovalEmail"
+      />
+      <Row
+        label="Daily digest"
+        hint="One summary email at 8am Mon–Fri: tasks due, content live today, site visits, team changes."
+        inAppKey="digestDailyInApp"
+        emailKey="digestDailyEmail"
+      />
+      <Row
+        label="Weekly digest"
+        hint="Monday morning recap: last week's funnel, this week's calendar, anything overdue."
+        inAppKey="digestWeeklyInApp"
+        emailKey="digestWeeklyEmail"
       />
     </div>
   );
@@ -525,5 +639,73 @@ function GoalInput({
         )}
       </div>
     </label>
+  );
+}
+
+function CronTriggers() {
+  const JOBS = [
+    { path: "/api/cron/digest-daily", label: "Daily digest", schedule: "Mon–Fri 7am UTC" },
+    { path: "/api/cron/digest-weekly", label: "Weekly digest", schedule: "Mon 7am UTC" },
+    { path: "/api/cron/subscription-reminders", label: "Subscription reminders", schedule: "Daily 8am UTC" },
+    { path: "/api/cron/stale-approvals", label: "Stale approval reminders", schedule: "Daily 8am UTC" },
+  ];
+  const [running, setRunning] = useState<string | null>(null);
+  const [result, setResult] = useState<{ path: string; ok: boolean; body: unknown } | null>(null);
+
+  async function run(path: string) {
+    setRunning(path);
+    setResult(null);
+    try {
+      const res = await fetch(path, { method: "GET", cache: "no-store" });
+      const body = await res.json().catch(() => ({}));
+      setResult({ path, ok: res.ok, body });
+    } catch (e) {
+      setResult({ path, ok: false, body: { error: e instanceof Error ? e.message : String(e) } });
+    } finally {
+      setRunning(null);
+    }
+  }
+
+  return (
+    <div>
+      {JOBS.map((j, i) => (
+        <div key={j.path} style={{
+          display: "flex", alignItems: "center", gap: 12,
+          padding: "10px 0", borderTop: i === 0 ? "none" : "1px solid var(--color-border)",
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-primary)" }}>{j.label}</div>
+            <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 2 }}>{j.schedule} · <code style={{ fontSize: 10 }}>{j.path}</code></div>
+          </div>
+          <button
+            onClick={() => run(j.path)}
+            disabled={running !== null}
+            style={{
+              padding: "6px 12px", borderRadius: 999,
+              background: running === j.path ? "rgba(0,113,227,0.6)" : "var(--color-accent)",
+              color: "white", border: "none", fontSize: 12, fontWeight: 600,
+              cursor: running ? "not-allowed" : "pointer",
+            }}
+          >
+            {running === j.path ? "Running…" : "Run now"}
+          </button>
+        </div>
+      ))}
+      {result && (
+        <div style={{
+          marginTop: 12, padding: 12, borderRadius: 10,
+          background: result.ok ? "rgba(48,164,108,0.08)" : "rgba(220,38,38,0.08)",
+          fontSize: 12, color: result.ok ? "#065F46" : "#991B1B",
+          fontFamily: "ui-monospace, SFMono-Regular, monospace",
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>
+            {result.ok ? "✓" : "✗"} {result.path}
+          </div>
+          <pre style={{ margin: 0, whiteSpace: "pre-wrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {JSON.stringify(result.body, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
   );
 }
