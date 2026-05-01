@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -80,6 +80,14 @@ interface CompanyWithProjects {
 }
 
 export default function NotesPage() {
+  return (
+    <Suspense fallback={null}>
+      <NotesPageInner />
+    </Suspense>
+  );
+}
+
+function NotesPageInner() {
   const sp = useSearchParams();
   const queryNoteId = sp.get("id");
   const queryMention = sp.get("mention");
