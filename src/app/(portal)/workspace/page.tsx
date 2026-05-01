@@ -465,14 +465,13 @@ function TasksTabs({ data, users }: { data: { me: string; tasks: DashboardTask[]
     router.replace(`/workspace${sp.toString() ? "?" + sp.toString() : ""}`, { scroll: false });
   }
 
-  const teammates = useMemo(() => users.filter((u) => u.email !== data.me), [users, data.me]);
-
   const predicate = useMemo(() => {
     if (view === "mine") {
       return (t: DashboardTask) => t.ownerEmail === data.me || t.collaborators.includes(data.me);
     }
+    // Team view: every assigned task across the team, optionally filtered to one person
     return (t: DashboardTask) => {
-      if (!t.ownerEmail || t.ownerEmail === data.me) return false;
+      if (!t.ownerEmail) return false;
       if (filterAssignee && t.ownerEmail !== filterAssignee) return false;
       return true;
     };
@@ -485,13 +484,13 @@ function TasksTabs({ data, users }: { data: { me: string; tasks: DashboardTask[]
         <TasksTab label="Team tasks" active={view === "team"} onClick={() => setView("team")} />
       </div>
 
-      {view === "team" && teammates.length > 0 && (
+      {view === "team" && users.length > 0 && (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
           <PersonChip label="Everyone" active={filterAssignee === ""} onClick={() => setFilterAssignee("")} />
-          {teammates.map((u) => (
+          {users.map((u) => (
             <PersonChip
               key={u.email}
-              label={u.label}
+              label={u.email === data.me ? `${u.label} (me)` : u.label}
               color={u.color}
               active={filterAssignee === u.email}
               onClick={() => setFilterAssignee(u.email)}
