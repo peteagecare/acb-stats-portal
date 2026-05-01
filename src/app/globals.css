@@ -244,3 +244,20 @@ body {
     padding: 12px 10px 40px !important;
   }
 }
+
+/* Asana-style task panel: borderless controls until hover/focus */
+.task-panel-control {
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background 100ms var(--ease-apple), border-color 100ms var(--ease-apple);
+}
+.task-panel-control:hover {
+  background: rgba(0, 0, 0, 0.035);
+}
+.task-panel-control:focus,
+.task-panel-control:focus-visible,
+.task-panel-control:focus-within {
+  background: white;
+  border-color: var(--color-accent);
+  outline: none;
+}

@@ -188,6 +188,24 @@ export const inputStyle: React.CSSProperties = {
   color: "var(--color-text-primary)",
 };
 
+/**
+ * Asana-style "naked" control: looks like static text until you hover/focus.
+ * Use inside the right-side task panel where every line is a field row.
+ */
+export const panelControlStyle: React.CSSProperties = {
+  padding: "6px 8px",
+  borderRadius: 8,
+  border: "1px solid transparent",
+  fontSize: 14,
+  fontFamily: "inherit",
+  background: "transparent",
+  outline: "none",
+  width: "100%",
+  color: "var(--color-text-primary)",
+  cursor: "pointer",
+  transition: "background 100ms var(--ease-apple), border-color 100ms var(--ease-apple)",
+};
+
 export const primaryButtonStyle: React.CSSProperties = {
   display: "inline-flex", alignItems: "center", gap: 6,
   padding: "8px 16px", borderRadius: 999,

@@ -16,6 +16,7 @@ import {
   dueState,
   fmtDate,
   inputStyle,
+  panelControlStyle,
   primaryButtonStyle,
   secondaryButtonStyle,
   upcomingQuarters,
@@ -1624,66 +1625,99 @@ function TaskPanel({
           style={{ width: "100%", fontSize: 22, fontWeight: 600, border: "none", outline: "none", padding: "4px 0 12px", color: "var(--color-text-primary)", fontFamily: "inherit", background: "transparent" }}
         />
 
-        <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", rowGap: 12, columnGap: 12, alignItems: "center", marginTop: 8, marginBottom: 22, fontSize: 13 }}>
-          <span style={{ color: "var(--color-text-secondary)" }}>Owner</span>
-          <select value={task.ownerEmail ?? ""} onChange={(e) => patch({ ownerEmail: e.target.value || null })} style={inputStyle}>
-            <option value="">Unassigned</option>
-            {users.map((u) => <option key={u.email} value={u.email}>{u.label}</option>)}
-          </select>
+        <div style={{ display: "grid", gridTemplateColumns: "132px 1fr", rowGap: 4, columnGap: 12, alignItems: "center", marginTop: 4, marginBottom: 18 }}>
+          <PanelLabel>Owner</PanelLabel>
+          <OwnerSelect
+            value={task.ownerEmail}
+            users={users}
+            onChange={(v) => patch({ ownerEmail: v })}
+          />
 
-          <span style={{ color: "var(--color-text-secondary)", alignSelf: "start", paddingTop: 8 }}>Collaborators</span>
-          <MultiUserPicker selected={task.collaborators} users={users} onChange={(next) => patch({ setCollaborators: next })} exclude={task.ownerEmail} />
+          <PanelLabel topAlign>Collaborators</PanelLabel>
+          <div style={{ padding: "4px 0" }}>
+            <MultiUserPicker selected={task.collaborators} users={users} onChange={(next) => patch({ setCollaborators: next })} exclude={task.ownerEmail} />
+          </div>
 
-          <span style={{ color: "var(--color-text-secondary)" }}>Start date</span>
-          <input type="date" value={task.startDate ?? ""} onChange={(e) => patch({ startDate: e.target.value || null })} style={inputStyle} />
-
-          <span style={{ color: "var(--color-text-secondary)" }}>End date</span>
-          <input type="date" value={task.endDate ?? ""} onChange={(e) => patch({ endDate: e.target.value || null })} style={inputStyle} />
-
-          <span style={{ color: "var(--color-text-secondary)" }}>Priority</span>
-          <select value={task.priority ?? ""} onChange={(e) => patch({ priority: (e.target.value || null) as Priority | null })} style={inputStyle}>
-            <option value="">None</option>
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-          </select>
-
-          <span style={{ color: "var(--color-text-secondary)" }}>Est. hours</span>
+          <PanelLabel>Start date</PanelLabel>
           <input
+            className="task-panel-control"
+            type="date"
+            value={task.startDate ?? ""}
+            onChange={(e) => patch({ startDate: e.target.value || null })}
+            style={panelControlStyle}
+          />
+
+          <PanelLabel>End date</PanelLabel>
+          <input
+            className="task-panel-control"
+            type="date"
+            value={task.endDate ?? ""}
+            onChange={(e) => patch({ endDate: e.target.value || null })}
+            style={panelControlStyle}
+          />
+
+          <PanelLabel>Priority</PanelLabel>
+          <PillSelect
+            value={task.priority ?? ""}
+            onChange={(v) => patch({ priority: (v || null) as Priority | null })}
+            options={[
+              { value: "", label: "None", bg: "transparent", color: "var(--color-text-tertiary)" },
+              { value: "low", label: "Low", bg: "#E0E7FF", color: "#3730A3" },
+              { value: "medium", label: "Medium", bg: "#FEF3C7", color: "#92400E" },
+              { value: "high", label: "High", bg: "#FEE2E2", color: "#991B1B" },
+            ]}
+          />
+
+          <PanelLabel>Est. hours</PanelLabel>
+          <input
+            className="task-panel-control"
             type="number"
             min={0}
             step={0.25}
             value={task.estimatedHours ?? ""}
             onChange={(e) => patch({ estimatedHours: e.target.value ? Number(e.target.value) : null })}
-            style={inputStyle}
+            style={panelControlStyle}
             placeholder="—"
           />
 
-          <span style={{ color: "var(--color-text-secondary)" }}>Status</span>
-          <select value={task.status} onChange={(e) => patch({ status: e.target.value as TaskStatus })} style={inputStyle}>
-            <option value="todo">To do</option>
-            <option value="doing">Doing</option>
-            <option value="blocked">Blocked</option>
-            <option value="done">Done</option>
-          </select>
+          <PanelLabel>Status</PanelLabel>
+          <PillSelect
+            value={task.status}
+            onChange={(v) => patch({ status: v as TaskStatus })}
+            options={[
+              { value: "todo", label: "To do", bg: "#F1F5F9", color: "#475569" },
+              { value: "doing", label: "Doing", bg: "#DBEAFE", color: "#1E40AF" },
+              { value: "blocked", label: "Blocked", bg: "#FEE2E2", color: "#991B1B" },
+              { value: "done", label: "Done", bg: "#D1FAE5", color: "#065F46" },
+            ]}
+          />
 
-          <span style={{ color: "var(--color-text-secondary)" }}>Section</span>
-          <select value={task.sectionId ?? ""} onChange={(e) => patch({ sectionId: e.target.value || null })} style={inputStyle}>
+          <PanelLabel>Section</PanelLabel>
+          <select
+            className="task-panel-control"
+            value={task.sectionId ?? ""}
+            onChange={(e) => patch({ sectionId: e.target.value || null })}
+            style={panelControlStyle}
+          >
             <option value="">Unsectioned</option>
             {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
 
-          <span style={{ color: "var(--color-text-secondary)", alignSelf: "start", paddingTop: 8 }}>Repeats</span>
-          <RecurrencePicker
-            value={task.recurrence}
-            onChange={(next) => patch({ recurrence: next })}
-          />
+          <PanelLabel topAlign>Repeats</PanelLabel>
+          <div style={{ padding: "4px 0" }}>
+            <RecurrencePicker
+              value={task.recurrence}
+              onChange={(next) => patch({ recurrence: next })}
+            />
+          </div>
 
-          <span style={{ color: "var(--color-text-secondary)", alignSelf: "start", paddingTop: 8 }}>Tags</span>
-          <TagPicker
-            selected={task.tagIds}
-            onChange={(next) => patch({ setTagIds: next })}
-          />
+          <PanelLabel topAlign>Tags</PanelLabel>
+          <div style={{ padding: "4px 0" }}>
+            <TagPicker
+              selected={task.tagIds}
+              onChange={(next) => patch({ setTagIds: next })}
+            />
+          </div>
         </div>
 
         <SubtasksSection
@@ -1726,6 +1760,124 @@ function TaskPanel({
         </button>
       </div>
     </div>
+  );
+}
+
+function PanelLabel({ children, topAlign }: { children: React.ReactNode; topAlign?: boolean }) {
+  return (
+    <span
+      style={{
+        fontSize: 12,
+        color: "var(--color-text-tertiary)",
+        alignSelf: topAlign ? "start" : "center",
+        paddingTop: topAlign ? 10 : 0,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function userInitial(label: string): string {
+  return (label || "?").trim().slice(0, 1).toUpperCase();
+}
+
+function OwnerSelect({
+  value, users, onChange,
+}: {
+  value: string | null;
+  users: DirectoryUser[];
+  onChange: (next: string | null) => void;
+}) {
+  const owner = users.find((u) => u.email === value) ?? null;
+  return (
+    <label
+      className="task-panel-control"
+      style={{
+        ...panelControlStyle,
+        display: "inline-flex", alignItems: "center", gap: 8,
+        position: "relative",
+      }}
+    >
+      {owner ? (
+        <>
+          <span style={{
+            width: 22, height: 22, borderRadius: "50%",
+            background: owner.color, color: "white",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 11, fontWeight: 700, flexShrink: 0,
+          }}>{userInitial(owner.label)}</span>
+          <span style={{ fontSize: 14 }}>{owner.label}</span>
+        </>
+      ) : (
+        <>
+          <span style={{
+            width: 22, height: 22, borderRadius: "50%",
+            border: "1px dashed var(--color-border)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "var(--color-text-tertiary)", flexShrink: 0,
+            fontSize: 13,
+          }}>+</span>
+          <span style={{ fontSize: 14, color: "var(--color-text-tertiary)" }}>Unassigned</span>
+        </>
+      )}
+      <select
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value || null)}
+        style={{
+          position: "absolute", inset: 0,
+          opacity: 0, cursor: "pointer", border: "none", background: "transparent",
+          fontFamily: "inherit",
+        }}
+      >
+        <option value="">Unassigned</option>
+        {users.map((u) => <option key={u.email} value={u.email}>{u.label}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function PillSelect({
+  value, options, onChange,
+}: {
+  value: string;
+  options: { value: string; label: string; bg: string; color: string }[];
+  onChange: (next: string) => void;
+}) {
+  const current = options.find((o) => o.value === value) ?? options[0];
+  return (
+    <label
+      className="task-panel-control"
+      style={{
+        ...panelControlStyle,
+        display: "inline-flex", alignItems: "center", gap: 6,
+        position: "relative",
+        padding: "4px 8px",
+      }}
+    >
+      <span
+        style={{
+          display: "inline-flex", alignItems: "center",
+          padding: "3px 10px", borderRadius: 999,
+          fontSize: 12, fontWeight: 600,
+          background: current.bg, color: current.color,
+          border: current.bg === "transparent" ? "1px solid var(--color-border)" : "none",
+        }}
+      >
+        {current.label}
+      </span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          position: "absolute", inset: 0,
+          opacity: 0, cursor: "pointer", border: "none", background: "transparent",
+          fontFamily: "inherit",
+        }}
+      >
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </label>
   );
 }
 
