@@ -1000,13 +1000,19 @@ function MentionComposer({
     onClose();
   }
 
-  // Position the popover under the chip, clamped to the viewport
+  // Position the popover near the chip, clamped to the viewport. If there
+  // isn't enough room below, flip above the chip instead so it never
+  // disappears off the bottom edge.
   const W = 360;
-  const left =
-    typeof window !== "undefined"
-      ? Math.max(8, Math.min(detail.rect.left, window.innerWidth - W - 8))
-      : detail.rect.left;
-  const top = detail.rect.bottom + 6;
+  const H_EST = 230;
+  const margin = 8;
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+  const left = Math.max(margin, Math.min(detail.rect.left, vw - W - margin));
+  const wantBelow = detail.rect.bottom + 6 + H_EST <= vh - margin;
+  const top = wantBelow
+    ? detail.rect.bottom + 6
+    : Math.max(margin, detail.rect.top - 6 - H_EST);
 
   return (
     <>
@@ -1022,16 +1028,18 @@ function MentionComposer({
         style={{
           position: "fixed", top, left, zIndex: 1100,
           width: W,
+          maxHeight: `calc(100vh - ${margin * 2}px)`,
           background: "white", borderRadius: 12,
           border: "1px solid var(--color-border)",
           boxShadow: "0 12px 36px rgba(0,0,0,0.18)",
           padding: 12,
           display: "flex", flexDirection: "column", gap: 8,
+          overflow: "auto",
         }}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-          Replying to{" "}
+          Tagging{" "}
           <span style={{ color: "var(--color-accent)", fontWeight: 600 }}>@{detail.label}</span>
         </div>
         <textarea
