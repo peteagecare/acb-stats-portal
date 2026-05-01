@@ -257,13 +257,11 @@ export default function NotesPage() {
             }}
           />
           {allTagIdsInScope.size > 0 && (
-            <div style={{ marginTop: 8 }}>
-              <TagFilterChips
-                allTagIds={allTagIdsInScope}
-                active={activeTagIds}
-                onChange={setActiveTagIds}
-              />
-            </div>
+            <FilterButton
+              allTagIds={allTagIdsInScope}
+              active={activeTagIds}
+              onChange={setActiveTagIds}
+            />
           )}
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: "0 8px 12px" }}>
@@ -391,6 +389,59 @@ function plainTextSnippet(html: string): string {
   const div = document.createElement("div");
   div.innerHTML = html;
   return (div.textContent || "").trim();
+}
+
+function FilterButton({
+  allTagIds, active, onChange,
+}: {
+  allTagIds: Set<string>;
+  active: Set<string>;
+  onChange: (next: Set<string>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
+
+  const count = active.size;
+  return (
+    <div ref={ref} style={{ position: "relative", marginTop: 8 }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 6,
+          padding: "5px 10px", borderRadius: 8,
+          border: "1px solid var(--color-border)",
+          background: count > 0 ? "rgba(0,113,227,0.08)" : "transparent",
+          color: count > 0 ? "var(--color-accent)" : "var(--color-text-secondary)",
+          fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
+        }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+        </svg>
+        Filter{count > 0 ? ` (${count})` : ""}
+      </button>
+      {open && (
+        <div
+          style={{
+            position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 30,
+            background: "white", borderRadius: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+            padding: 12, minWidth: 240, border: "1px solid var(--color-border)",
+          }}
+        >
+          <TagFilterChips allTagIds={allTagIds} active={active} onChange={onChange} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 function NoteListItem({
