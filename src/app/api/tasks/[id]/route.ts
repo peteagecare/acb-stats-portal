@@ -23,6 +23,26 @@ async function loadTask(id: string) {
   return row;
 }
 
+export async function GET(request: NextRequest, { params }: Params) {
+  const user = requireUser(request);
+  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await params;
+  const task = await loadTask(id);
+  if (!task) return Response.json({ error: "Not found" }, { status: 404 });
+  if (!(await canSeeProject(user.email, task.projectId))) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+  const [collabs, tags] = await Promise.all([
+    db.select().from(taskCollaborators).where(eq(taskCollaborators.taskId, id)),
+    db.select().from(taskTags).where(eq(taskTags.taskId, id)),
+  ]);
+  return Response.json({
+    ...task,
+    collaborators: collabs.map((r) => r.userEmail),
+    tagIds: tags.map((r) => r.tagId),
+  });
+}
+
 export async function PATCH(request: NextRequest, { params }: Params) {
   const user = requireUser(request);
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
