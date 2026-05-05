@@ -40,6 +40,7 @@ import { RecurrenceRule, formatRecurrence } from "@/lib/recurrence";
 import { RecurrencePicker } from "../../_recurrence-picker";
 import { TagFilterChips, TagPicker, TagPillList, useTags } from "../../_tags";
 import { DatePicker, EnumPicker, UserPicker } from "@/app/components/Pickers";
+import { useTaskContextMenu } from "../../_task-context-menu";
 
 type ProjectStatus = "planning" | "active" | "on_hold" | "done" | "archived";
 type TaskStatus = "todo" | "doing" | "blocked" | "done";
@@ -938,6 +939,13 @@ function TaskRow({
   const [hovered, setHovered] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
 
+  const { onContextMenu: onContextMenuRow, menu: contextMenu } = useTaskContextMenu({
+    taskTitle: task.title,
+    onDelete: async () => {
+      await onMutate(`/api/tasks/${task.id}`, { method: "DELETE" });
+    },
+  });
+
   async function toggleComplete(e: React.MouseEvent) {
     e.stopPropagation();
     await onMutate(`/api/tasks/${task.id}`, {
@@ -976,6 +984,7 @@ function TaskRow({
     <>
     <div
       onClick={() => onOpenTask(task.id)}
+      onContextMenu={onContextMenuRow}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       draggable
@@ -1128,6 +1137,7 @@ function TaskRow({
         )}
       </div>
     </div>
+    {contextMenu}
     {hasChildren && expanded && childTasks.map((child) => (
       <TaskRow
         key={child.id}

@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Avatar, colorForEmail } from "../workspace/_shared";
 
 interface User {
   email: string;
   label: string;
   role: string;
   createdAt: string;
+  avatarUrl?: string;
 }
 
 interface NewUserResult {
@@ -292,7 +294,7 @@ export default function UsersPage() {
               key={u.email}
               style={{
                 display: "grid",
-                gridTemplateColumns: "minmax(0, 1fr) auto auto auto",
+                gridTemplateColumns: "auto minmax(0, 1fr) auto auto auto",
                 alignItems: "center",
                 gap: 12,
                 padding: "10px 14px",
@@ -300,6 +302,15 @@ export default function UsersPage() {
                 borderRadius: 12,
               }}
             >
+              <Avatar
+                user={{
+                  email: u.email,
+                  label: u.label,
+                  color: colorForEmail(u.email),
+                  avatarUrl: u.avatarUrl,
+                }}
+                size={36}
+              />
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {u.label}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { upload } from "@vercel/blob/client";
 import {
   CALENDAR_ASSET_TYPES,
@@ -60,8 +61,7 @@ interface MeResp {
 
 type ModalState =
   | { mode: "closed" }
-  | { mode: "create"; defaultDate: string; prefill?: Partial<CalendarEntry> }
-  | { mode: "edit"; entry: CalendarEntry };
+  | { mode: "create"; defaultDate: string; prefill?: Partial<CalendarEntry> };
 
 interface GhostRow {
   slotId: string;
@@ -246,10 +246,6 @@ export default function ContentCalendarPage() {
       return;
     }
     setItems(body.items ?? []);
-  }
-
-  async function handleInlineSave(id: string, patch: Partial<CalendarEntry>) {
-    await handleSave({ id, ...patch });
   }
 
   async function handleAddRow(weekStart: string) {
@@ -454,12 +450,10 @@ export default function ContentCalendarPage() {
             myEmail={me?.email ?? ""}
             approvals={approvals}
             savingApproval={savingApproval}
-            onEdit={(entry) => setModal({ mode: "edit", entry })}
             onDelete={handleDelete}
             onQuickStatus={handleQuickStatus}
             onApprove={handleApprove}
             onReject={handleReject}
-            onInlineSave={handleInlineSave}
             onAddRow={handleAddRow}
             onFillGhost={(g) =>
               setModal({
@@ -511,12 +505,10 @@ function WeekGroup({
   myEmail,
   approvals,
   savingApproval,
-  onEdit,
   onDelete,
   onQuickStatus,
   onApprove,
   onReject,
-  onInlineSave,
   onAddRow,
   onFillGhost,
 }: {
@@ -528,12 +520,10 @@ function WeekGroup({
   myEmail: string;
   approvals: ApprovalsMap;
   savingApproval: string | null;
-  onEdit: (entry: CalendarEntry) => void;
   onDelete: (id: string) => void;
   onQuickStatus: (entry: CalendarEntry, status: CalendarStatus) => void;
   onApprove: (entry: CalendarEntry, role: AnyApprovalKey) => void;
   onReject: (entry: CalendarEntry, role: AnyApprovalKey) => void;
-  onInlineSave: (id: string, patch: Partial<CalendarEntry>) => Promise<void>;
   onAddRow: (weekStart: string) => Promise<void>;
   onFillGhost: (g: GhostRow) => void;
 }) {
@@ -656,12 +646,10 @@ function WeekGroup({
                         myEmail={myEmail}
                         approval={approvals[m.entry.id] ?? {}}
                         savingApproval={savingApproval}
-                        onEdit={onEdit}
                         onDelete={onDelete}
                         onQuickStatus={onQuickStatus}
                         onApprove={onApprove}
                         onReject={onReject}
-                        onInlineSave={onInlineSave}
                       />
                     ) : (
                       <GhostScheduleRow
@@ -759,24 +747,20 @@ function Row({
   myEmail,
   approval,
   savingApproval,
-  onEdit,
   onDelete,
   onQuickStatus,
   onApprove,
   onReject,
-  onInlineSave,
 }: {
   entry: CalendarEntry;
   isPete: boolean;
   myEmail: string;
   approval: EntryApprovals;
   savingApproval: string | null;
-  onEdit: (entry: CalendarEntry) => void;
   onDelete: (id: string) => void;
   onQuickStatus: (entry: CalendarEntry, status: CalendarStatus) => void;
   onApprove: (entry: CalendarEntry, role: AnyApprovalKey) => void;
   onReject: (entry: CalendarEntry, role: AnyApprovalKey) => void;
-  onInlineSave: (id: string, patch: Partial<CalendarEntry>) => Promise<void>;
 }) {
   const statusColour = STATUS_COLOURS[entry.status];
   const assetColour = entry.assetType ? ASSET_TYPE_COLOURS[entry.assetType] : null;
@@ -785,105 +769,61 @@ function Row({
   const dayNum = dateObj.getDate();
   const isMine = entry.submittedBy.toLowerCase() === myEmail.toLowerCase();
   const canDelete = isPete || isMine;
-
-  const save = (patch: Partial<CalendarEntry>) => onInlineSave(entry.id, patch);
+  const notePath = `/content-calendar/entry/${entry.id}`;
 
   return (
     <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-      <EditableCell
-        value={entry.liveDate}
-        type="date"
-        onSave={(v) => save({ liveDate: v })}
-        display={
-          <>
-            <div style={{ fontWeight: 600 }}>{day}</div>
-            <div style={{ color: "var(--color-text-secondary)" }}>{dayNum}</div>
-          </>
-        }
-      />
-      <EditableCell
-        value={entry.time ?? ""}
-        type="time"
-        onSave={(v) => save({ time: v || undefined })}
-      />
-      <EditableCell
-        value={entry.status}
-        type="select"
-        options={CALENDAR_STATUSES}
-        optionDisabled={(o) => (o === "Approved" || o === "Suggested Changes") && !isPete && o !== entry.status}
-        onSave={(v) => save({ status: v as CalendarStatus })}
-        display={<span style={pill(statusColour.bg, statusColour.fg)}>{entry.status}</span>}
-      />
-      <EditableCell
-        value={entry.platform}
-        type="select"
-        options={CALENDAR_PLATFORMS}
-        onSave={(v) => save({ platform: v as CalendarPlatform })}
-        cellExtra={{ minWidth: 140 }}
-        display={<div style={{ fontSize: 12, color: "#374151" }}>{entry.platform}</div>}
-      />
-      <EditableCell
-        value={entry.assetType ?? ""}
-        type="select"
-        options={CALENDAR_ASSET_TYPES}
-        allowEmpty
-        onSave={(v) => save({ assetType: (v || undefined) as CalendarAssetType | undefined })}
-        display={
-          entry.assetType && assetColour ? (
-            <span style={pill(assetColour.bg, assetColour.fg)}>{entry.assetType}</span>
-          ) : <span style={{ color: "#94a3b8" }}>—</span>
-        }
-      />
-      <EditableCell
-        value={entry.title}
-        type="text"
-        onSave={(v) => save({ title: v })}
-        cellExtra={{ minWidth: 240 }}
-        display={<div style={{ fontWeight: 600, color: "#0f172a" }}>{entry.title}</div>}
-      />
-      <EditableCell
-        value={entry.responsible ?? ""}
-        type="select"
-        options={KNOWN_PEOPLE.map((p) => p.label) as readonly string[]}
-        allowEmpty
-        onSave={(v) => save({ responsible: v || undefined })}
-      />
-      <EditableCell
-        value={entry.notes ?? ""}
-        type="textarea"
-        onSave={(v) => save({ notes: v || undefined })}
-        cellExtra={{ maxWidth: 200 }}
-        display={
-          <>
-            <div style={{ whiteSpace: "pre-wrap", fontSize: 11, color: "#475569" }}>{entry.notes || <span style={{ color: "#94a3b8" }}>—</span>}</div>
-            {entry.feedback && (
-              <div style={{ marginTop: 6, padding: 6, background: "#fef3c7", borderRadius: 6, fontSize: 11, color: "#78350f" }}>
-                <strong>Feedback: </strong>{entry.feedback}
-              </div>
-            )}
-          </>
-        }
-      />
-      <EditableCell
-        value={entry.assetLink ?? ""}
-        type="text"
-        placeholder="https://…"
-        onSave={(v) => save({ assetLink: v || undefined })}
-        display={
-          <>
-            {entry.assetLink ? (
-              <a href={entry.assetLink} target="_blank" rel="noreferrer" style={{ color: "var(--color-accent, #0071e3)", textDecoration: "none" }} onClick={(e) => e.stopPropagation()}>
-                View
-              </a>
-            ) : <span style={{ color: "#94a3b8" }}>—</span>}
-            {entry.supportedLinks?.map((l, i) => (
-              <a key={i} href={l} target="_blank" rel="noreferrer" style={{ display: "block", fontSize: 11, color: "var(--color-accent, #0071e3)", textDecoration: "none", marginTop: 2 }} onClick={(e) => e.stopPropagation()}>
-                Link {i + 1}
-              </a>
-            ))}
-          </>
-        }
-      />
+      <td style={cellStyle()}>
+        <div style={{ fontWeight: 600 }}>{day}</div>
+        <div style={{ color: "var(--color-text-secondary)" }}>{dayNum}</div>
+      </td>
+      <td style={cellStyle()}>
+        {entry.time || <span style={{ color: "#94a3b8" }}>—</span>}
+      </td>
+      <td style={cellStyle()}>
+        <span style={pill(statusColour.bg, statusColour.fg)}>{entry.status}</span>
+      </td>
+      <td style={cellStyle({ minWidth: 140 })}>
+        <div style={{ fontSize: 12, color: "#374151" }}>{entry.platform}</div>
+      </td>
+      <td style={cellStyle()}>
+        {entry.assetType && assetColour ? (
+          <span style={pill(assetColour.bg, assetColour.fg)}>{entry.assetType}</span>
+        ) : <span style={{ color: "#94a3b8" }}>—</span>}
+      </td>
+      <td style={cellStyle({ minWidth: 240 })}>
+        <Link
+          href={notePath}
+          style={{ fontWeight: 600, color: "#0f172a", textDecoration: "none" }}
+        >
+          {entry.title}
+        </Link>
+      </td>
+      <td style={cellStyle()}>
+        {entry.responsible || <span style={{ color: "#94a3b8" }}>—</span>}
+      </td>
+      <td style={cellStyle({ maxWidth: 200 })}>
+        <div style={{ whiteSpace: "pre-wrap", fontSize: 11, color: "#475569" }}>
+          {entry.notes || <span style={{ color: "#94a3b8" }}>—</span>}
+        </div>
+        {entry.feedback && (
+          <div style={{ marginTop: 6, padding: 6, background: "#fef3c7", borderRadius: 6, fontSize: 11, color: "#78350f" }}>
+            <strong>Feedback: </strong>{entry.feedback}
+          </div>
+        )}
+      </td>
+      <td style={cellStyle()}>
+        {entry.assetLink ? (
+          <a href={entry.assetLink} target="_blank" rel="noreferrer" style={{ color: "var(--color-accent, #0071e3)", textDecoration: "none" }}>
+            View
+          </a>
+        ) : <span style={{ color: "#94a3b8" }}>—</span>}
+        {entry.supportedLinks?.map((l, i) => (
+          <a key={i} href={l} target="_blank" rel="noreferrer" style={{ display: "block", fontSize: 11, color: "var(--color-accent, #0071e3)", textDecoration: "none", marginTop: 2 }}>
+            Link {i + 1}
+          </a>
+        ))}
+      </td>
       <td style={cellStyle({ minWidth: 200 })}>
         {entry.needsFinanceApproval ? (
           <FinanceApprovalCell
@@ -923,7 +863,12 @@ function Row({
       </td>
       <td style={cellStyle()}>
         <div style={{ display: "flex", gap: 4 }}>
-          <button onClick={() => onEdit(entry)} style={btnStyle("#374151", "#f3f4f6")}>Edit</button>
+          <Link
+            href={`/content-calendar/entry/${entry.id}`}
+            style={{ ...btnStyle("#374151", "#f3f4f6"), textDecoration: "none", display: "inline-block" }}
+          >
+            Open
+          </Link>
           {canDelete && (
             <button onClick={() => onDelete(entry.id)} style={btnStyle("#7f1d1d", "#fee2e2")}>Del</button>
           )}
@@ -939,21 +884,18 @@ function EntryModal({
   onSave,
   isPete,
 }: {
-  state: { mode: "create"; defaultDate: string; prefill?: Partial<CalendarEntry> } | { mode: "edit"; entry: CalendarEntry };
+  state: { mode: "create"; defaultDate: string; prefill?: Partial<CalendarEntry> };
   onClose: () => void;
-  onSave: (payload: Partial<CalendarEntry> & { id?: string }) => Promise<void>;
+  onSave: (payload: Partial<CalendarEntry>) => Promise<void>;
   isPete: boolean;
 }) {
-  const initial: Partial<CalendarEntry> =
-    state.mode === "edit"
-      ? state.entry
-      : {
-          liveDate: state.defaultDate,
-          status: "Not Started",
-          needsFinanceApproval: false,
-          platform: "Facebook & Instagram",
-          ...state.prefill,
-        };
+  const initial: Partial<CalendarEntry> = {
+    liveDate: state.defaultDate,
+    status: "Not Started",
+    needsFinanceApproval: false,
+    platform: "Facebook & Instagram",
+    ...state.prefill,
+  };
 
   const [liveDate, setLiveDate] = useState(initial.liveDate ?? "");
   const [time, setTime] = useState(initial.time ?? "");
@@ -965,12 +907,9 @@ function EntryModal({
   const [responsible, setResponsible] = useState(initial.responsible ?? "");
   const [assetLink, setAssetLink] = useState(initial.assetLink ?? "");
   const [supportedLinksText, setSupportedLinksText] = useState((initial.supportedLinks ?? []).join("\n"));
-  const [feedback, setFeedback] = useState(initial.feedback ?? "");
   const [needsFinanceApproval, setNeedsFinanceApproval] = useState<boolean>(initial.needsFinanceApproval ?? false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
-  const isEdit = state.mode === "edit";
 
   async function submit() {
     setBusy(true);
@@ -980,8 +919,7 @@ function EntryModal({
         .split("\n")
         .map((l) => l.trim())
         .filter((l) => l.length);
-      const payload: Partial<CalendarEntry> & { id?: string } = {
-        id: isEdit ? state.entry.id : undefined,
+      const payload: Partial<CalendarEntry> = {
         liveDate,
         time: time || undefined,
         platform,
@@ -992,7 +930,6 @@ function EntryModal({
         responsible: responsible || undefined,
         assetLink: assetLink || undefined,
         supportedLinks,
-        feedback: feedback || undefined,
         needsFinanceApproval,
       };
       await onSave(payload);
@@ -1046,7 +983,7 @@ function EntryModal({
       >
         <header style={{ display: "flex", alignItems: "center", padding: "18px 24px", borderBottom: "1px solid var(--color-border)" }}>
           <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600, color: "var(--color-text-primary)" }}>
-            {isEdit ? "Edit entry" : "New entry"}
+            New entry
           </h2>
           <button
             onClick={onClose}
@@ -1117,16 +1054,6 @@ function EntryModal({
           </ModalField>
           <div style={{ marginBottom: 18 }} />
 
-          {isEdit && (
-            <>
-              <SectionLabel>Post-go-live</SectionLabel>
-              <ModalField label="Feedback">
-                <textarea value={feedback} onChange={(e) => setFeedback(e.target.value)} rows={2} style={{ ...modalInput, resize: "vertical" }} />
-              </ModalField>
-              <div style={{ marginBottom: 18 }} />
-            </>
-          )}
-
           <SectionLabel>Approval</SectionLabel>
           <label
             style={{
@@ -1191,147 +1118,11 @@ function EntryModal({
               fontFamily: "inherit",
             }}
           >
-            {busy ? "Saving…" : isEdit ? "Save changes" : "Create entry"}
+            {busy ? "Saving…" : "Create entry"}
           </button>
         </footer>
       </div>
     </div>
-  );
-}
-
-function EditableCell({
-  value,
-  type,
-  options,
-  allowEmpty,
-  optionDisabled,
-  display,
-  onSave,
-  cellExtra,
-  placeholder,
-}: {
-  value: string;
-  type: "text" | "textarea" | "date" | "time" | "select";
-  options?: readonly string[];
-  allowEmpty?: boolean;
-  optionDisabled?: (opt: string) => boolean;
-  display?: React.ReactNode;
-  onSave: (value: string) => Promise<void>;
-  cellExtra?: React.CSSProperties;
-  placeholder?: string;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    setDraft(value);
-  }, [value]);
-
-  async function commit(next: string) {
-    if (busy) return;
-    if (next === value) {
-      setEditing(false);
-      return;
-    }
-    setBusy(true);
-    try {
-      await onSave(next);
-      setEditing(false);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : String(e));
-      setDraft(value);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function cancel() {
-    setDraft(value);
-    setEditing(false);
-  }
-
-  if (!editing) {
-    const shown = display ?? (value ? value : <span style={{ color: "#94a3b8" }}>—</span>);
-    return (
-      <td
-        style={{ ...cellStyle(cellExtra), cursor: "cell" }}
-        onDoubleClick={() => setEditing(true)}
-        title="Double-click to edit"
-      >
-        {shown}
-      </td>
-    );
-  }
-
-  if (type === "select" && options) {
-    return (
-      <td style={cellStyle(cellExtra)}>
-        <select
-          autoFocus
-          value={draft}
-          onChange={(e) => {
-            setDraft(e.target.value);
-            commit(e.target.value);
-          }}
-          onBlur={() => setEditing(false)}
-          onKeyDown={(e) => { if (e.key === "Escape") cancel(); }}
-          disabled={busy}
-          style={inputStyle({ width: "100%", fontSize: 12 })}
-        >
-          {allowEmpty && <option value="">—</option>}
-          {options.map((o) => {
-            const disabled = optionDisabled?.(o) ?? false;
-            return (
-              <option key={o} value={o} disabled={disabled}>
-                {o}{disabled ? " (Pete only)" : ""}
-              </option>
-            );
-          })}
-        </select>
-      </td>
-    );
-  }
-
-  if (type === "textarea") {
-    return (
-      <td style={cellStyle(cellExtra)}>
-        <textarea
-          autoFocus
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => commit(draft)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") { e.preventDefault(); cancel(); }
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commit(draft); }
-          }}
-          rows={3}
-          disabled={busy}
-          placeholder={placeholder}
-          style={inputStyle({ width: "100%", fontSize: 12, resize: "vertical" })}
-        />
-      </td>
-    );
-  }
-
-  const inputType = type === "text" ? "text" : type;
-  return (
-    <td style={cellStyle(cellExtra)}>
-      <input
-        autoFocus
-        type={inputType}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => commit(draft)}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") { e.preventDefault(); cancel(); }
-          if (e.key === "Enter") { e.preventDefault(); commit(draft); }
-        }}
-        disabled={busy}
-        placeholder={placeholder}
-        style={inputStyle({ width: "100%", fontSize: 12 })}
-      />
-    </td>
   );
 }
 
@@ -1894,10 +1685,15 @@ function IdeaLibraryModal({
               )}
               {ideas.map((idea) => (
                 <div key={idea.id} style={{ background: "#fff", border: "1px solid var(--color-border)", borderRadius: 10, padding: 12, display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <Link
+                    href={`/content-calendar/idea/${idea.id}`}
+                    onClick={onClose}
+                    style={{ flex: 1, minWidth: 0, textDecoration: "none", color: "inherit" }}
+                  >
                     <div style={{ fontWeight: 600, fontSize: 13, color: "var(--color-text-primary)" }}>{idea.title}</div>
                     {idea.notes && <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 2 }}>{idea.notes}</div>}
-                  </div>
+                    <div style={{ fontSize: 10, color: "var(--color-accent)", marginTop: 4 }}>Open full notes →</div>
+                  </Link>
                   <select
                     value={idea.platform ?? ""}
                     onChange={(e) => patchIdea(idea.id, { platform: (e.target.value || undefined) as CalendarPlatform | undefined })}

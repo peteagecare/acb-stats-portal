@@ -13,6 +13,6 @@ export async function GET(request: NextRequest) {
 
   const users = await loadUsers();
   return Response.json({
-    users: users.map((u) => ({ email: u.email, label: u.label })),
+    users: users.map((u) => ({ email: u.email, label: u.label, avatarUrl: u.avatarUrl })),
   });
 }

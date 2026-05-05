@@ -6,6 +6,15 @@ export interface DirectoryUser {
   email: string;
   label: string;
   color: string;
+  avatarUrl?: string;
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 const AVATAR_PALETTE = [
@@ -21,13 +30,13 @@ export function colorForEmail(email: string): string {
 
 export function userMeta(email: string | null | undefined, users: DirectoryUser[]): DirectoryUser | null {
   if (!email) return null;
-  return (
-    users.find((u) => u.email === email) ?? {
-      email,
-      label: email.split("@")[0],
-      color: colorForEmail(email),
-    }
-  );
+  const found = users.find((u) => u.email === email);
+  if (found) return found;
+  return {
+    email,
+    label: email.split("@")[0],
+    color: colorForEmail(email),
+  };
 }
 
 export function useUsers(): DirectoryUser[] {
@@ -35,13 +44,14 @@ export function useUsers(): DirectoryUser[] {
   useEffect(() => {
     fetch("/api/users", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((json: { users?: { email: string; label: string }[] } | null) => {
+      .then((json: { users?: { email: string; label: string; avatarUrl?: string }[] } | null) => {
         if (!json?.users) return;
         setUsers(
           json.users.map((u) => ({
             email: u.email,
             label: u.label || u.email.split("@")[0],
             color: colorForEmail(u.email),
+            avatarUrl: u.avatarUrl,
           })),
         );
       })
@@ -51,6 +61,25 @@ export function useUsers(): DirectoryUser[] {
 }
 
 export function Avatar({ user, size = 24 }: { user: DirectoryUser | null; size?: number }) {
+  const [gravatarHash, setGravatarHash] = useState<string | null>(null);
+  const [imgFailed, setImgFailed] = useState(false);
+
+  // Reset failure state if the image source changes (e.g. user uploads a new pic)
+  const imageSource = user?.avatarUrl ?? null;
+  useEffect(() => {
+    setImgFailed(false);
+  }, [imageSource]);
+
+  // Compute a Gravatar SHA-256 hash on demand for users without an uploaded pic
+  useEffect(() => {
+    if (!user || user.avatarUrl) return;
+    let cancelled = false;
+    sha256Hex(user.email.trim().toLowerCase()).then((h) => {
+      if (!cancelled) setGravatarHash(h);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [user]);
+
   if (!user) {
     return (
       <span
@@ -66,6 +95,33 @@ export function Avatar({ user, size = 24 }: { user: DirectoryUser | null; size?:
       >?</span>
     );
   }
+
+  const px = Math.round(size * (typeof window !== "undefined" ? window.devicePixelRatio || 1 : 2));
+  const src = user.avatarUrl
+    ? user.avatarUrl
+    : gravatarHash
+      ? `https://www.gravatar.com/avatar/${gravatarHash}?s=${px}&d=404`
+      : null;
+
+  if (src && !imgFailed) {
+    return (
+      <img
+        src={src}
+        alt={user.label}
+        title={`${user.label} (${user.email})`}
+        width={size}
+        height={size}
+        loading="lazy"
+        onError={() => setImgFailed(true)}
+        style={{
+          width: size, height: size, borderRadius: "50%",
+          objectFit: "cover", flexShrink: 0, display: "inline-block",
+          background: user.color,
+        }}
+      />
+    );
+  }
+
   return (
     <span
       title={`${user.label} (${user.email})`}

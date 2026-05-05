@@ -342,6 +342,7 @@ export async function PATCH(request: NextRequest) {
   if (body.notes !== undefined) next.notes = trimOrUndef(body.notes);
   if (body.responsible !== undefined) next.responsible = trimOrUndef(body.responsible);
   if (body.feedback !== undefined) next.feedback = trimOrUndef(body.feedback);
+  if (typeof body.content === "string") next.content = body.content;
   if (body.needsFinanceApproval !== undefined) {
     next.needsFinanceApproval = body.needsFinanceApproval === true;
   }

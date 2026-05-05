@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { dismiss as dismissNotif, getDismissed } from "@/lib/notifications-dismissed";
 
 interface Notification {
   id: string;
@@ -39,10 +40,37 @@ export default function NotificationsBell() {
   const [unread, setUnread] = useState(0);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [me, setMe] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => setMounted(true), []);
+
+  // Load current email so we can scope dismissals to the right user
+  useEffect(() => {
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { email: string | null } | null) => {
+        if (j?.email) {
+          setMe(j.email);
+          setDismissed(getDismissed(j.email));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Re-sync dismissed set when localStorage changes (other tabs, dismiss/clear)
+  useEffect(() => {
+    if (!me) return;
+    function sync() { setDismissed(getDismissed(me)); }
+    window.addEventListener("storage", sync);
+    window.addEventListener("acb-notifications-dismissed-changed", sync);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("acb-notifications-dismissed-changed", sync);
+    };
+  }, [me]);
 
   const refresh = useCallback(async () => {
     try {
@@ -61,6 +89,11 @@ export default function NotificationsBell() {
     const t = setInterval(refresh, 60_000);
     return () => clearInterval(t);
   }, [refresh]);
+
+  const visibleNotifs = useMemo(
+    () => notifs.filter((n) => !dismissed.has(n.id)),
+    [notifs, dismissed],
+  );
 
   // Close on outside click + reposition on resize/scroll while open
   useEffect(() => {
@@ -91,6 +124,17 @@ export default function NotificationsBell() {
       body: JSON.stringify({ markAllRead: true }),
     });
     refresh();
+  }
+
+  function clearAll() {
+    if (!me) return;
+    dismissNotif(me, visibleNotifs.map((n) => n.id));
+    if (unread > 0) markAllRead();
+  }
+
+  function clearOne(id: string) {
+    if (!me) return;
+    dismissNotif(me, id);
   }
 
   function togglePanel() {
@@ -155,21 +199,60 @@ export default function NotificationsBell() {
           }}
         >
           <div style={{
-            display: "flex", alignItems: "center",
+            display: "flex", alignItems: "center", gap: 8,
             padding: "10px 14px",
             borderBottom: "1px solid var(--color-border)",
             flexShrink: 0,
           }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>Notifications</div>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+              {visibleNotifs.length > 0 && (
+                <button
+                  onClick={clearAll}
+                  style={{
+                    background: "transparent", border: "none",
+                    color: "var(--color-accent)", cursor: "pointer",
+                    fontSize: 11, fontWeight: 600, padding: "2px 6px",
+                    borderRadius: 6, fontFamily: "inherit",
+                  }}
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
           </div>
           <div style={{ flex: 1, overflowY: "auto" }}>
-            {notifs.length === 0 ? (
+            {visibleNotifs.length === 0 ? (
               <div style={{ padding: "24px 16px", textAlign: "center", fontSize: 12, color: "var(--color-text-tertiary)" }}>
-                Nothing yet.
+                {notifs.length === 0 ? "Nothing yet." : "All clear — nothing new."}
               </div>
             ) : (
-              notifs.map((n) => <NotifRow key={n.id} n={n} onClose={() => setOpen(false)} />)
+              visibleNotifs.map((n) => (
+                <NotifRow
+                  key={n.id}
+                  n={n}
+                  onClose={() => setOpen(false)}
+                  onClear={() => clearOne(n.id)}
+                />
+              ))
             )}
+          </div>
+          <div style={{
+            padding: "8px 14px",
+            borderTop: "1px solid var(--color-border)",
+            flexShrink: 0,
+            textAlign: "center",
+          }}>
+            <Link
+              href="/notifications"
+              onClick={() => setOpen(false)}
+              style={{
+                fontSize: 12, color: "var(--color-accent)",
+                textDecoration: "none", fontWeight: 600,
+              }}
+            >
+              View all notifications →
+            </Link>
           </div>
         </div>,
         document.body,
@@ -184,7 +267,7 @@ function clampLeft(x: number, width: number): number {
   return Math.max(margin, Math.min(x, window.innerWidth - width - margin));
 }
 
-function NotifRow({ n, onClose }: { n: Notification; onClose: () => void }) {
+function NotifRow({ n, onClose, onClear }: { n: Notification; onClose: () => void; onClear?: () => void }) {
   const actor = n.payload?.actorLabel ?? n.actorEmail;
   const excerpt = n.payload?.excerpt ?? null;
 
@@ -221,6 +304,10 @@ function NotifRow({ n, onClose }: { n: Notification; onClose: () => void }) {
     const parentTitle = (n.payload?.parentTitle as string | undefined) ?? "an item";
     text = `${actor} commented on "${parentTitle}"`;
     href = (n.payload?.parentUrl as string | undefined) ?? null;
+  } else if (n.kind === "comment_mention") {
+    const parentTitle = (n.payload?.parentTitle as string | undefined) ?? "an item";
+    text = `${actor} mentioned you in a comment on "${parentTitle}"`;
+    href = (n.payload?.parentUrl as string | undefined) ?? null;
   } else if (n.kind === "note_shared") {
     const noteTitle = (n.payload?.noteTitle as string | undefined) ?? "a meeting note";
     text = `${actor} shared "${noteTitle}" with you`;
@@ -241,12 +328,11 @@ function NotifRow({ n, onClose }: { n: Notification; onClose: () => void }) {
     if (n.noteId) href = `/notes?id=${n.noteId}&mention=${encodeURIComponent(n.recipientEmail)}`;
   }
 
-  const inner = (
+  const body = (
     <div style={{
       display: "flex", gap: 10,
       padding: "10px 14px",
       background: n.readAt === null ? "rgba(0,113,227,0.05)" : "transparent",
-      borderBottom: "1px solid var(--color-border)",
     }}>
       <span style={{
         flexShrink: 0, marginTop: 5,
@@ -277,14 +363,35 @@ function NotifRow({ n, onClose }: { n: Notification; onClose: () => void }) {
     </div>
   );
 
-  if (href) {
-    return (
-      <Link href={href} onClick={onClose} style={{ textDecoration: "none", color: "inherit", display: "block" }}>
-        {inner}
+  const wrapped = href
+    ? (
+      <Link href={href} onClick={onClose} style={{ textDecoration: "none", color: "inherit", display: "block", flex: 1, minWidth: 0 }}>
+        {body}
       </Link>
-    );
-  }
-  return inner;
+    )
+    : <div style={{ flex: 1, minWidth: 0 }}>{body}</div>;
+
+  return (
+    <div style={{ display: "flex", alignItems: "stretch", borderBottom: "1px solid var(--color-border)" }}>
+      {wrapped}
+      {onClear && (
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClear(); }}
+          aria-label="Clear notification"
+          title="Clear"
+          style={{
+            background: "transparent", border: "none", cursor: "pointer",
+            color: "var(--color-text-tertiary)", padding: "10px 12px",
+            display: "flex", alignItems: "center", flexShrink: 0,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
 }
 
 function formatTime(iso: string): string {

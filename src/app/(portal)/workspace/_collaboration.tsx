@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { upload } from "@vercel/blob/client";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Placeholder from "@tiptap/extension-placeholder";
 import {
   Avatar,
   DirectoryUser,
@@ -10,8 +13,14 @@ import {
   secondaryButtonStyle,
   userMeta,
 } from "./_shared";
+import { CommentMention } from "./_comment-mention";
+import "../notes/notes.css";
 
 export type ParentType = "project" | "task";
+
+function commentBodyIsHtml(body: string): boolean {
+  return /^\s*<(p|ul|ol|h[1-6]|blockquote|pre|div|span)\b/i.test(body);
+}
 
 /* ─────────────────────────────────── */
 /* Comments                            */
@@ -36,8 +45,29 @@ export function Comments({
   currentEmail: string | null;
 }) {
   const [list, setList] = useState<Comment[] | null>(null);
-  const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Placeholder.configure({ placeholder: "Add a comment… (use @ to mention)" }),
+      CommentMention,
+    ],
+    immediatelyRender: false,
+    editorProps: {
+      attributes: {
+        class: "comment-editor",
+      },
+      handleKeyDown: (_view, event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+          event.preventDefault();
+          submitRef.current?.();
+          return true;
+        }
+        return false;
+      },
+    },
+  });
 
   const refresh = useCallback(async () => {
     const res = await fetch(
@@ -51,30 +81,35 @@ export function Comments({
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  const submitRef = useRef<(() => void) | null>(null);
   async function submit() {
-    const text = draft.trim();
-    if (!text) return;
+    if (!editor) return;
+    if (editor.isEmpty) return;
+    const html = editor.getHTML();
     setPosting(true);
     try {
       const res = await fetch("/api/comments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ parentType, parentId, body: text }),
+        body: JSON.stringify({ parentType, parentId, body: html }),
       });
       if (res.ok) {
-        setDraft("");
+        editor.commands.clearContent();
         await refresh();
       }
     } finally {
       setPosting(false);
     }
   }
+  submitRef.current = submit;
 
   async function deleteComment(id: string) {
     if (!confirm("Delete this comment?")) return;
     const res = await fetch(`/api/comments/${id}`, { method: "DELETE" });
     if (res.ok) refresh();
   }
+
+  const isEmpty = !editor || editor.isEmpty;
 
   return (
     <div>
@@ -108,9 +143,17 @@ export function Comments({
                       </button>
                     )}
                   </div>
-                  <div style={{ fontSize: 13, marginTop: 2, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                    {c.body}
-                  </div>
+                  {commentBodyIsHtml(c.body) ? (
+                    <div
+                      className="comment-body"
+                      style={{ fontSize: 13, marginTop: 2, wordBreak: "break-word" }}
+                      dangerouslySetInnerHTML={{ __html: c.body }}
+                    />
+                  ) : (
+                    <div style={{ fontSize: 13, marginTop: 2, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                      {c.body}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -119,27 +162,28 @@ export function Comments({
       )}
 
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Add a comment…"
-          rows={2}
-          onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submit();
+        <div
+          style={{
+            ...inputStyle,
+            flex: 1,
+            minHeight: 60,
+            padding: "8px 10px",
+            opacity: posting ? 0.6 : 1,
+            pointerEvents: posting ? "none" : "auto",
           }}
-          style={{ ...inputStyle, resize: "vertical", minHeight: 60 }}
-          disabled={posting}
-        />
+        >
+          <EditorContent editor={editor} />
+        </div>
         <button
           onClick={submit}
-          disabled={posting || !draft.trim()}
-          style={{ ...primaryButtonStyle, padding: "8px 14px", opacity: posting || !draft.trim() ? 0.5 : 1 }}
+          disabled={posting || isEmpty}
+          style={{ ...primaryButtonStyle, padding: "8px 14px", opacity: posting || isEmpty ? 0.5 : 1 }}
         >
           {posting ? "Posting…" : "Post"}
         </button>
       </div>
       <div style={{ fontSize: 10, color: "var(--color-text-tertiary)", marginTop: 4 }}>
-        ⌘/Ctrl + Enter to post
+        Type @ to mention someone · ⌘/Ctrl + Enter to post
       </div>
     </div>
   );

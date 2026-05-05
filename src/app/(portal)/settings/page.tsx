@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Avatar, colorForEmail, type DirectoryUser } from "../workspace/_shared";
 
 interface Goals {
   leadGoalPerMonth: number | null;
@@ -182,6 +183,10 @@ export default function SettingsPage() {
           <GoalInput id="contentGoalPerMonth" label="Content contacts / month" drafts={drafts} update={update} disabled={!loaded} />
           <GoalInput id="tvGoalPerMonth" label="TV contacts / month" drafts={drafts} update={update} disabled={!loaded} />
         </Grid>
+      </Section>
+
+      <Section title="Profile picture" description="Upload a picture so colleagues can spot your tasks at a glance. If you skip this, we’ll try Gravatar (using your email) before falling back to your initials.">
+        <ProfilePicture />
       </Section>
 
       <Section title="Tasks" description="Workspace-wide tags for categorising tasks (e.g. Facebook, SEO, Brochure).">
@@ -706,6 +711,133 @@ function CronTriggers() {
           </pre>
         </div>
       )}
+    </div>
+  );
+}
+
+function ProfilePicture() {
+  const [me, setMe] = useState<{ email: string; label: string; avatarUrl?: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<"upload" | "remove" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement | null>(null);
+
+  async function load() {
+    setError(null);
+    const meRes = await fetch("/api/auth/me", { cache: "no-store" });
+    const meJson = (await meRes.json()) as { email: string | null };
+    if (!meJson.email) {
+      setLoading(false);
+      return;
+    }
+    const usersRes = await fetch("/api/users", { cache: "no-store" });
+    const usersJson = (await usersRes.json()) as {
+      users?: { email: string; label: string; avatarUrl?: string }[];
+    };
+    const found = usersJson.users?.find((u) => u.email.toLowerCase() === meJson.email!.toLowerCase());
+    setMe(found ?? { email: meJson.email, label: meJson.email.split("@")[0] });
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function handleFile(file: File) {
+    setError(null);
+    setBusy("upload");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/me/avatar", { method: "POST", body: fd });
+      const json = (await res.json().catch(() => ({}))) as { error?: string; avatarUrl?: string };
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setBusy(null);
+      if (fileInput.current) fileInput.current.value = "";
+    }
+  }
+
+  async function handleRemove() {
+    if (!confirm("Remove your profile picture?")) return;
+    setError(null);
+    setBusy("remove");
+    try {
+      const res = await fetch("/api/me/avatar", { method: "DELETE" });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? `HTTP ${res.status}`);
+      }
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Remove failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (loading) return <div style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>Loading…</div>;
+  if (!me) return <div style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>Sign in to manage your picture.</div>;
+
+  const directoryUser: DirectoryUser = {
+    email: me.email,
+    label: me.label,
+    color: colorForEmail(me.email),
+    avatarUrl: me.avatarUrl,
+  };
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
+      <Avatar user={directoryUser} size={72} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            onClick={() => fileInput.current?.click()}
+            disabled={busy !== null}
+            style={{
+              background: "var(--color-accent)", color: "white", border: "none",
+              padding: "8px 14px", borderRadius: "var(--radius-button)",
+              fontSize: 13, fontWeight: 600, cursor: busy ? "wait" : "pointer",
+              opacity: busy ? 0.6 : 1,
+            }}
+          >
+            {busy === "upload" ? "Uploading…" : me.avatarUrl ? "Replace picture" : "Upload picture"}
+          </button>
+          {me.avatarUrl && (
+            <button
+              onClick={handleRemove}
+              disabled={busy !== null}
+              style={{
+                background: "transparent",
+                border: "1px solid rgba(217,61,66,0.35)",
+                color: "#9E1A1E",
+                padding: "8px 14px", borderRadius: "var(--radius-button)",
+                fontSize: 13, fontWeight: 600, cursor: busy ? "wait" : "pointer",
+                opacity: busy ? 0.6 : 1,
+              }}
+            >
+              {busy === "remove" ? "Removing…" : "Remove"}
+            </button>
+          )}
+          <input
+            ref={fileInput}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFile(f);
+            }}
+          />
+        </div>
+        <div style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
+          PNG, JPEG, WebP, or GIF · max 2 MB
+        </div>
+        {error && (
+          <div style={{ fontSize: 12, color: "#9E1A1E" }}>{error}</div>
+        )}
+      </div>
     </div>
   );
 }

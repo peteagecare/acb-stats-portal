@@ -12,6 +12,7 @@ export interface AppUser {
   role: "admin" | "viewer";
   totpSecret: string; // base32
   createdAt: string; // ISO date
+  avatarUrl?: string;
 }
 
 /**

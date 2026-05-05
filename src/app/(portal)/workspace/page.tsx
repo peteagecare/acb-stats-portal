@@ -18,6 +18,7 @@ import {
 } from "./_shared";
 import { TagPicker, TagPillList, useTags } from "./_tags";
 import { Comments } from "./_collaboration";
+import { useTaskContextMenu } from "./_task-context-menu";
 import { DatePicker, EnumPicker, ProjectPicker, UserPicker } from "@/app/components/Pickers";
 
 /* Dashboard-wide handler for opening a task in a side panel without
@@ -26,6 +27,13 @@ import { DatePicker, EnumPicker, ProjectPicker, UserPicker } from "@/app/compone
 const TaskOpenContext = createContext<((id: string) => void) | null>(null);
 function useOpenTask(): ((id: string) => void) | null {
   return useContext(TaskOpenContext);
+}
+
+/* Refresh-the-dashboard hook, used by leaf task UIs that mutate (e.g. delete
+ * via right-click) and need the page-level state to reload. */
+const TaskRefreshContext = createContext<(() => Promise<void> | void) | null>(null);
+function useTaskRefresh(): (() => Promise<void> | void) | null {
+  return useContext(TaskRefreshContext);
 }
 
 interface DashboardTask {
@@ -125,6 +133,7 @@ export default function WorkspacePage() {
 
   return (
     <TaskOpenContext.Provider value={setSelectedTaskId}>
+    <TaskRefreshContext.Provider value={refresh}>
     <div className="wsp-page" style={{ padding: "28px 32px 56px" }}>
       <div style={{ display: "flex", alignItems: "flex-end", marginBottom: 22, gap: 16 }}>
         <div>
@@ -180,6 +189,7 @@ export default function WorkspacePage() {
         />
       )}
     </div>
+    </TaskRefreshContext.Provider>
     </TaskOpenContext.Provider>
   );
 }
@@ -1234,18 +1244,32 @@ function DraggableKanbanCard({
 function KanbanCard({ task, users }: { task: DashboardTask; users: DirectoryUser[] }) {
   const router = useRouter();
   const openTask = useOpenTask();
+  const refresh = useTaskRefresh();
   const allTags = useTags();
   const owner = userMeta(task.ownerEmail, users);
   const projectColor = colorForEmail(task.projectId);
   const due = endDateMs(task.endDate);
   const overdue = due != null && due < todayStart().getTime() && !task.completed;
+  const { onContextMenu, menu } = useTaskContextMenu({
+    taskTitle: task.title,
+    onDelete: async () => {
+      const res = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? `HTTP ${res.status}`);
+      }
+      await refresh?.();
+    },
+  });
   function open() {
     if (openTask) openTask(task.id);
     else router.push(`/workspace/${task.companyId}/${task.projectId}?task=${task.id}`);
   }
   return (
+    <>
     <div
       onClick={open}
+      onContextMenu={onContextMenu}
       style={{
         background: "white", borderRadius: 10, padding: 10,
         border: "1px solid var(--color-border)",
@@ -1303,6 +1327,8 @@ function KanbanCard({ task, users }: { task: DashboardTask; users: DirectoryUser
         {owner && <Avatar user={owner} size={20} />}
       </div>
     </div>
+    {menu}
+    </>
   );
 }
 
@@ -1775,6 +1801,7 @@ function BucketTaskRow({
 }) {
   const router = useRouter();
   const openTask = useOpenTask();
+  const refresh = useTaskRefresh();
   const allTags = useTags();
   const projectColor = colorForEmail(task.projectId);
   const due = endDateMs(task.endDate);
@@ -1783,6 +1810,17 @@ function BucketTaskRow({
   const dragOps = useDragOps();
   const [over, setOver] = useState<"before" | "after" | null>(null);
   const isDragging = dragOps.draggedId === task.id;
+  const { onContextMenu, menu } = useTaskContextMenu({
+    taskTitle: task.title,
+    onDelete: async () => {
+      const res = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? `HTTP ${res.status}`);
+      }
+      await refresh?.();
+    },
+  });
 
   function open() {
     if (openTask) openTask(task.id);
@@ -1799,8 +1837,10 @@ function BucketTaskRow({
   }
 
   return (
+    <>
     <div
       onClick={open}
+      onContextMenu={onContextMenu}
       draggable
       onDragStart={(e) => {
         dragOps.setDraggedId(task.id);
@@ -1894,6 +1934,8 @@ function BucketTaskRow({
       )}
       {owner && <Avatar user={owner} size={22} />}
     </div>
+    {menu}
+    </>
   );
 }
 
@@ -1984,12 +2026,24 @@ function AssignedByMe({ data, users }: { data: { me: string; tasks: DashboardTas
 function AssignedRow({ task, users, me }: { task: DashboardTask; users: DirectoryUser[]; me: string }) {
   const router = useRouter();
   const openTask = useOpenTask();
+  const refresh = useTaskRefresh();
   const allTags = useTags();
   const projectColor = colorForEmail(task.projectId);
   const due = endDateMs(task.endDate);
   const todayMs = todayStart().getTime();
   const overdue = due != null && due < todayMs && !task.completed;
   const owner = userMeta(task.ownerEmail, users);
+  const { onContextMenu, menu } = useTaskContextMenu({
+    taskTitle: task.title,
+    onDelete: async () => {
+      const res = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? `HTTP ${res.status}`);
+      }
+      await refresh?.();
+    },
+  });
 
   function open() {
     if (openTask) openTask(task.id);
@@ -1997,8 +2051,10 @@ function AssignedRow({ task, users, me }: { task: DashboardTask; users: Director
   }
 
   return (
+    <>
     <div
       onClick={open}
+      onContextMenu={onContextMenu}
       style={{
         display: "flex", alignItems: "center", gap: 10,
         padding: "10px 4px", borderTop: "1px solid var(--color-border)",
@@ -2045,6 +2101,8 @@ function AssignedRow({ task, users, me }: { task: DashboardTask; users: Director
       )}
       {owner && owner.email !== me && <Avatar user={owner} size={22} />}
     </div>
+    {menu}
+    </>
   );
 }
 

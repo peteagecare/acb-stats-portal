@@ -2,11 +2,26 @@ import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db/client";
 import { comments, tasks, projects, companies } from "@/db/schema";
 import { loadUsers } from "@/lib/users";
-import { sendCommentEmail } from "@/lib/email";
+import { sendCommentEmail, sendMentionEmail } from "@/lib/email";
 import { notify } from "@/lib/notify";
+import { extractMentionEmails } from "@/lib/mentions";
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 /** Notify the parent owner + all earlier commenters when a new comment lands.
- *  Skips the actor. Honors `commentInApp` / `commentEmail` prefs. */
+ *  Also pings every @-mentioned user using mention prefs. Mentioned users are
+ *  removed from the comment_added recipient set so they get one notification,
+ *  not two. Skips the actor. */
 export async function notifyComment(opts: {
   parentType: "task" | "project";
   parentId: string;
@@ -82,21 +97,64 @@ export async function notifyComment(opts: {
       ne(comments.authorEmail, actorEmail),
     ));
 
+  // Build excerpt + URL once
+  const users = await loadUsers();
+  const actorLabel = users.find((u) => u.email === actorEmail)?.label ?? actorEmail;
+  const plainText = stripHtml(commentBody);
+  const excerpt = plainText.length > 280 ? `${plainText.slice(0, 277)}…` : plainText;
+  const url = parentType === "task"
+    ? `${origin}/workspace/${companyId}/${projectId}?task=${taskId}`
+    : `${origin}/workspace/${companyId}/${projectId}`;
+  const parentUrl = url.replace(origin, "");
+
+  // Mentions take priority — they get a "comment_mention" notification with
+  // mention prefs. The actor is filtered out by `notify()` itself.
+  const mentioned = new Set(
+    extractMentionEmails(commentBody).map((e) => e.toLowerCase()),
+  );
+  mentioned.delete(actorEmail.toLowerCase());
+
+  for (const recipientEmail of mentioned) {
+    await notify({
+      recipientEmail,
+      actorEmail,
+      kind: "comment_mention",
+      payload: {
+        actorLabel,
+        excerpt,
+        parentType,
+        parentTitle,
+        parentUrl,
+        projectName,
+        projectId,
+        companyId,
+        taskId,
+      },
+      inAppKey: "mentionsInApp",
+      emailKey: "mentionsEmail",
+      taskId,
+      sendEmail: () => sendMentionEmail({
+        to: recipientEmail,
+        actorLabel,
+        noteTitle: parentTitle,
+        noteUrl: url,
+        excerpt,
+        isAssignment: false,
+      }),
+    });
+  }
+
+  // Comment-watchers (owner + earlier commenters), minus anyone we just
+  // mention-pinged so they don't get two notifications for the same comment.
   const recipients = new Set<string>();
   if (ownerEmail) recipients.add(ownerEmail);
   for (const r of earlier) {
     if (r.authorEmail) recipients.add(r.authorEmail);
   }
   recipients.delete(actorEmail);
+  for (const m of mentioned) recipients.delete(m);
 
   if (recipients.size === 0) return;
-
-  const users = await loadUsers();
-  const actorLabel = users.find((u) => u.email === actorEmail)?.label ?? actorEmail;
-  const excerpt = commentBody.length > 280 ? `${commentBody.slice(0, 277)}…` : commentBody;
-  const url = parentType === "task"
-    ? `${origin}/workspace/${companyId}/${projectId}?task=${taskId}`
-    : `${origin}/workspace/${companyId}/${projectId}`;
 
   for (const recipientEmail of recipients) {
     await notify({
@@ -108,7 +166,7 @@ export async function notifyComment(opts: {
         excerpt,
         parentType,
         parentTitle,
-        parentUrl: url.replace(origin, ""),
+        parentUrl,
         projectName,
         projectId,
         companyId,

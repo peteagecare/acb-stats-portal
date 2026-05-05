@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
       label: u.label,
       role: u.role,
       createdAt: u.createdAt,
+      avatarUrl: u.avatarUrl,
     })),
   });
 }

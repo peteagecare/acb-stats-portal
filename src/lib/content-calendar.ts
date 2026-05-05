@@ -56,6 +56,8 @@ export interface CalendarEntry {
   supportedLinks?: string[];
   feedback?: string;
   needsFinanceApproval: boolean;
+  /** Rich-text HTML body for the long-form planning notes on this content piece. */
+  content?: string;
   submittedBy: string;
   submittedByLabel: string;
   submittedAt: string;

@@ -12,6 +12,8 @@ export interface ContentIdea {
   notes?: string;
   /** Optional preferred platform — used to find the next matching slot. */
   platform?: CalendarPlatform;
+  /** Rich-text HTML body — long-form notes about the idea. */
+  content?: string;
   createdAt: string;
   createdBy: string;
 }
@@ -77,7 +79,13 @@ export async function DELETE(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const user = requireAuth(request);
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  const body = (await request.json()) as { id?: string; title?: string; notes?: string; platform?: string | null };
+  const body = (await request.json()) as {
+    id?: string;
+    title?: string;
+    notes?: string;
+    platform?: string | null;
+    content?: string;
+  };
   if (!body.id) return Response.json({ error: "id required" }, { status: 400 });
   const data = await load();
   const idx = data.ideas.findIndex((i) => i.id === body.id);
@@ -88,6 +96,7 @@ export async function PATCH(request: NextRequest) {
     data.ideas[idx].platform =
       body.platform && isPlatform(body.platform) ? body.platform : undefined;
   }
+  if (typeof body.content === "string") data.ideas[idx].content = body.content;
   await save(data);
   return Response.json(data.ideas[idx]);
 }
