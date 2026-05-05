@@ -182,6 +182,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/teams", label: "Contacts Per Team", icon: Icon.teams },
       { href: "/trends", label: "Trends & Lifecycle", icon: Icon.trends },
       { href: "/lead-timeline", label: "Lead Timeline", icon: Icon.timeline },
+      { href: "/smt-reporting", label: "SMT Reporting", icon: Icon.overview },
     ],
   },
   {

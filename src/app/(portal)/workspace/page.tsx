@@ -40,6 +40,7 @@ interface DashboardTask {
   completed: boolean;
   completedAt: string | null;
   parentTaskId: string | null;
+  order: number;
   projectId: string;
   projectName: string;
   projectStatus: string;
@@ -158,7 +159,7 @@ export default function WorkspacePage() {
             />
           )}
           <CompaniesGrid companies={companies} onNew={() => setCreatingCompany(true)} />
-          <TasksTabs data={data} users={users} />
+          <TasksTabs data={data} users={users} setData={setData} onChanged={refresh} />
           <AssignedByMe data={data} users={users} />
           <PeopleWidget tasks={data.tasks} users={users} />
         </div>
@@ -800,7 +801,140 @@ function endDateMs(iso?: string | null) {
 type ViewMode = "list" | "kanban" | "calendar";
 const VIEW_KEY = "workspace-tasks-view";
 
-function TasksTabs({ data, users }: { data: { me: string; tasks: DashboardTask[] }; users: DirectoryUser[] }) {
+/* ── Drag & drop helpers ──────────────────────────────────────────── */
+
+type DragOps = {
+  draggedId: string | null;
+  setDraggedId: (id: string | null) => void;
+  /** Apply a partial update locally (optimistic) and PATCH the server. */
+  patchTask: (id: string, patch: Partial<Pick<DashboardTask, "status" | "endDate" | "order">>) => Promise<void>;
+  /** Re-number `order` for a list of task IDs (in the new visual order) using 10-step gaps. */
+  reorderGroup: (orderedIds: string[]) => Promise<void>;
+};
+
+const DragOpsContext = createContext<DragOps | null>(null);
+function useDragOps(): DragOps {
+  const v = useContext(DragOpsContext);
+  if (!v) throw new Error("DragOpsContext not found");
+  return v;
+}
+
+/** Maps a list-view bucket key to the date a dropped task should land on. */
+function bucketDateFor(key: BucketKey): string | null {
+  function iso(d: Date) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  const today = new Date();
+  if (key === "today") return iso(today);
+  if (key === "thisWeek") return iso(endOfWeek(today));
+  if (key === "nextWeek") {
+    const nws = new Date(endOfWeek(today).getTime() + 24 * 3600 * 1000);
+    return iso(nws);
+  }
+  if (key === "later") {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    return iso(d);
+  }
+  return null; // sometime / completed → no date
+}
+
+function isoFromDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function dropEdge(e: React.DragEvent<HTMLElement>): "before" | "after" {
+  const rect = e.currentTarget.getBoundingClientRect();
+  return e.clientY < rect.top + rect.height / 2 ? "before" : "after";
+}
+
+function TasksTabs({
+  data,
+  users,
+  setData,
+  onChanged,
+}: {
+  data: { me: string; tasks: DashboardTask[] };
+  users: DirectoryUser[];
+  setData: React.Dispatch<React.SetStateAction<{ me: string; tasks: DashboardTask[] } | null>>;
+  onChanged: () => void;
+}) {
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+
+  const patchTask: DragOps["patchTask"] = useCallback(
+    async (id, patch) => {
+      // Optimistic local update
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          tasks: prev.tasks.map((t) =>
+            t.id === id
+              ? {
+                  ...t,
+                  ...(patch.status !== undefined ? { status: patch.status } : null),
+                  ...(patch.endDate !== undefined ? { endDate: patch.endDate } : null),
+                  ...(patch.order !== undefined ? { order: patch.order } : null),
+                }
+              : t,
+          ),
+        };
+      });
+      try {
+        await fetch(`/api/tasks/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+      } catch {
+        // best effort; refresh will reconcile
+      } finally {
+        onChanged();
+      }
+    },
+    [setData, onChanged],
+  );
+
+  const reorderGroup: DragOps["reorderGroup"] = useCallback(
+    async (orderedIds) => {
+      const newOrders = new Map<string, number>();
+      orderedIds.forEach((id, i) => newOrders.set(id, i * 10));
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          tasks: prev.tasks.map((t) => (newOrders.has(t.id) ? { ...t, order: newOrders.get(t.id)! } : t)),
+        };
+      });
+      await Promise.all(
+        Array.from(newOrders.entries()).map(([id, order]) =>
+          fetch(`/api/tasks/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ order }),
+          }).catch(() => null),
+        ),
+      );
+      onChanged();
+    },
+    [setData, onChanged],
+  );
+
+  const dragOps: DragOps = {
+    draggedId,
+    setDraggedId,
+    patchTask,
+    reorderGroup,
+  };
+
+  return (
+    <DragOpsContext.Provider value={dragOps}>
+      <TasksTabsInner data={data} users={users} />
+    </DragOpsContext.Provider>
+  );
+}
+
+function TasksTabsInner({ data, users }: { data: { me: string; tasks: DashboardTask[] }; users: DirectoryUser[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const view = searchParams.get("view") === "team" ? "team" : "mine";
@@ -934,6 +1068,9 @@ function KanbanView({
   users: DirectoryUser[];
   predicate: (t: DashboardTask) => boolean;
 }) {
+  const dragOps = useDragOps();
+  const [hoverCol, setHoverCol] = useState<DashboardTask["status"] | null>(null);
+
   const grouped = useMemo(() => {
     const out: Record<DashboardTask["status"], DashboardTask[]> = { todo: [], doing: [], blocked: [], done: [] };
     for (const t of data.tasks) {
@@ -941,14 +1078,40 @@ function KanbanView({
       if (!predicate(t)) continue;
       out[t.status].push(t);
     }
-    const sortByDue = (a: DashboardTask, b: DashboardTask) => {
+    const cmp = (a: DashboardTask, b: DashboardTask) => {
+      if (a.order !== b.order) return a.order - b.order;
       const da = endDateMs(a.endDate) ?? Number.POSITIVE_INFINITY;
       const db = endDateMs(b.endDate) ?? Number.POSITIVE_INFINITY;
       return da - db;
     };
-    for (const k of Object.keys(out) as (keyof typeof out)[]) out[k].sort(sortByDue);
+    for (const k of Object.keys(out) as (keyof typeof out)[]) out[k].sort(cmp);
     return out;
   }, [data, predicate]);
+
+  function handleDropOnColumn(colKey: DashboardTask["status"], anchorTaskId: string | null, edge: "before" | "after") {
+    const id = dragOps.draggedId;
+    if (!id) return;
+    const dragged = data.tasks.find((t) => t.id === id);
+    if (!dragged) return;
+    const isCrossColumn = dragged.status !== colKey;
+
+    // Build new order list for target column. `target` is the column WITHOUT the dragged task.
+    const target = grouped[colKey].filter((t) => t.id !== id);
+    let insertAt: number;
+    if (anchorTaskId) {
+      const idx = target.findIndex((t) => t.id === anchorTaskId);
+      insertAt = idx < 0 ? target.length : idx + (edge === "after" ? 1 : 0);
+    } else {
+      insertAt = target.length;
+    }
+    const ordered = [...target.slice(0, insertAt), dragged, ...target.slice(insertAt)];
+    const orderedIds = ordered.map((t) => t.id);
+
+    if (isCrossColumn) dragOps.patchTask(id, { status: colKey });
+    dragOps.reorderGroup(orderedIds);
+    dragOps.setDraggedId(null);
+    setHoverCol(null);
+  }
 
   return (
     <div style={{
@@ -960,13 +1123,33 @@ function KanbanView({
     }}>
       {KANBAN_COLUMNS.map((col) => {
         const tasks = grouped[col.key];
+        const isHovered = hoverCol === col.key;
         return (
-          <div key={col.key} style={{
-            background: "var(--bg-card)", borderRadius: 14,
-            boxShadow: "var(--shadow-card)",
-            display: "flex", flexDirection: "column",
-            minHeight: 200, maxHeight: "calc(100vh - 280px)",
-          }}>
+          <div
+            key={col.key}
+            onDragOver={(e) => {
+              if (!dragOps.draggedId) return;
+              e.preventDefault();
+              setHoverCol(col.key);
+            }}
+            onDragLeave={(e) => {
+              if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
+              setHoverCol((c) => (c === col.key ? null : c));
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              handleDropOnColumn(col.key, null, "after");
+            }}
+            style={{
+              background: "var(--bg-card)", borderRadius: 14,
+              boxShadow: "var(--shadow-card)",
+              display: "flex", flexDirection: "column",
+              minHeight: 200, maxHeight: "calc(100vh - 280px)",
+              outline: isHovered ? `2px solid ${col.color}` : "2px solid transparent",
+              outlineOffset: -2,
+              transition: "outline-color 100ms",
+            }}
+          >
             <div style={{
               display: "flex", alignItems: "center", gap: 8,
               padding: "12px 14px",
@@ -985,12 +1168,65 @@ function KanbanView({
                   Empty
                 </div>
               ) : (
-                tasks.map((t) => <KanbanCard key={t.id} task={t} users={users} />)
+                tasks.map((t) => (
+                  <DraggableKanbanCard
+                    key={t.id}
+                    task={t}
+                    users={users}
+                    onDropAt={(edge) => handleDropOnColumn(col.key, t.id, edge)}
+                  />
+                ))
               )}
             </div>
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function DraggableKanbanCard({
+  task,
+  users,
+  onDropAt,
+}: {
+  task: DashboardTask;
+  users: DirectoryUser[];
+  onDropAt: (edge: "before" | "after") => void;
+}) {
+  const dragOps = useDragOps();
+  const [over, setOver] = useState<"before" | "after" | null>(null);
+  const isDragging = dragOps.draggedId === task.id;
+  return (
+    <div
+      draggable
+      onDragStart={(e) => {
+        dragOps.setDraggedId(task.id);
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", task.id);
+      }}
+      onDragEnd={() => dragOps.setDraggedId(null)}
+      onDragOver={(e) => {
+        if (!dragOps.draggedId || dragOps.draggedId === task.id) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setOver(dropEdge(e));
+      }}
+      onDragLeave={() => setOver(null)}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const edge = dropEdge(e);
+        setOver(null);
+        onDropAt(edge);
+      }}
+      style={{
+        opacity: isDragging ? 0.4 : 1,
+        borderTop: over === "before" ? "2px solid var(--color-accent)" : "2px solid transparent",
+        borderBottom: over === "after" ? "2px solid var(--color-accent)" : "2px solid transparent",
+      }}
+    >
+      <KanbanCard task={task} users={users} />
     </div>
   );
 }
@@ -1135,6 +1371,16 @@ function CalendarView({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
 
+  const dragOps = useDragOps();
+  const [hoverIso, setHoverIso] = useState<string | null>(null);
+  function handleDropOn(targetIso: string) {
+    const id = dragOps.draggedId;
+    if (!id) return;
+    dragOps.patchTask(id, { endDate: targetIso });
+    dragOps.setDraggedId(null);
+    setHoverIso(null);
+  }
+
   return (
     <div style={{
       background: "var(--bg-card)", borderRadius: 14,
@@ -1202,16 +1448,32 @@ function CalendarView({
           const dayTasks = tasksByDay.get(iso) ?? [];
           const isToday = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
           const lastRow = Math.floor(i / 7) === weekRows - 1;
+          const isHovered = hoverIso === iso;
           return (
             <div
               key={i}
+              onDragOver={(e) => {
+                if (!dragOps.draggedId) return;
+                e.preventDefault();
+                setHoverIso(iso);
+              }}
+              onDragLeave={(e) => {
+                if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
+                setHoverIso((c) => (c === iso ? null : c));
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                handleDropOn(iso);
+              }}
               style={{
                 padding: "6px 6px 8px",
                 borderRight: (i + 1) % 7 === 0 ? "none" : "1px solid var(--color-border)",
                 borderBottom: lastRow ? "none" : "1px solid var(--color-border)",
-                background: otherMonth ? "rgba(0,0,0,0.015)" : "transparent",
+                background: isHovered ? "rgba(0,113,227,0.08)" : otherMonth ? "rgba(0,0,0,0.015)" : "transparent",
                 minWidth: 0, minHeight: 0, overflow: "hidden",
                 display: "flex", flexDirection: "column",
+                outline: isHovered ? "2px solid var(--color-accent)" : "none",
+                outlineOffset: -2,
               }}
             >
               <div style={{
@@ -1247,16 +1509,26 @@ function CalendarView({
 function CalendarTaskChip({ task, users, onClick }: { task: DashboardTask; users: DirectoryUser[]; onClick: () => void }) {
   const owner = userMeta(task.ownerEmail, users);
   const projectColor = colorForEmail(task.projectId);
+  const dragOps = useDragOps();
+  const isDragging = dragOps.draggedId === task.id;
   return (
     <button
       onClick={onClick}
+      draggable
+      onDragStart={(e) => {
+        dragOps.setDraggedId(task.id);
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", task.id);
+      }}
+      onDragEnd={() => dragOps.setDraggedId(null)}
       title={`${task.title} · ${task.projectName}${owner ? ` · ${owner.label}` : ""}`}
       style={{
         display: "flex", alignItems: "center", gap: 4,
         padding: "3px 6px", borderRadius: 6,
         background: `${projectColor}1A`,
-        border: "none", cursor: "pointer", fontFamily: "inherit",
+        border: "none", cursor: isDragging ? "grabbing" : "grab", fontFamily: "inherit",
         textAlign: "left", width: "100%",
+        opacity: isDragging ? 0.4 : 1,
       }}
     >
       <span style={{ width: 5, height: 5, borderRadius: "50%", background: projectColor, flexShrink: 0 }} />
@@ -1339,16 +1611,17 @@ function TasksBuckets({
       else if (due >= nextWeekStartMs && due <= nextWeekEndMs) out.nextWeek.push(t);
       else out.later.push(t);
     }
-    const sortByDue = (a: DashboardTask, b: DashboardTask) => {
+    const cmp = (a: DashboardTask, b: DashboardTask) => {
+      if (a.order !== b.order) return a.order - b.order;
       const da = endDateMs(a.endDate) ?? Number.POSITIVE_INFINITY;
       const db = endDateMs(b.endDate) ?? Number.POSITIVE_INFINITY;
       return da - db;
     };
-    out.today.sort(sortByDue);
-    out.thisWeek.sort(sortByDue);
-    out.nextWeek.sort(sortByDue);
-    out.later.sort(sortByDue);
-    out.sometime.sort(sortByDue);
+    out.today.sort(cmp);
+    out.thisWeek.sort(cmp);
+    out.nextWeek.sort(cmp);
+    out.later.sort(cmp);
+    out.sometime.sort(cmp);
     out.completed.sort((a, b) => {
       const da = a.completedAt ? new Date(a.completedAt).getTime() : 0;
       const db = b.completedAt ? new Date(b.completedAt).getTime() : 0;
@@ -1367,6 +1640,7 @@ function TasksBuckets({
           users={users}
           emptyHint={b.emptyHint}
           variant={b.key}
+          allTasksInBucket={buckets[b.key]}
         />
       ))}
     </div>
@@ -1374,13 +1648,14 @@ function TasksBuckets({
 }
 
 function BucketCard({
-  label, tasks, users, emptyHint, variant,
+  label, tasks, users, emptyHint, variant, allTasksInBucket,
 }: {
   label: string;
   tasks: DashboardTask[];
   users: DirectoryUser[];
   emptyHint: string;
   variant: BucketKey;
+  allTasksInBucket: DashboardTask[];
 }) {
   const accent =
     variant === "today" ? "#DC2626" :
@@ -1391,9 +1666,62 @@ function BucketCard({
     "#10B981";
   const todayMs = todayStart().getTime();
   const [open, setOpen] = useState(variant !== "completed" && variant !== "sometime" && variant !== "later");
+  const dragOps = useDragOps();
+  const [hovered, setHovered] = useState(false);
+
+  function handleDrop(anchorTaskId: string | null, edge: "before" | "after") {
+    const id = dragOps.draggedId;
+    if (!id) return;
+    const allInBucket = allTasksInBucket.filter((t) => t.id !== id);
+    let insertAt: number;
+    if (anchorTaskId) {
+      const idx = allInBucket.findIndex((t) => t.id === anchorTaskId);
+      insertAt = idx < 0 ? allInBucket.length : idx + (edge === "after" ? 1 : 0);
+    } else {
+      insertAt = allInBucket.length;
+    }
+
+    if (variant === "completed") {
+      fetch(`/api/tasks/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ completed: true }),
+      }).catch(() => null);
+    } else {
+      dragOps.patchTask(id, { endDate: bucketDateFor(variant) });
+    }
+
+    const orderedIds = [...allInBucket.slice(0, insertAt).map((t) => t.id), id, ...allInBucket.slice(insertAt).map((t) => t.id)];
+    dragOps.reorderGroup(orderedIds);
+    dragOps.setDraggedId(null);
+    setHovered(false);
+  }
 
   return (
-    <div style={{ background: "var(--bg-card)", borderRadius: 18, boxShadow: "var(--shadow-card)", overflow: "hidden" }}>
+    <div
+      onDragOver={(e) => {
+        if (!dragOps.draggedId) return;
+        e.preventDefault();
+        setHovered(true);
+      }}
+      onDragLeave={(e) => {
+        if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
+        setHovered(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        handleDrop(null, "after");
+      }}
+      style={{
+        background: "var(--bg-card)",
+        borderRadius: 18,
+        boxShadow: "var(--shadow-card)",
+        overflow: "hidden",
+        outline: hovered ? `2px solid ${accent}` : "2px solid transparent",
+        outlineOffset: -2,
+        transition: "outline-color 100ms",
+      }}
+    >
       <button
         onClick={() => setOpen((v) => !v)}
         style={{
@@ -1422,7 +1750,13 @@ function BucketCard({
         ) : (
           <div style={{ display: "flex", flexDirection: "column" }}>
             {tasks.map((t) => (
-              <BucketTaskRow key={t.id} task={t} users={users} todayMs={todayMs} />
+              <BucketTaskRow
+                key={t.id}
+                task={t}
+                users={users}
+                todayMs={todayMs}
+                onDropAt={(edge) => handleDrop(t.id, edge)}
+              />
             ))}
           </div>
         )
@@ -1431,7 +1765,14 @@ function BucketCard({
   );
 }
 
-function BucketTaskRow({ task, users, todayMs }: { task: DashboardTask; users: DirectoryUser[]; todayMs: number }) {
+function BucketTaskRow({
+  task, users, todayMs, onDropAt,
+}: {
+  task: DashboardTask;
+  users: DirectoryUser[];
+  todayMs: number;
+  onDropAt: (edge: "before" | "after") => void;
+}) {
   const router = useRouter();
   const openTask = useOpenTask();
   const allTags = useTags();
@@ -1439,6 +1780,9 @@ function BucketTaskRow({ task, users, todayMs }: { task: DashboardTask; users: D
   const due = endDateMs(task.endDate);
   const overdue = due != null && due < todayMs && !task.completed;
   const owner = userMeta(task.ownerEmail, users);
+  const dragOps = useDragOps();
+  const [over, setOver] = useState<"before" | "after" | null>(null);
+  const isDragging = dragOps.draggedId === task.id;
 
   function open() {
     if (openTask) openTask(task.id);
@@ -1457,10 +1801,35 @@ function BucketTaskRow({ task, users, todayMs }: { task: DashboardTask; users: D
   return (
     <div
       onClick={open}
+      draggable
+      onDragStart={(e) => {
+        dragOps.setDraggedId(task.id);
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", task.id);
+      }}
+      onDragEnd={() => dragOps.setDraggedId(null)}
+      onDragOver={(e) => {
+        if (!dragOps.draggedId || dragOps.draggedId === task.id) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setOver(dropEdge(e));
+      }}
+      onDragLeave={() => setOver(null)}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const edge = dropEdge(e);
+        setOver(null);
+        onDropAt(edge);
+      }}
       style={{
         display: "flex", alignItems: "center", gap: 10,
-        padding: "10px 18px", borderTop: "1px solid var(--color-border)",
-        cursor: "pointer", transition: "background 100ms var(--ease-apple)",
+        padding: "10px 18px",
+        borderTop: over === "before" ? "2px solid var(--color-accent)" : "1px solid var(--color-border)",
+        borderBottom: over === "after" ? "2px solid var(--color-accent)" : "none",
+        cursor: isDragging ? "grabbing" : "pointer",
+        transition: "background 100ms var(--ease-apple)",
+        opacity: isDragging ? 0.4 : 1,
       }}
       onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.02)")}
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}

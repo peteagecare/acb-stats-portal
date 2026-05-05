@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
       completed: tasks.completed,
       completedAt: tasks.completedAt,
       parentTaskId: tasks.parentTaskId,
+      order: tasks.order,
       projectId: tasks.projectId,
       projectName: projects.name,
       projectStatus: projects.status,

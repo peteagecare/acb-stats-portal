@@ -60,8 +60,17 @@ interface MeResp {
 
 type ModalState =
   | { mode: "closed" }
-  | { mode: "create"; defaultDate: string }
+  | { mode: "create"; defaultDate: string; prefill?: Partial<CalendarEntry> }
   | { mode: "edit"; entry: CalendarEntry };
+
+interface GhostRow {
+  slotId: string;
+  date: string;
+  time?: string;
+  platform: CalendarPlatform;
+  assetType?: CalendarAssetType;
+  label: string;
+}
 
 export default function ContentCalendarPage() {
   const [items, setItems] = useState<CalendarEntry[]>([]);
@@ -74,6 +83,35 @@ export default function ContentCalendarPage() {
   const [filterStatus, setFilterStatus] = useState<CalendarStatus | "all">("all");
   const [search, setSearch] = useState("");
   const [savingApproval, setSavingApproval] = useState<string | null>(null);
+  const [showIdeas, setShowIdeas] = useState(false);
+  const [scheduleSlots, setScheduleSlots] = useState<ScheduleSlot[]>([]);
+  const [scheduleDisabledDays, setScheduleDisabledDays] = useState<number[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    function load() {
+      fetch("/api/posting-schedule")
+        .then((r) => (r.ok ? r.json() : { slots: [], disabledDays: [] }))
+        .then((d: { slots?: ScheduleSlot[]; disabledDays?: number[] }) => {
+          if (cancelled) return;
+          setScheduleSlots(d.slots ?? []);
+          setScheduleDisabledDays(d.disabledDays ?? []);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setScheduleSlots([]);
+          setScheduleDisabledDays([]);
+        });
+    }
+    load();
+    // Re-load schedule when the modal closes so calendar sees latest edits
+    const handler = () => load();
+    window.addEventListener("focus", handler);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", handler);
+    };
+  }, []);
 
   useEffect(() => {
     fetch("/api/auth/me", { cache: "no-store" })
@@ -127,16 +165,60 @@ export default function ContentCalendarPage() {
       arr.push(it);
       map.set(k, arr);
     }
+
+    // Always include current week + next 4 weeks even if no entries yet,
+    // so the schedule skeleton has somewhere to render.
+    const today = new Date();
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+    monday.setHours(0, 0, 0, 0);
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i * 7);
+      const k = fmtIsoDate(d);
+      if (!map.has(k)) map.set(k, []);
+    }
+
     const sortedKeys = Array.from(map.keys()).sort();
-    return sortedKeys.map((k) => ({
-      week: k,
-      label: weekLabel(k),
-      rows: map.get(k)!.sort((a, b) => {
+    return sortedKeys.map((k) => {
+      const rows = (map.get(k) ?? []).sort((a, b) => {
         if (a.liveDate !== b.liveDate) return a.liveDate.localeCompare(b.liveDate);
         return (a.time ?? "").localeCompare(b.time ?? "");
-      }),
-    }));
-  }, [filtered]);
+      });
+
+      // Build ghost placeholder rows from the schedule template — only if
+      // there's no real entry at the same date+platform+time slot AND the
+      // slot's weekday isn't disabled.
+      const ghosts: GhostRow[] = [];
+      const weekMonday = new Date(k + "T00:00:00");
+      for (const slot of scheduleSlots) {
+        if (scheduleDisabledDays.includes(slot.weekday)) continue;
+        const offset = (slot.weekday + 6) % 7; // Mon=1 → 0, Sun=0 → 6
+        const slotDate = new Date(weekMonday);
+        slotDate.setDate(weekMonday.getDate() + offset);
+        const iso = fmtIsoDate(slotDate);
+        const taken = rows.some(
+          (r) => r.liveDate === iso && r.platform === slot.platform && (slot.time ? r.time === slot.time : true),
+        );
+        if (taken) continue;
+        ghosts.push({
+          slotId: slot.id,
+          date: iso,
+          time: slot.time,
+          platform: slot.platform,
+          assetType: slot.assetType,
+          label: slot.label,
+        });
+      }
+
+      return {
+        week: k,
+        label: weekLabel(k),
+        rows,
+        ghosts,
+      };
+    });
+  }, [filtered, scheduleSlots, scheduleDisabledDays]);
 
   async function handleSave(payload: Partial<CalendarEntry> & { id?: string }) {
     const method = payload.id ? "PATCH" : "POST";
@@ -285,21 +367,38 @@ export default function ContentCalendarPage() {
             Double-click any cell to edit. Click <em>+ Add entry to this week</em> at the bottom of any week to drop in a new row.
           </p>
         </div>
-        <button
-          onClick={() => setModal({ mode: "create", defaultDate: fmtIsoDate(new Date()) })}
-          style={{
-            background: "var(--color-accent, #0071e3)",
-            color: "#fff",
-            border: 0,
-            padding: "10px 18px",
-            borderRadius: 10,
-            fontSize: 14,
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-        >
-          + New entry
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={() => setShowIdeas(true)}
+            style={{
+              background: "#fff",
+              color: "var(--color-text-primary)",
+              border: "1px solid var(--color-border)",
+              padding: "10px 16px",
+              borderRadius: 10,
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Idea Library
+          </button>
+          <button
+            onClick={() => setModal({ mode: "create", defaultDate: fmtIsoDate(new Date()) })}
+            style={{
+              background: "var(--color-accent, #0071e3)",
+              color: "#fff",
+              border: 0,
+              padding: "10px 18px",
+              borderRadius: 10,
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            + New entry
+          </button>
+        </div>
       </header>
 
       <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
@@ -350,6 +449,7 @@ export default function ContentCalendarPage() {
             weekStart={group.week}
             label={group.label}
             rows={group.rows}
+            ghosts={group.ghosts}
             isPete={isPete}
             myEmail={me?.email ?? ""}
             approvals={approvals}
@@ -361,6 +461,13 @@ export default function ContentCalendarPage() {
             onReject={handleReject}
             onInlineSave={handleInlineSave}
             onAddRow={handleAddRow}
+            onFillGhost={(g) =>
+              setModal({
+                mode: "create",
+                defaultDate: g.date,
+                prefill: { time: g.time, platform: g.platform, assetType: g.assetType, title: "" },
+              })
+            }
           />
         ))}
       </div>
@@ -376,6 +483,21 @@ export default function ContentCalendarPage() {
           isPete={isPete}
         />
       )}
+
+      {showIdeas && (
+        <IdeaLibraryModal
+          onClose={() => setShowIdeas(false)}
+          existingEntries={items}
+          onCreatedEntry={async () => {
+            // Refresh calendar after slot fill
+            const res = await fetch("/api/content-calendar");
+            if (res.ok) {
+              const body = await res.json();
+              setItems(body.items ?? []);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -384,6 +506,7 @@ function WeekGroup({
   weekStart,
   label,
   rows,
+  ghosts,
   isPete,
   myEmail,
   approvals,
@@ -395,10 +518,12 @@ function WeekGroup({
   onReject,
   onInlineSave,
   onAddRow,
+  onFillGhost,
 }: {
   weekStart: string;
   label: string;
   rows: CalendarEntry[];
+  ghosts: GhostRow[];
   isPete: boolean;
   myEmail: string;
   approvals: ApprovalsMap;
@@ -410,9 +535,28 @@ function WeekGroup({
   onReject: (entry: CalendarEntry, role: AnyApprovalKey) => void;
   onInlineSave: (id: string, patch: Partial<CalendarEntry>) => Promise<void>;
   onAddRow: (weekStart: string) => Promise<void>;
+  onFillGhost: (g: GhostRow) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const liveCount = rows.filter((r) => r.status !== "Cancelled").length;
+  // Merge real rows + ghosts into a single ordered list, marking ghosts with a tag.
+  type Mixed = { kind: "real"; entry: CalendarEntry } | { kind: "ghost"; g: GhostRow };
+  function mixedDate(m: Mixed): string {
+    return m.kind === "real" ? m.entry.liveDate : m.g.date;
+  }
+  function mixedTime(m: Mixed): string {
+    return (m.kind === "real" ? m.entry.time : m.g.time) ?? "";
+  }
+  const mixed: Mixed[] = [
+    ...rows.map((entry): Mixed => ({ kind: "real", entry })),
+    ...ghosts.map((g): Mixed => ({ kind: "ghost", g })),
+  ].sort((a, b) => {
+    const dc = mixedDate(a).localeCompare(mixedDate(b));
+    if (dc !== 0) return dc;
+    const tc = mixedTime(a).localeCompare(mixedTime(b));
+    if (tc !== 0) return tc;
+    return a.kind === b.kind ? 0 : a.kind === "real" ? -1 : 1;
+  });
 
   return (
     <section
@@ -474,12 +618,12 @@ function WeekGroup({
 
       {!collapsed && (
         <>
-          {rows.length === 0 && (
+          {mixed.length === 0 && (
             <div style={{ padding: "20px 18px", fontSize: 13, color: "var(--color-text-tertiary)", fontStyle: "italic" }}>
               No entries this week yet.
             </div>
           )}
-          {rows.length > 0 && (
+          {mixed.length > 0 && (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", minWidth: 1400, borderCollapse: "collapse", fontSize: 12 }}>
                 <thead>
@@ -503,22 +647,30 @@ function WeekGroup({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((entry) => (
-                    <Row
-                      key={entry.id}
-                      entry={entry}
-                      isPete={isPete}
-                      myEmail={myEmail}
-                      approval={approvals[entry.id] ?? {}}
-                      savingApproval={savingApproval}
-                      onEdit={onEdit}
-                      onDelete={onDelete}
-                      onQuickStatus={onQuickStatus}
-                      onApprove={onApprove}
-                      onReject={onReject}
-                      onInlineSave={onInlineSave}
-                    />
-                  ))}
+                  {mixed.map((m) =>
+                    m.kind === "real" ? (
+                      <Row
+                        key={m.entry.id}
+                        entry={m.entry}
+                        isPete={isPete}
+                        myEmail={myEmail}
+                        approval={approvals[m.entry.id] ?? {}}
+                        savingApproval={savingApproval}
+                        onEdit={onEdit}
+                        onDelete={onDelete}
+                        onQuickStatus={onQuickStatus}
+                        onApprove={onApprove}
+                        onReject={onReject}
+                        onInlineSave={onInlineSave}
+                      />
+                    ) : (
+                      <GhostScheduleRow
+                        key={`ghost-${m.g.slotId}-${m.g.date}`}
+                        ghost={m.g}
+                        onClick={() => onFillGhost(m.g)}
+                      />
+                    ),
+                  )}
                 </tbody>
               </table>
             </div>
@@ -548,6 +700,56 @@ function WeekGroup({
         </>
       )}
     </section>
+  );
+}
+
+const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function GhostScheduleRow({ ghost, onClick }: { ghost: GhostRow; onClick: () => void }) {
+  const dt = new Date(ghost.date + "T00:00:00");
+  return (
+    <tr
+      onClick={onClick}
+      style={{
+        cursor: "pointer",
+        background: "rgba(0,113,227,0.025)",
+        borderTop: "1px dashed var(--color-border)",
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,113,227,0.07)")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(0,113,227,0.025)")}
+      title="Click to add an entry to this slot"
+    >
+      <td style={{ padding: "8px 12px", color: "var(--color-text-tertiary)", fontWeight: 500 }}>
+        {WEEKDAY_SHORT[dt.getDay()]} {dt.getDate()}
+      </td>
+      <td style={{ padding: "8px 12px", color: "var(--color-text-tertiary)" }}>
+        {ghost.time ?? "—"}
+      </td>
+      <td style={{ padding: "8px 12px" }}>
+        <span
+          style={{
+            display: "inline-block",
+            padding: "2px 8px",
+            borderRadius: 999,
+            background: "rgba(0,113,227,0.08)",
+            color: "var(--color-accent)",
+            fontSize: 11,
+            fontWeight: 600,
+            border: "1px dashed rgba(0,113,227,0.4)",
+          }}
+        >
+          Empty slot
+        </span>
+      </td>
+      <td style={{ padding: "8px 12px", color: "var(--color-text-secondary)" }}>{ghost.platform}</td>
+      <td style={{ padding: "8px 12px", color: "var(--color-text-tertiary)" }}>{ghost.assetType ?? "—"}</td>
+      <td style={{ padding: "8px 12px", color: "var(--color-text-tertiary)", fontStyle: "italic" }}>
+        {ghost.label} · click to fill
+      </td>
+      <td colSpan={5} style={{ padding: "8px 12px", color: "var(--color-text-tertiary)" }}>
+        <span style={{ color: "var(--color-accent)", fontSize: 11, fontWeight: 600 }}>+ Add</span>
+      </td>
+    </tr>
   );
 }
 
@@ -737,7 +939,7 @@ function EntryModal({
   onSave,
   isPete,
 }: {
-  state: { mode: "create"; defaultDate: string } | { mode: "edit"; entry: CalendarEntry };
+  state: { mode: "create"; defaultDate: string; prefill?: Partial<CalendarEntry> } | { mode: "edit"; entry: CalendarEntry };
   onClose: () => void;
   onSave: (payload: Partial<CalendarEntry> & { id?: string }) => Promise<void>;
   isPete: boolean;
@@ -750,6 +952,7 @@ function EntryModal({
           status: "Not Started",
           needsFinanceApproval: false,
           platform: "Facebook & Instagram",
+          ...state.prefill,
         };
 
   const [liveDate, setLiveDate] = useState(initial.liveDate ?? "");
@@ -1388,4 +1591,695 @@ function btnStyle(fg: string, bg: string, extra: React.CSSProperties = {}): Reac
     cursor: "pointer",
     ...extra,
   };
+}
+
+/* ─── Idea Library + Schedule template ─────────────────────────────── */
+
+interface ContentIdea {
+  id: string;
+  title: string;
+  notes?: string;
+  platform?: CalendarPlatform;
+  createdAt: string;
+  createdBy: string;
+}
+interface ScheduleSlot {
+  id: string;
+  weekday: number; // 0=Sun..6=Sat
+  time?: string;
+  platform: CalendarPlatform;
+  assetType?: CalendarAssetType;
+  label: string;
+}
+
+const WEEKDAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function IdeaLibraryModal({
+  onClose,
+  existingEntries,
+  onCreatedEntry,
+}: {
+  onClose: () => void;
+  existingEntries: CalendarEntry[];
+  onCreatedEntry: () => Promise<void>;
+}) {
+  const [tab, setTab] = useState<"ideas" | "schedule">("ideas");
+  const [ideas, setIdeas] = useState<ContentIdea[]>([]);
+  const [slots, setSlots] = useState<ScheduleSlot[]>([]);
+  const [disabledDays, setDisabledDays] = useState<number[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newIdea, setNewIdea] = useState("");
+  const [newIdeaNotes, setNewIdeaNotes] = useState("");
+  const [newIdeaPlatform, setNewIdeaPlatform] = useState<CalendarPlatform | "">("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetch("/api/content-ideas").then((r) => (r.ok ? r.json() : { ideas: [] })),
+      fetch("/api/posting-schedule").then((r) => (r.ok ? r.json() : { slots: [] })),
+    ])
+      .then(([i, s]) => {
+        if (cancelled) return;
+        setIdeas(i.ideas ?? []);
+        setSlots(s.slots ?? []);
+        setDisabledDays(s.disabledDays ?? []);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function addIdea() {
+    const title = newIdea.trim();
+    if (!title) return;
+    const res = await fetch("/api/content-ideas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title,
+        notes: newIdeaNotes.trim() || undefined,
+        platform: newIdeaPlatform || undefined,
+      }),
+    });
+    if (res.ok) {
+      const idea = (await res.json()) as ContentIdea;
+      setIdeas((prev) => [idea, ...prev]);
+      setNewIdea("");
+      setNewIdeaNotes("");
+      setNewIdeaPlatform("");
+    }
+  }
+
+  async function patchIdea(id: string, patch: Partial<ContentIdea>) {
+    setIdeas((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)));
+    await fetch("/api/content-ideas", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, ...patch }),
+    });
+  }
+
+  async function deleteIdea(id: string) {
+    const res = await fetch(`/api/content-ideas?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (res.ok) setIdeas((prev) => prev.filter((i) => i.id !== id));
+  }
+
+  function findNextSlotDate(slot: ScheduleSlot, fromDate: Date): string {
+    // Walk forward day by day up to 12 weeks
+    for (let i = 0; i < 84; i++) {
+      const d = new Date(fromDate);
+      d.setDate(fromDate.getDate() + i);
+      if (d.getDay() !== slot.weekday) continue;
+      const iso = fmtIsoDate(d);
+      const conflict = existingEntries.some(
+        (e) =>
+          e.liveDate === iso &&
+          e.platform === slot.platform &&
+          (slot.time ? e.time === slot.time : true),
+      );
+      if (!conflict) return iso;
+    }
+    return fmtIsoDate(fromDate);
+  }
+
+  /** Find the next available slot — optionally restricted to a platform. */
+  function nextAvailableSlot(platform?: CalendarPlatform): { slot: ScheduleSlot; date: string } | null {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const candidates = (platform ? slots.filter((s) => s.platform === platform) : slots).filter(
+      (s) => !disabledDays.includes(s.weekday),
+    );
+    let best: { slot: ScheduleSlot; date: string } | null = null;
+    for (const slot of candidates) {
+      const date = findNextSlotDate(slot, today);
+      if (!best || date < best.date || (date === best.date && (slot.time ?? "99:99") < (best.slot.time ?? "99:99"))) {
+        best = { slot, date };
+      }
+    }
+    return best;
+  }
+
+  async function addToNextSlot(idea: ContentIdea) {
+    const next = nextAvailableSlot(idea.platform);
+    if (!next) {
+      setToast(
+        idea.platform
+          ? `No free ${shortPlatformLabel(idea.platform)} slots in your schedule.`
+          : "No slots in your schedule yet.",
+      );
+      return;
+    }
+    setBusyId(idea.id);
+    try {
+      const payload: Partial<CalendarEntry> & { liveDate: string; platform: CalendarPlatform; status: CalendarStatus; title: string } = {
+        liveDate: next.date,
+        time: next.slot.time,
+        platform: next.slot.platform,
+        assetType: next.slot.assetType,
+        status: "Not Started",
+        title: idea.title,
+        notes: idea.notes,
+        needsFinanceApproval: false,
+      };
+      const res = await fetch("/api/content-calendar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        await onCreatedEntry();
+        const dt = new Date(`${next.date}T00:00:00`);
+        const day = WEEKDAY_LABELS[dt.getDay()];
+        setToast(`Added "${idea.title}" to ${day} ${dt.getDate()}/${dt.getMonth() + 1} — ${next.slot.label}`);
+        setTimeout(() => setToast(null), 4000);
+      } else {
+        const j = await res.json().catch(() => ({}));
+        setToast(j.error ?? "Failed to add entry");
+      }
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function saveSchedule(nextSlots: ScheduleSlot[], nextDisabled: number[]) {
+    setSlots(nextSlots);
+    setDisabledDays(nextDisabled);
+    await fetch("/api/posting-schedule", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slots: nextSlots, disabledDays: nextDisabled }),
+    });
+  }
+
+  function updateSlot(id: string, patch: Partial<ScheduleSlot>) {
+    saveSchedule(slots.map((s) => (s.id === id ? { ...s, ...patch } : s)), disabledDays);
+  }
+  function deleteSlot(id: string) {
+    saveSchedule(slots.filter((s) => s.id !== id), disabledDays);
+  }
+  function addSlot(weekday: number, platformDefault?: CalendarPlatform) {
+    const newSlot: ScheduleSlot = {
+      id: crypto.randomUUID(),
+      weekday,
+      platform: platformDefault ?? "Facebook & Instagram",
+      assetType: "IMAGE",
+      label: "New slot",
+    };
+    saveSchedule([...slots, newSlot], disabledDays);
+  }
+  function toggleDay(weekday: number) {
+    const next = disabledDays.includes(weekday)
+      ? disabledDays.filter((d) => d !== weekday)
+      : [...disabledDays, weekday];
+    saveSchedule(slots, next);
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000,
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "#fff", borderRadius: 14, width: "100%", maxWidth: tab === "schedule" ? 1280 : 920,
+          maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden",
+          boxShadow: "0 20px 50px rgba(0,0,0,0.2)",
+        }}
+      >
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Idea Library</h2>
+          <button onClick={onClose} style={{ background: "transparent", border: "none", fontSize: 22, cursor: "pointer", color: "var(--color-text-secondary)", padding: 0, lineHeight: 1 }}>×</button>
+        </div>
+
+        <div style={{ display: "flex", gap: 4, padding: "10px 20px 0", borderBottom: "1px solid var(--color-border)" }}>
+          {(["ideas", "schedule"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              style={{
+                background: "transparent", border: "none", padding: "8px 14px",
+                borderBottom: tab === t ? "2px solid var(--color-accent)" : "2px solid transparent",
+                color: tab === t ? "var(--color-accent)" : "var(--color-text-secondary)",
+                fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: -1,
+              }}
+            >
+              {t === "ideas" ? "Ideas" : "Schedule"}
+            </button>
+          ))}
+        </div>
+
+        {toast && (
+          <div style={{ padding: "8px 20px", background: "#ECFDF5", color: "#065F46", fontSize: 12, fontWeight: 500 }}>
+            {toast}
+          </div>
+        )}
+
+        <div style={{ overflowY: "auto", padding: 20 }}>
+          {loading && <p style={{ color: "var(--color-text-secondary)" }}>Loading…</p>}
+
+          {!loading && tab === "ideas" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 10, padding: 12 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <input
+                    value={newIdea}
+                    onChange={(e) => setNewIdea(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) addIdea(); }}
+                    placeholder="New idea…"
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--color-border)", fontSize: 13, fontFamily: "inherit" }}
+                  />
+                  <input
+                    value={newIdeaNotes}
+                    onChange={(e) => setNewIdeaNotes(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) addIdea(); }}
+                    placeholder="Notes (optional)"
+                    style={{ width: "100%", padding: "6px 10px", borderRadius: 8, border: "1px solid var(--color-border)", fontSize: 12, fontFamily: "inherit", color: "var(--color-text-secondary)" }}
+                  />
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <select
+                      value={newIdeaPlatform}
+                      onChange={(e) => setNewIdeaPlatform((e.target.value || "") as CalendarPlatform | "")}
+                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--color-border)", fontSize: 12, fontFamily: "inherit", background: "#fff", flex: 1 }}
+                    >
+                      <option value="">Any platform</option>
+                      {CALENDAR_PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                    <button
+                      onClick={addIdea}
+                      disabled={!newIdea.trim()}
+                      style={{
+                        padding: "6px 14px", borderRadius: 8, border: 0,
+                        background: newIdea.trim() ? "var(--color-accent)" : "#E5E7EB",
+                        color: newIdea.trim() ? "#fff" : "var(--color-text-tertiary)",
+                        fontSize: 12, fontWeight: 600, cursor: newIdea.trim() ? "pointer" : "not-allowed",
+                      }}
+                    >
+                      + New idea
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {ideas.length === 0 && (
+                <p style={{ color: "var(--color-text-tertiary)", fontStyle: "italic", fontSize: 13 }}>No ideas yet.</p>
+              )}
+              {ideas.map((idea) => (
+                <div key={idea.id} style={{ background: "#fff", border: "1px solid var(--color-border)", borderRadius: 10, padding: 12, display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: "var(--color-text-primary)" }}>{idea.title}</div>
+                    {idea.notes && <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 2 }}>{idea.notes}</div>}
+                  </div>
+                  <select
+                    value={idea.platform ?? ""}
+                    onChange={(e) => patchIdea(idea.id, { platform: (e.target.value || undefined) as CalendarPlatform | undefined })}
+                    title="Preferred platform"
+                    style={{
+                      padding: "6px 10px", borderRadius: 8,
+                      border: "1px solid var(--color-border)",
+                      fontSize: 11, fontFamily: "inherit", background: "#fff",
+                      maxWidth: 200, color: idea.platform ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
+                    }}
+                  >
+                    <option value="">Any platform</option>
+                    {CALENDAR_PLATFORMS.map((p) => <option key={p} value={p}>{shortPlatformLabel(p)}</option>)}
+                  </select>
+                  <button
+                    onClick={() => addToNextSlot(idea)}
+                    disabled={busyId === idea.id}
+                    style={{
+                      background: "var(--color-accent)", color: "#fff", border: 0,
+                      padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 600,
+                      cursor: busyId === idea.id ? "wait" : "pointer", whiteSpace: "nowrap",
+                    }}
+                  >
+                    {busyId === idea.id ? "Adding…" : "Add to next slot"}
+                  </button>
+                  <button
+                    onClick={() => deleteIdea(idea.id)}
+                    title="Delete idea"
+                    style={{
+                      background: "transparent", border: "1px solid var(--color-border)",
+                      padding: "6px 10px", borderRadius: 8, fontSize: 11,
+                      color: "var(--color-text-secondary)", cursor: "pointer",
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!loading && tab === "schedule" && (
+            <ScheduleEditor
+              slots={slots}
+              disabledDays={disabledDays}
+              onUpdate={updateSlot}
+              onDelete={deleteSlot}
+              onAdd={addSlot}
+              onToggleDay={toggleDay}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScheduleEditor({
+  slots,
+  disabledDays,
+  onUpdate,
+  onDelete,
+  onAdd,
+  onToggleDay,
+}: {
+  slots: ScheduleSlot[];
+  disabledDays: number[];
+  onUpdate: (id: string, patch: Partial<ScheduleSlot>) => void;
+  onDelete: (id: string) => void;
+  onAdd: (weekday: number, platformDefault?: CalendarPlatform) => void;
+  onToggleDay: (weekday: number) => void;
+}) {
+  const days = [1, 2, 3, 4, 5, 6, 0]; // Mon–Sun
+  const dayShort = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const [platformFilter, setPlatformFilter] = useState<CalendarPlatform | "all">("all");
+
+  const platformsInUse = useMemo(() => {
+    const set = new Set<CalendarPlatform>();
+    for (const s of slots) set.add(s.platform);
+    return Array.from(set).sort();
+  }, [slots]);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-secondary)" }}>
+        Edit your weekly posting skeleton. Each slot defines a day / time / platform combo and shows up as a placeholder row on the content calendar until you fill it.
+      </p>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          Filter
+        </span>
+        <button
+          onClick={() => setPlatformFilter("all")}
+          style={chipStyle(platformFilter === "all")}
+        >
+          All platforms ({slots.length})
+        </button>
+        {platformsInUse.map((p) => {
+          const count = slots.filter((s) => s.platform === p).length;
+          return (
+            <button
+              key={p}
+              onClick={() => setPlatformFilter(p)}
+              style={chipStyle(platformFilter === p)}
+              title={p}
+            >
+              {shortPlatformLabel(p)} ({count})
+            </button>
+          );
+        })}
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(7, minmax(150px, 1fr))",
+          gap: 8,
+          alignItems: "stretch",
+        }}
+      >
+        {days.map((wd) => {
+          const offDay = disabledDays.includes(wd);
+          const daySlots = slots
+            .filter((s) => s.weekday === wd)
+            .filter((s) => platformFilter === "all" || s.platform === platformFilter)
+            .sort((a, b) => (a.time ?? "").localeCompare(b.time ?? ""));
+          return (
+            <div
+              key={wd}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                background: "#fff",
+                border: "1px solid var(--color-border)",
+                borderRadius: 10,
+                overflow: "hidden",
+                opacity: offDay ? 0.55 : 1,
+                minWidth: 0,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "10px 8px",
+                  borderBottom: "1px solid var(--color-border)",
+                  background: "#FAFAFA",
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 700 }}>{dayShort[wd]}</div>
+                <DayToggle on={!offDay} onChange={() => onToggleDay(wd)} />
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  padding: 8,
+                  flex: 1,
+                  minHeight: 80,
+                }}
+              >
+                {daySlots.length === 0 ? (
+                  <p style={{ margin: "8px 0", fontSize: 11, color: "var(--color-text-tertiary)", fontStyle: "italic", textAlign: "center" }}>
+                    {platformFilter === "all" ? "No slots" : "—"}
+                  </p>
+                ) : (
+                  daySlots.map((s) => (
+                    <SlotCard
+                      key={s.id}
+                      slot={s}
+                      onUpdate={(patch) => onUpdate(s.id, patch)}
+                      onDelete={() => onDelete(s.id)}
+                    />
+                  ))
+                )}
+                <button
+                  onClick={() => onAdd(wd, platformFilter === "all" ? undefined : platformFilter)}
+                  style={{
+                    marginTop: "auto",
+                    background: "transparent",
+                    border: "1px dashed var(--color-border)",
+                    borderRadius: 6,
+                    padding: "4px 6px",
+                    fontSize: 11,
+                    color: "var(--color-text-tertiary)",
+                    cursor: "pointer",
+                  }}
+                >
+                  + Add slot
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function chipStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: "4px 10px",
+    borderRadius: 999,
+    border: `1px solid ${active ? "var(--color-accent)" : "var(--color-border)"}`,
+    background: active ? "rgba(0,113,227,0.08)" : "transparent",
+    color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  };
+}
+
+function shortPlatformLabel(p: CalendarPlatform): string {
+  switch (p) {
+    case "Stories / Reels - Facebook, Instagram, TikTok & YouTube Shorts":
+      return "Story / Reel";
+    case "Facebook & Instagram":
+      return "FB & IG";
+    case "Facebook, Linked In, TikTok & Instagram":
+      return "FB / LI / TT / IG";
+    case "Facebook, Instagram & TikTok":
+      return "FB / IG / TT";
+    case "LinkedIn - Business":
+      return "LinkedIn — Business";
+    case "LinkedIn - Sam":
+      return "LinkedIn — Sam";
+    default:
+      return p;
+  }
+}
+
+function DayToggle({ on, onChange }: { on: boolean; onChange: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onChange}
+      aria-pressed={on}
+      title={on ? "Day on — click to disable" : "Day off — click to enable"}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "2px 6px 2px 10px",
+        borderRadius: 999,
+        border: "none",
+        background: on ? "rgba(16,185,129,0.12)" : "rgba(0,0,0,0.06)",
+        cursor: "pointer",
+        fontFamily: "inherit",
+      }}
+    >
+      <span style={{ fontSize: 10, fontWeight: 700, color: on ? "#10B981" : "var(--color-text-tertiary)" }}>
+        {on ? "On" : "Off"}
+      </span>
+      <span
+        style={{
+          width: 22,
+          height: 13,
+          borderRadius: 999,
+          background: on ? "#10B981" : "rgba(0,0,0,0.15)",
+          position: "relative",
+          transition: "background 120ms",
+        }}
+      >
+        <span
+          style={{
+            position: "absolute",
+            top: 1.5,
+            left: on ? 11 : 1.5,
+            width: 10,
+            height: 10,
+            borderRadius: "50%",
+            background: "#fff",
+            transition: "left 120ms",
+          }}
+        />
+      </span>
+    </button>
+  );
+}
+
+function SlotCard({
+  slot,
+  onUpdate,
+  onDelete,
+}: {
+  slot: ScheduleSlot;
+  onUpdate: (patch: Partial<ScheduleSlot>) => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div
+      style={{
+        background: "#FAFAFA",
+        border: "1px solid var(--color-border)",
+        borderRadius: 8,
+        padding: 6,
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+        position: "relative",
+      }}
+    >
+      <button
+        onClick={onDelete}
+        title="Delete slot"
+        style={{
+          position: "absolute",
+          top: 4,
+          right: 4,
+          background: "transparent",
+          border: "none",
+          fontSize: 14,
+          lineHeight: 1,
+          color: "var(--color-text-tertiary)",
+          cursor: "pointer",
+          padding: 0,
+        }}
+      >
+        ×
+      </button>
+      <input
+        value={slot.label}
+        onChange={(e) => onUpdate({ label: e.target.value })}
+        placeholder="Label"
+        style={{
+          padding: "3px 6px",
+          paddingRight: 18,
+          borderRadius: 5,
+          border: "1px solid var(--color-border)",
+          fontSize: 11,
+          fontFamily: "inherit",
+          fontWeight: 600,
+          background: "#fff",
+        }}
+      />
+      <input
+        type="time"
+        value={slot.time ?? ""}
+        onChange={(e) => onUpdate({ time: e.target.value || undefined })}
+        style={{
+          padding: "3px 6px",
+          borderRadius: 5,
+          border: "1px solid var(--color-border)",
+          fontSize: 11,
+          fontFamily: "inherit",
+          background: "#fff",
+        }}
+      />
+      <select
+        value={slot.platform}
+        onChange={(e) => onUpdate({ platform: e.target.value as CalendarPlatform })}
+        style={{
+          padding: "3px 6px",
+          borderRadius: 5,
+          border: "1px solid var(--color-border)",
+          fontSize: 11,
+          fontFamily: "inherit",
+          background: "#fff",
+        }}
+      >
+        {CALENDAR_PLATFORMS.map((p) => <option key={p} value={p}>{shortPlatformLabel(p)}</option>)}
+      </select>
+      <select
+        value={slot.assetType ?? ""}
+        onChange={(e) => onUpdate({ assetType: (e.target.value || undefined) as CalendarAssetType | undefined })}
+        style={{
+          padding: "3px 6px",
+          borderRadius: 5,
+          border: "1px solid var(--color-border)",
+          fontSize: 11,
+          fontFamily: "inherit",
+          background: "#fff",
+        }}
+      >
+        <option value="">No asset</option>
+        {CALENDAR_ASSET_TYPES.map((a) => <option key={a} value={a}>{a}</option>)}
+      </select>
+    </div>
+  );
 }
