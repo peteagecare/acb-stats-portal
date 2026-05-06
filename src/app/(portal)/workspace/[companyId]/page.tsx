@@ -23,10 +23,13 @@ import {
 import { useRouter } from "next/navigation";
 import { TRACKER_STYLE, computeTracker } from "@/lib/tracker";
 import { TagPillList, useTags } from "../_tags";
+import { useFavourites } from "@/app/components/use-favourites";
 
 type ProjectStatus = "planning" | "active" | "on_hold" | "done" | "archived";
 type ProjectType = "quarterly" | "initiative" | "ongoing";
 type Department = "ppc" | "seo" | "content" | "web";
+type CompanyViewMode = "list" | "kanban" | "gantt";
+const COMPANY_VIEW_KEY = "company-projects-view";
 
 const DEPARTMENT_META: Record<Department, { label: string; bg: string; color: string }> = {
   ppc: { label: "PPC", bg: "#FEF3C7", color: "#92400E" },
@@ -90,6 +93,28 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
   const [creating, setCreating] = useState(false);
   const [editingCompany, setEditingCompany] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [viewMode, setViewMode] = useState<CompanyViewMode>("list");
+  const { favourites } = useFavourites();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = localStorage.getItem(COMPANY_VIEW_KEY);
+    if (stored === "list" || stored === "kanban" || stored === "gantt") setViewMode(stored);
+  }, []);
+
+  function changeViewMode(next: CompanyViewMode) {
+    setViewMode(next);
+    if (typeof window !== "undefined") localStorage.setItem(COMPANY_VIEW_KEY, next);
+  }
+
+  async function changeProjectStatus(projectId: string, status: ProjectStatus) {
+    await fetch(`/api/projects/${projectId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    refresh();
+  }
 
   const refresh = useCallback(async () => {
     try {
@@ -179,11 +204,14 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
         <CompanyTasks tasks={tasks} projects={projects ?? []} users={users} companyId={companyId} />
       )}
 
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 14, marginTop: tasks.length > 0 ? 28 : 0 }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 14, marginTop: tasks.length > 0 ? 28 : 0, gap: 10 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Projects</h2>
-        <button onClick={() => setCreating(true)} style={{ ...primaryButtonStyle, marginLeft: "auto" }}>
-          + New project
-        </button>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
+          <CompanyViewSwitcher value={viewMode} onChange={changeViewMode} />
+          <button onClick={() => setCreating(true)} style={primaryButtonStyle}>
+            + New project
+          </button>
+        </div>
       </div>
 
       {projects && projects.length === 0 && (
@@ -195,34 +223,60 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
       {projects && projects.length > 0 && (() => {
         const active = projects.filter((p) => p.status !== "archived");
         const archived = projects.filter((p) => p.status === "archived");
+        const pinned = active.filter((p) => favourites.has(p.id));
+        const unpinned = active.filter((p) => !favourites.has(p.id));
         return (
           <>
-            {active.length > 0 ? (
-              <GroupedProjects projects={active} users={users} />
-            ) : (
-              <div style={{ padding: "36px 20px", textAlign: "center", background: "var(--bg-card)", borderRadius: 18, boxShadow: "var(--shadow-card)" }}>
-                <div style={{ fontSize: 14, color: "var(--color-text-secondary)" }}>No active projects.</div>
-              </div>
-            )}
-            {archived.length > 0 && (
-              <div style={{ marginTop: 28 }}>
-                <button
-                  onClick={() => setShowArchived((v) => !v)}
-                  style={{
-                    background: "transparent", border: "none", padding: "6px 0",
-                    fontSize: 13, color: "var(--color-text-secondary)", cursor: "pointer",
-                    display: "flex", alignItems: "center", gap: 6,
-                  }}
-                >
-                  <span style={{ display: "inline-block", transform: showArchived ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>›</span>
-                  {showArchived ? "Hide" : "Show"} archived ({archived.length})
-                </button>
-                {showArchived && (
-                  <div style={{ marginTop: 12, opacity: 0.75 }}>
-                    <GroupedProjects projects={archived} users={users} />
+            {viewMode === "list" && (
+              <>
+                {pinned.length > 0 && (
+                  <div style={{ marginBottom: 24 }}>
+                    <h3 style={{
+                      display: "flex", alignItems: "center", gap: 8,
+                      fontSize: 13, fontWeight: 600, margin: "0 0 10px",
+                      textTransform: "uppercase", letterSpacing: 0.5,
+                      color: "var(--color-text-secondary)",
+                    }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="#EF4444" stroke="#EF4444" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" /></svg>
+                      Pinned
+                    </h3>
+                    <ProjectList projects={pinned} users={users} />
                   </div>
                 )}
-              </div>
+                {unpinned.length > 0 ? (
+                  <GroupedProjects projects={unpinned} users={users} />
+                ) : pinned.length === 0 ? (
+                  <div style={{ padding: "36px 20px", textAlign: "center", background: "var(--bg-card)", borderRadius: 18, boxShadow: "var(--shadow-card)" }}>
+                    <div style={{ fontSize: 14, color: "var(--color-text-secondary)" }}>No active projects.</div>
+                  </div>
+                ) : null}
+                {archived.length > 0 && (
+                  <div style={{ marginTop: 28 }}>
+                    <button
+                      onClick={() => setShowArchived((v) => !v)}
+                      style={{
+                        background: "transparent", border: "none", padding: "6px 0",
+                        fontSize: 13, color: "var(--color-text-secondary)", cursor: "pointer",
+                        display: "flex", alignItems: "center", gap: 6,
+                      }}
+                    >
+                      <span style={{ display: "inline-block", transform: showArchived ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>›</span>
+                      {showArchived ? "Hide" : "Show"} archived ({archived.length})
+                    </button>
+                    {showArchived && (
+                      <div style={{ marginTop: 12, opacity: 0.75 }}>
+                        <GroupedProjects projects={archived} users={users} />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+            {viewMode === "kanban" && (
+              <ProjectsKanban projects={active} companyId={companyId} users={users} onChangeStatus={changeProjectStatus} />
+            )}
+            {viewMode === "gantt" && (
+              <ProjectsGantt projects={active} companyId={companyId} users={users} />
             )}
           </>
         );
@@ -917,6 +971,414 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
         {label}
       </label>
       {children}
+    </div>
+  );
+}
+
+/* ─── View switcher + alternative project views ─── */
+
+function CompanyViewSwitcher({ value, onChange }: { value: CompanyViewMode; onChange: (m: CompanyViewMode) => void }) {
+  const Btn = ({ mode, label, children }: { mode: CompanyViewMode; label: string; children: React.ReactNode }) => (
+    <button
+      onClick={() => onChange(mode)}
+      title={label}
+      aria-label={label}
+      style={{
+        padding: 6,
+        background: value === mode ? "rgba(0,113,227,0.1)" : "transparent",
+        border: "none", borderRadius: 8,
+        color: value === mode ? "var(--color-accent)" : "var(--color-text-secondary)",
+        cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+    >{children}</button>
+  );
+  return (
+    <div style={{ display: "flex", gap: 2 }}>
+      <Btn mode="list" label="List view">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+          <circle cx="4" cy="6" r="1" fill="currentColor" /><circle cx="4" cy="12" r="1" fill="currentColor" /><circle cx="4" cy="18" r="1" fill="currentColor" />
+        </svg>
+      </Btn>
+      <Btn mode="kanban" label="Kanban view">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="4" width="5" height="16" rx="1" /><rect x="10" y="4" width="5" height="10" rx="1" /><rect x="17" y="4" width="4" height="13" rx="1" />
+        </svg>
+      </Btn>
+      <Btn mode="gantt" label="Gantt view">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <line x1="3" y1="6" x2="3" y2="20" />
+          <rect x="6" y="6" width="9" height="3" rx="1" />
+          <rect x="9" y="11" width="11" height="3" rx="1" />
+          <rect x="6" y="16" width="7" height="3" rx="1" />
+        </svg>
+      </Btn>
+    </div>
+  );
+}
+
+const PROJECT_KANBAN_COLUMNS: { status: ProjectStatus; label: string; accent: string }[] = [
+  { status: "planning", label: "Planning", accent: "#94A3B8" },
+  { status: "active", label: "Active", accent: "#0071E3" },
+  { status: "on_hold", label: "On hold", accent: "#A855F7" },
+  { status: "done", label: "Done", accent: "#10B981" },
+];
+
+function ProjectsKanban({
+  projects, companyId, users, onChangeStatus,
+}: {
+  projects: ProjectRow[];
+  companyId: string;
+  users: DirectoryUser[];
+  onChangeStatus: (projectId: string, status: ProjectStatus) => Promise<void>;
+}) {
+  return (
+    <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 8 }}>
+      {PROJECT_KANBAN_COLUMNS.map((col) => (
+        <ProjectsKanbanColumn
+          key={col.status}
+          status={col.status}
+          label={col.label}
+          accent={col.accent}
+          projects={projects.filter((p) => p.status === col.status)}
+          companyId={companyId}
+          users={users}
+          onChangeStatus={onChangeStatus}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ProjectsKanbanColumn({
+  status, label, accent, projects, companyId, users, onChangeStatus,
+}: {
+  status: ProjectStatus;
+  label: string;
+  accent: string;
+  projects: ProjectRow[];
+  companyId: string;
+  users: DirectoryUser[];
+  onChangeStatus: (projectId: string, status: ProjectStatus) => Promise<void>;
+}) {
+  const [dropActive, setDropActive] = useState(false);
+
+  function onDragOver(e: React.DragEvent) {
+    if (!e.dataTransfer.types.includes("application/x-project-id")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (!dropActive) setDropActive(true);
+  }
+  function onDragLeave(e: React.DragEvent) {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setDropActive(false);
+  }
+  async function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDropActive(false);
+    const projectId = e.dataTransfer.getData("application/x-project-id");
+    const fromStatus = e.dataTransfer.getData("application/x-from-status");
+    if (!projectId || fromStatus === status) return;
+    await onChangeStatus(projectId, status);
+  }
+
+  return (
+    <div
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      style={{
+        flex: "0 0 300px",
+        background: "var(--bg-card)",
+        borderRadius: 14,
+        boxShadow: dropActive ? `0 0 0 2px ${accent}` : "var(--shadow-card)",
+        overflow: "hidden",
+        display: "flex", flexDirection: "column",
+        maxHeight: "calc(100vh - 280px)",
+        transition: "box-shadow 100ms",
+      }}
+    >
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10,
+        padding: "12px 14px",
+        borderBottom: "1px solid var(--color-border)",
+        flexShrink: 0,
+      }}>
+        <span style={{ width: 8, height: 8, borderRadius: "50%", background: accent }} />
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{label}</span>
+        <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", background: "rgba(0,0,0,0.04)", padding: "2px 7px", borderRadius: 999 }}>
+          {projects.length}
+        </span>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+        {projects.length === 0 && (
+          <div style={{ padding: "10px 6px", fontSize: 12, color: "var(--color-text-tertiary)", fontStyle: "italic" }}>
+            None.
+          </div>
+        )}
+        {projects.map((p) => (
+          <ProjectKanbanCard key={p.id} project={p} companyId={companyId} users={users} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProjectKanbanCard({
+  project, companyId, users,
+}: {
+  project: ProjectRow;
+  companyId: string;
+  users: DirectoryUser[];
+}) {
+  const router = useRouter();
+  const owner = userMeta(project.ownerEmail, users);
+  const projectColor = colorForEmail(project.id);
+  const total = project.taskCounts.open + project.taskCounts.done;
+  const pct = total === 0 ? 0 : Math.round((project.taskCounts.done / total) * 100);
+
+  return (
+    <div
+      onClick={() => router.push(`/workspace/${companyId}/${project.id}`)}
+      draggable
+      onDragStart={(e) => {
+        e.stopPropagation();
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("application/x-project-id", project.id);
+        e.dataTransfer.setData("application/x-from-status", project.status);
+        e.currentTarget.style.opacity = "0.5";
+      }}
+      onDragEnd={(e) => { e.currentTarget.style.opacity = "1"; }}
+      style={{
+        background: "white",
+        border: "1px solid var(--color-border)",
+        borderLeft: `3px solid ${projectColor}`,
+        borderRadius: 10,
+        padding: "10px 12px",
+        cursor: "pointer",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+        display: "flex", flexDirection: "column", gap: 8,
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.02)")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = "white")}
+    >
+      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.35, wordBreak: "break-word" }}>
+        {project.name}
+      </div>
+      {project.description && (
+        <div style={{
+          fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.4,
+          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+        }}>
+          {project.description}
+        </div>
+      )}
+      {total > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ flex: 1, height: 4, background: "rgba(0,0,0,0.06)", borderRadius: 999, overflow: "hidden" }}>
+            <div style={{ width: `${pct}%`, height: "100%", background: projectColor }} />
+          </div>
+          <span style={{ fontSize: 10, color: "var(--color-text-tertiary)", fontWeight: 500 }}>
+            {project.taskCounts.done}/{total}
+          </span>
+        </div>
+      )}
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {project.department && (
+          <span style={{
+            fontSize: 10, fontWeight: 600,
+            color: DEPARTMENT_META[project.department].color,
+            background: DEPARTMENT_META[project.department].bg,
+            padding: "2px 7px", borderRadius: 999,
+          }}>
+            {DEPARTMENT_META[project.department].label}
+          </span>
+        )}
+        {project.endDate && (
+          <span style={{
+            fontSize: 10, color: "var(--color-text-secondary)",
+            background: "rgba(0,0,0,0.04)", padding: "2px 7px", borderRadius: 999,
+          }}>
+            {fmtDate(project.endDate)}
+          </span>
+        )}
+        {owner && (
+          <span style={{ marginLeft: "auto" }}>
+            <Avatar user={owner} size={20} />
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const PROJ_CAL_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function ProjectsGantt({
+  projects, companyId, users,
+}: {
+  projects: ProjectRow[];
+  companyId: string;
+  users: DirectoryUser[];
+}) {
+  const router = useRouter();
+  // Show 6 months centered on the current month, projects rendered as horizontal bars
+  // spanning their startDate → endDate. Projects without dates appear in a "No dates" footer list.
+  const [anchorMonth, setAnchorMonth] = useState(() => {
+    const t = new Date();
+    return new Date(t.getFullYear(), t.getMonth(), 1);
+  });
+  const monthSpan = 6;
+  const months: Date[] = [];
+  for (let i = 0; i < monthSpan; i++) {
+    months.push(new Date(anchorMonth.getFullYear(), anchorMonth.getMonth() + i, 1));
+  }
+  const rangeStart = months[0].getTime();
+  const rangeEnd = new Date(months[monthSpan - 1].getFullYear(), months[monthSpan - 1].getMonth() + 1, 0, 23, 59).getTime();
+  const totalMs = rangeEnd - rangeStart;
+
+  function parseIso(iso: string | null): number | null {
+    if (!iso) return null;
+    const [y, m, d] = iso.split("-").map(Number);
+    if (!y || !m || !d) return null;
+    return new Date(y, m - 1, d).getTime();
+  }
+  const dated: { p: ProjectRow; startMs: number; endMs: number }[] = [];
+  const undated: ProjectRow[] = [];
+  for (const p of projects) {
+    const s = parseIso(p.startDate);
+    const e = parseIso(p.endDate);
+    if (s == null && e == null) { undated.push(p); continue; }
+    const startMs = s ?? e!;
+    const endMs = e ?? s!;
+    if (endMs < rangeStart || startMs > rangeEnd) continue; // out of range
+    dated.push({ p, startMs, endMs });
+  }
+  dated.sort((a, b) => a.startMs - b.startMs);
+
+  const todayMs = Date.now();
+  const todayPct = todayMs >= rangeStart && todayMs <= rangeEnd ? ((todayMs - rangeStart) / totalMs) * 100 : null;
+
+  return (
+    <div style={{ background: "var(--bg-card)", borderRadius: 18, padding: 18, boxShadow: "var(--shadow-card)" }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 14, gap: 8 }}>
+        <button
+          onClick={() => setAnchorMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
+          style={{ background: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: "var(--color-text-secondary)" }}
+        >‹</button>
+        <h3 style={{ flex: 1, textAlign: "center", margin: 0, fontSize: 14, fontWeight: 600 }}>
+          {PROJ_CAL_MONTHS[months[0].getMonth()]} {months[0].getFullYear()} – {PROJ_CAL_MONTHS[months[monthSpan - 1].getMonth()]} {months[monthSpan - 1].getFullYear()}
+        </h3>
+        <button
+          onClick={() => setAnchorMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
+          style={{ background: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: "var(--color-text-secondary)" }}
+        >›</button>
+        <button
+          onClick={() => { const t = new Date(); setAnchorMonth(new Date(t.getFullYear(), t.getMonth(), 1)); }}
+          style={{ background: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: "var(--color-text-secondary)" }}
+        >Today</button>
+      </div>
+
+      {/* Month header */}
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${monthSpan}, 1fr)`, marginLeft: 200, gap: 0, borderBottom: "1px solid var(--color-border)" }}>
+        {months.map((m, i) => (
+          <div key={i} style={{
+            padding: "6px 8px", fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)",
+            borderLeft: i === 0 ? "1px solid var(--color-border)" : "1px solid var(--color-border)",
+            textAlign: "center",
+          }}>
+            {PROJ_CAL_MONTHS[m.getMonth()]} {m.getFullYear()}
+          </div>
+        ))}
+      </div>
+
+      {/* Rows */}
+      <div style={{ position: "relative" }}>
+        {todayPct != null && (
+          <div style={{
+            position: "absolute",
+            left: `calc(200px + ${todayPct}% * (100% - 200px) / 100)`,
+            top: 0, bottom: 0, width: 1.5,
+            background: "var(--color-accent)", zIndex: 1, pointerEvents: "none",
+          }} />
+        )}
+        {dated.length === 0 ? (
+          <div style={{ padding: "24px 16px", textAlign: "center", fontSize: 12, color: "var(--color-text-tertiary)", fontStyle: "italic" }}>
+            No scheduled projects in this range.
+          </div>
+        ) : (
+          dated.map(({ p, startMs, endMs }) => {
+            const leftPct = Math.max(0, ((startMs - rangeStart) / totalMs) * 100);
+            const widthPct = Math.max(1.5, ((Math.min(endMs, rangeEnd) - Math.max(startMs, rangeStart)) / totalMs) * 100);
+            const projectColor = colorForEmail(p.id);
+            const owner = userMeta(p.ownerEmail, users);
+            return (
+              <div key={p.id} style={{
+                display: "grid", gridTemplateColumns: "200px 1fr", borderBottom: "1px solid var(--color-border)",
+                alignItems: "center", minHeight: 36,
+              }}>
+                <button
+                  onClick={() => router.push(`/workspace/${companyId}/${p.id}`)}
+                  style={{
+                    background: "transparent", border: "none", padding: "8px 10px", cursor: "pointer", fontFamily: "inherit",
+                    textAlign: "left", display: "flex", alignItems: "center", gap: 6, minWidth: 0,
+                  }}
+                >
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: projectColor, flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {p.name}
+                  </span>
+                </button>
+                <div style={{ position: "relative", height: 28 }}>
+                  <button
+                    onClick={() => router.push(`/workspace/${companyId}/${p.id}`)}
+                    title={`${fmtDate(p.startDate)} → ${fmtDate(p.endDate)}`}
+                    style={{
+                      position: "absolute",
+                      left: `${leftPct}%`, width: `${widthPct}%`,
+                      top: 4, bottom: 4,
+                      background: `${projectColor}DD`,
+                      border: "none", borderRadius: 6,
+                      cursor: "pointer", fontFamily: "inherit",
+                      color: "white", fontSize: 11, fontWeight: 600,
+                      padding: "0 8px", textAlign: "left",
+                      display: "flex", alignItems: "center", gap: 6,
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    }}
+                  >
+                    {owner && <Avatar user={owner} size={16} />}
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {undated.length > 0 && (
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--color-border)" }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+            No scheduled dates
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {undated.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => router.push(`/workspace/${companyId}/${p.id}`)}
+                style={{
+                  background: "rgba(0,0,0,0.04)", border: "1px solid var(--color-border)",
+                  borderRadius: 999, padding: "4px 10px", fontSize: 11, fontWeight: 500,
+                  color: "var(--color-text-secondary)", cursor: "pointer", fontFamily: "inherit",
+                }}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
-import { RecurrenceRule, formatRecurrence } from "@/lib/recurrence";
+import { RecurrenceRule, formatISODate, formatRecurrence, nextOccurrence } from "@/lib/recurrence";
 import { RecurrencePicker } from "./_recurrence-picker";
 import { MoveToPanel } from "./_move-to-panel";
 import { inputStyle } from "./_shared";
@@ -146,7 +146,14 @@ export function useTaskContextMenu({
           busy={busy}
           onBack={() => setView("root")}
           onSave={async (rule) => {
-            await applyPatch({ recurrence: rule });
+            // Whenever a rule is saved, re-seed the due date with the next
+            // occurrence so changing the days updates the deadline.
+            const patch: TaskPatch = { recurrence: rule };
+            if (rule) {
+              const seed = nextOccurrence(rule, new Date());
+              if (seed) patch.endDate = formatISODate(seed);
+            }
+            await applyPatch(patch);
             close();
           }}
         />

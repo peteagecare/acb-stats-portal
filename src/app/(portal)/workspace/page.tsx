@@ -23,6 +23,7 @@ import { InlineTaskTitle } from "./_inline-title";
 import { MoveToButton } from "./_move-to-button";
 import { LinkifiedTextarea } from "./_linkified-textarea";
 import { DatePicker, EnumPicker, ProjectPicker, UserPicker } from "@/app/components/Pickers";
+import { useFavourites } from "@/app/components/use-favourites";
 
 /* Dashboard-wide handler for opening a task in a side panel without
  * navigating away. Children call this from click handlers; the page
@@ -190,6 +191,7 @@ export default function WorkspacePage() {
             />
           )}
           <CompaniesGrid companies={companies} onNew={() => setCreatingCompany(true)} />
+          <FavouritesGrid />
           <TasksTabs data={data} users={users} setData={setData} onChanged={refresh} />
           <AssignedByMe data={data} users={users} />
           <PeopleWidget tasks={data.tasks} users={users} />
@@ -1203,6 +1205,84 @@ function CompaniesGrid({ companies, onNew }: { companies: CompanyRow[]; onNew: (
   );
 }
 
+/* ── Favourites grid (pinned projects) ── */
+
+function FavouritesGrid() {
+  const { list, toggle } = useFavourites();
+  if (list.length === 0) return null;
+  return (
+    <section>
+      <h2 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 10px", textTransform: "uppercase", letterSpacing: 0.5, color: "var(--color-text-secondary)", display: "flex", alignItems: "center", gap: 8 }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="#EF4444" stroke="#EF4444" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" /></svg>
+        Favourites
+      </h2>
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+        gap: 12,
+      }}>
+        {list.map((p) => {
+          const projColor = colorForEmail(p.projectId);
+          return (
+            <div
+              key={p.projectId}
+              style={{
+                position: "relative",
+                background: "var(--bg-card)", borderRadius: 14,
+                boxShadow: "var(--shadow-card)",
+                transition: "box-shadow 150ms var(--ease-apple), transform 120ms var(--ease-apple)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = "var(--shadow-card-hover)";
+                e.currentTarget.style.transform = "translateY(-1px)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = "var(--shadow-card)";
+                e.currentTarget.style.transform = "translateY(0)";
+              }}
+            >
+              <Link
+                href={`/workspace/${p.companyId}/${p.projectId}`}
+                style={{
+                  display: "block", padding: "14px 16px",
+                  textDecoration: "none", color: "inherit",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: projColor, flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {p.name}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", textTransform: "capitalize" }}>
+                      {p.status.replace("_", " ")}
+                    </div>
+                  </div>
+                </div>
+              </Link>
+              <button
+                onClick={() => toggle(p.projectId)}
+                aria-label={`Unpin ${p.name}`}
+                title="Unpin"
+                style={{
+                  position: "absolute", top: 8, right: 8,
+                  background: "transparent", border: "none",
+                  padding: 4, cursor: "pointer",
+                  color: "#EF4444", display: "flex",
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2">
+                  <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+                </svg>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 /* ── My tasks (bucketed by due window) ── */
 
 type BucketKey = "today" | "thisWeek" | "nextWeek" | "later" | "sometime" | "completed";
@@ -1233,7 +1313,7 @@ function endDateMs(iso?: string | null) {
   return new Date(y, m - 1, d).getTime();
 }
 
-type ViewMode = "list" | "calendar";
+type ViewMode = "list" | "kanban" | "calendar" | "gantt";
 const VIEW_KEY = "workspace-tasks-view";
 
 /* ── Drag & drop helpers ──────────────────────────────────────────── */
@@ -1371,7 +1451,9 @@ function TasksTabs({
 function TasksTabsInner({ data, users }: { data: { me: string; tasks: DashboardTask[] }; users: DirectoryUser[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const view = searchParams.get("view") === "team" ? "team" : "mine";
+  const viewParam = searchParams.get("view");
+  const view: "mine" | "team" | "all" =
+    viewParam === "team" ? "team" : viewParam === "all" ? "all" : "mine";
   const [filterAssignee, setFilterAssignee] = useState<string>("");
   const [mode, setMode] = useState<ViewMode>("list");
 
@@ -1379,7 +1461,7 @@ function TasksTabsInner({ data, users }: { data: { me: string; tasks: DashboardT
   useEffect(() => {
     if (typeof window === "undefined") return;
     const stored = localStorage.getItem(VIEW_KEY);
-    if (stored === "calendar" || stored === "list") setMode(stored);
+    if (stored === "calendar" || stored === "list" || stored === "kanban" || stored === "gantt") setMode(stored);
   }, []);
 
   function changeMode(next: ViewMode) {
@@ -1387,10 +1469,12 @@ function TasksTabsInner({ data, users }: { data: { me: string; tasks: DashboardT
     if (typeof window !== "undefined") localStorage.setItem(VIEW_KEY, next);
   }
 
-  function setView(v: "mine" | "team") {
+  function setView(v: "mine" | "team" | "all") {
     const sp = new URLSearchParams(searchParams.toString());
     if (v === "mine") sp.delete("view");
-    else sp.set("view", "team");
+    else sp.set("view", v);
+    // Switching away from All clears its owner/status params
+    if (v !== "all") { sp.delete("owner"); sp.delete("status"); }
     router.replace(`/workspace${sp.toString() ? "?" + sp.toString() : ""}`, { scroll: false });
   }
 
@@ -1410,8 +1494,9 @@ function TasksTabsInner({ data, users }: { data: { me: string; tasks: DashboardT
       <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 12, borderBottom: "1px solid var(--color-border)" }}>
         <TasksTab label="My tasks" active={view === "mine"} onClick={() => setView("mine")} />
         <TasksTab label="Team tasks" active={view === "team"} onClick={() => setView("team")} />
+        <TasksTab label="All tasks" active={view === "all"} onClick={() => setView("all")} />
         <span style={{ flex: 1 }} />
-        <ViewModeSwitcher value={mode} onChange={changeMode} />
+        {view !== "all" && <ViewModeSwitcher value={mode} onChange={changeMode} />}
       </div>
 
       {view === "team" && users.length > 0 && (
@@ -1429,8 +1514,16 @@ function TasksTabsInner({ data, users }: { data: { me: string; tasks: DashboardT
         </div>
       )}
 
-      {mode === "list" && <TasksBuckets data={data} users={users} predicate={predicate} />}
-      {mode === "calendar" && <CalendarView data={data} users={users} predicate={predicate} />}
+      {view === "all" ? (
+        <AllTasksTable data={data} users={users} />
+      ) : (
+        <>
+          {mode === "list" && <TasksBuckets data={data} users={users} predicate={predicate} />}
+          {mode === "kanban" && <TasksKanban data={data} users={users} predicate={predicate} />}
+          {mode === "calendar" && <CalendarView data={data} users={users} predicate={predicate} />}
+          {mode === "gantt" && <TasksGantt data={data} users={users} predicate={predicate} />}
+        </>
+      )}
     </section>
   );
 }
@@ -1466,12 +1559,27 @@ function ViewModeSwitcher({ value, onChange }: { value: ViewMode; onChange: (m: 
           <circle cx="4" cy="18" r="1" fill="currentColor" />
         </svg>
       </Btn>
+      <Btn mode="kanban" label="Kanban view">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="4" width="5" height="16" rx="1" />
+          <rect x="10" y="4" width="5" height="10" rx="1" />
+          <rect x="17" y="4" width="4" height="13" rx="1" />
+        </svg>
+      </Btn>
       <Btn mode="calendar" label="Calendar view">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <rect x="3" y="5" width="18" height="16" rx="2" />
           <line x1="3" y1="10" x2="21" y2="10" />
           <line x1="8" y1="3" x2="8" y2="7" />
           <line x1="16" y1="3" x2="16" y2="7" />
+        </svg>
+      </Btn>
+      <Btn mode="gantt" label="Gantt view">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <line x1="3" y1="6" x2="3" y2="20" />
+          <rect x="6" y="6" width="9" height="3" rx="1" />
+          <rect x="9" y="11" width="11" height="3" rx="1" />
+          <rect x="6" y="16" width="7" height="3" rx="1" />
         </svg>
       </Btn>
     </div>
@@ -1816,6 +1924,971 @@ function TasksBuckets({
         />
       ))}
     </div>
+  );
+}
+
+/* ─── Gantt view ─── */
+/* Tasks rendered as horizontal bars on a timeline, grouped by project. */
+
+const GANTT_MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function TasksGantt({
+  data, users, predicate,
+}: {
+  data: { me: string; tasks: DashboardTask[] };
+  users: DirectoryUser[];
+  predicate: (t: DashboardTask) => boolean;
+}) {
+  const router = useRouter();
+  const openTask = useOpenTask();
+  const [anchorMonth, setAnchorMonth] = useState(() => {
+    const t = new Date();
+    return new Date(t.getFullYear(), t.getMonth() - 1, 1);
+  });
+  const monthSpan = 3;
+  const months: Date[] = [];
+  for (let i = 0; i < monthSpan; i++) {
+    months.push(new Date(anchorMonth.getFullYear(), anchorMonth.getMonth() + i, 1));
+  }
+  const rangeStart = months[0].getTime();
+  const rangeEnd = new Date(months[monthSpan - 1].getFullYear(), months[monthSpan - 1].getMonth() + 1, 0, 23, 59).getTime();
+  const totalMs = rangeEnd - rangeStart;
+
+  function parseIso(iso: string | null): number | null {
+    if (!iso) return null;
+    const [y, m, d] = iso.split("-").map(Number);
+    if (!y || !m || !d) return null;
+    return new Date(y, m - 1, d).getTime();
+  }
+
+  // Filter tasks via predicate, drop subtasks, then group by project
+  type Row = { t: DashboardTask; startMs: number; endMs: number };
+  const grouped = useMemo(() => {
+    const byProject = new Map<string, { projectName: string; companyId: string; rows: Row[]; undated: DashboardTask[] }>();
+    for (const t of data.tasks) {
+      if (t.parentTaskId) continue;
+      if (!predicate(t)) continue;
+      const s = parseIso(t.startDate);
+      const e = parseIso(t.endDate);
+      const bucket = byProject.get(t.projectId) ?? { projectName: t.projectName, companyId: t.companyId, rows: [], undated: [] };
+      if (s == null && e == null) {
+        bucket.undated.push(t);
+      } else {
+        const startMs = s ?? e!;
+        const endMs = e ?? s!;
+        if (endMs >= rangeStart && startMs <= rangeEnd) {
+          bucket.rows.push({ t, startMs, endMs });
+        }
+      }
+      byProject.set(t.projectId, bucket);
+    }
+    // Sort tasks within each project by start
+    for (const v of byProject.values()) v.rows.sort((a, b) => a.startMs - b.startMs);
+    // Sort projects by earliest task start (or name fallback)
+    return [...byProject.entries()]
+      .map(([id, v]) => ({ id, ...v, earliest: v.rows[0]?.startMs ?? Number.POSITIVE_INFINITY }))
+      .sort((a, b) => {
+        if (a.earliest !== b.earliest) return a.earliest - b.earliest;
+        return a.projectName.localeCompare(b.projectName);
+      });
+  }, [data.tasks, predicate, rangeStart, rangeEnd]);
+
+  const todayMs = Date.now();
+  const todayPct = todayMs >= rangeStart && todayMs <= rangeEnd ? ((todayMs - rangeStart) / totalMs) * 100 : null;
+
+  function open(t: DashboardTask) {
+    if (openTask) openTask(t.id);
+    else router.push(`/workspace/${t.companyId}/${t.projectId}?task=${t.id}`);
+  }
+
+  const visibleProjects = grouped.filter((p) => p.rows.length > 0 || p.undated.length > 0);
+
+  return (
+    <div style={{ background: "var(--bg-card)", borderRadius: 18, padding: 18, boxShadow: "var(--shadow-card)" }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 14, gap: 8 }}>
+        <button
+          onClick={() => setAnchorMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
+          style={{ background: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: "var(--color-text-secondary)" }}
+        >‹</button>
+        <h3 style={{ flex: 1, textAlign: "center", margin: 0, fontSize: 14, fontWeight: 600 }}>
+          {GANTT_MONTHS_SHORT[months[0].getMonth()]} {months[0].getFullYear()} – {GANTT_MONTHS_SHORT[months[monthSpan - 1].getMonth()]} {months[monthSpan - 1].getFullYear()}
+        </h3>
+        <button
+          onClick={() => setAnchorMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
+          style={{ background: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: "var(--color-text-secondary)" }}
+        >›</button>
+        <button
+          onClick={() => { const t = new Date(); setAnchorMonth(new Date(t.getFullYear(), t.getMonth() - 1, 1)); }}
+          style={{ background: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: "var(--color-text-secondary)" }}
+        >Today</button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${monthSpan}, 1fr)`, marginLeft: 240, borderBottom: "1px solid var(--color-border)" }}>
+        {months.map((m, i) => (
+          <div key={i} style={{
+            padding: "6px 8px", fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)",
+            borderLeft: "1px solid var(--color-border)", textAlign: "center",
+          }}>
+            {GANTT_MONTHS_SHORT[m.getMonth()]} {m.getFullYear()}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ position: "relative" }}>
+        {todayPct != null && (
+          <div style={{
+            position: "absolute",
+            left: `calc(240px + ${todayPct}% * (100% - 240px) / 100)`,
+            top: 0, bottom: 0, width: 1.5,
+            background: "var(--color-accent)", zIndex: 1, pointerEvents: "none",
+          }} />
+        )}
+        {visibleProjects.length === 0 ? (
+          <div style={{ padding: "24px 16px", textAlign: "center", fontSize: 12, color: "var(--color-text-tertiary)", fontStyle: "italic" }}>
+            No scheduled tasks in this range.
+          </div>
+        ) : visibleProjects.map((proj) => {
+          const projColor = colorForEmail(proj.id);
+          return (
+            <div key={proj.id}>
+              <div style={{
+                display: "grid", gridTemplateColumns: "240px 1fr",
+                background: "rgba(0,0,0,0.02)",
+                borderBottom: "1px solid var(--color-border)",
+                borderTop: "1px solid var(--color-border)",
+              }}>
+                <button
+                  onClick={() => router.push(`/workspace/${proj.companyId}/${proj.id}`)}
+                  style={{
+                    background: "transparent", border: "none", padding: "8px 10px",
+                    cursor: "pointer", fontFamily: "inherit",
+                    textAlign: "left", display: "flex", alignItems: "center", gap: 8, minWidth: 0,
+                  }}
+                >
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: projColor, flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {proj.projectName}
+                  </span>
+                  <span style={{ fontSize: 10, color: "var(--color-text-tertiary)", background: "rgba(0,0,0,0.05)", padding: "1px 6px", borderRadius: 999 }}>
+                    {proj.rows.length + proj.undated.length}
+                  </span>
+                </button>
+                <div />
+              </div>
+              {proj.rows.map(({ t, startMs, endMs }) => {
+                const leftPct = Math.max(0, ((startMs - rangeStart) / totalMs) * 100);
+                const widthPct = Math.max(1.5, ((Math.min(endMs, rangeEnd) - Math.max(startMs, rangeStart)) / totalMs) * 100);
+                const owner = userMeta(t.ownerEmail, users);
+                const ownerColor = owner?.color ?? projColor;
+                return (
+                  <div key={t.id} style={{
+                    display: "grid", gridTemplateColumns: "240px 1fr",
+                    borderBottom: "1px solid var(--color-border)",
+                    alignItems: "center", minHeight: 30,
+                  }}>
+                    <button
+                      onClick={() => open(t)}
+                      style={{
+                        background: "transparent", border: "none", padding: "4px 10px 4px 24px",
+                        cursor: "pointer", fontFamily: "inherit",
+                        textAlign: "left",
+                        fontSize: 12, fontWeight: 500,
+                        color: t.completed ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
+                        textDecoration: t.completed ? "line-through" : "none",
+                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0,
+                      }}
+                    >
+                      {t.title}
+                    </button>
+                    <div style={{ position: "relative", height: 22 }}>
+                      <button
+                        onClick={() => open(t)}
+                        title={`${fmtDate(t.startDate)} → ${fmtDate(t.endDate)}`}
+                        style={{
+                          position: "absolute",
+                          left: `${leftPct}%`, width: `${widthPct}%`,
+                          top: 3, bottom: 3,
+                          background: t.completed ? "rgba(0,0,0,0.15)" : `${ownerColor}DD`,
+                          border: "none", borderRadius: 5,
+                          cursor: "pointer", fontFamily: "inherit",
+                          color: "white", fontSize: 10, fontWeight: 600,
+                          padding: "0 6px", textAlign: "left",
+                          display: "flex", alignItems: "center",
+                          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                        }}
+                      >
+                        {widthPct > 6 ? t.title : ""}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              {proj.undated.length > 0 && (
+                <div style={{
+                  display: "grid", gridTemplateColumns: "240px 1fr",
+                  borderBottom: "1px solid var(--color-border)",
+                  alignItems: "center", minHeight: 28,
+                }}>
+                  <div style={{ padding: "4px 10px 4px 24px", fontSize: 10, fontWeight: 500, color: "var(--color-text-tertiary)", fontStyle: "italic" }}>
+                    No dates ({proj.undated.length})
+                  </div>
+                  <div style={{ padding: "4px 8px", display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {proj.undated.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => open(t)}
+                        style={{
+                          background: "rgba(0,0,0,0.04)", border: "1px solid var(--color-border)",
+                          borderRadius: 999, padding: "2px 8px", fontSize: 10, fontWeight: 500,
+                          color: "var(--color-text-secondary)", cursor: "pointer", fontFamily: "inherit",
+                          maxWidth: 200, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                        }}
+                      >
+                        {t.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ─── All tasks table ─── */
+/* Spreadsheet-style flat list with owner / status / project filters.
+ * Filters mirror URL params so the People widget can deep-link in. */
+
+type AllTasksStatus = "all" | "open" | "completed" | "overdue" | "upcoming";
+
+const STATUS_LABEL: Record<AllTasksStatus, string> = {
+  all: "All statuses",
+  open: "Open",
+  completed: "Completed",
+  overdue: "Overdue",
+  upcoming: "Upcoming this week",
+};
+
+type SortKey = "title" | "project" | "owner" | "due" | "status";
+type SortDir = "asc" | "desc";
+
+const ALL_TASKS_GRID = "30px minmax(0,1fr) 180px 150px 110px 110px 24px";
+
+function AllTasksTable({ data, users }: { data: { me: string; tasks: DashboardTask[] }; users: DirectoryUser[] }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const openTask = useOpenTask();
+
+  const ownerParam = searchParams.get("owner") ?? "any"; // any | me | __none | <email>
+  const statusParam = ((): AllTasksStatus => {
+    const s = searchParams.get("status");
+    if (s === "open" || s === "completed" || s === "overdue" || s === "upcoming") return s;
+    return "all";
+  })();
+  const projectParam = searchParams.get("project") ?? "any";
+
+  // Per-column quick filter (title only — project/owner have top-level dropdowns,
+  // due is rarely text-searched).
+  const [qTitle, setQTitle] = useState("");
+
+  // Sort
+  const [sortKey, setSortKey] = useState<SortKey>("due");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  function toggleSort(k: SortKey) {
+    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(k); setSortDir("asc"); }
+  }
+
+  function setParam(key: string, value: string | null) {
+    const sp = new URLSearchParams(searchParams.toString());
+    if (value == null || value === "" || value === "any" || value === "all") sp.delete(key);
+    else sp.set(key, value);
+    router.replace(`/workspace${sp.toString() ? "?" + sp.toString() : ""}`, { scroll: false });
+  }
+
+  const projects = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of data.tasks) m.set(t.projectId, t.projectName);
+    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [data.tasks]);
+
+  const todayMs = todayStart().getTime();
+  const weekEndMs = endOfWeek(new Date()).getTime();
+
+  const filtered = useMemo(() => {
+    const titleQ = qTitle.trim().toLowerCase();
+
+    const rows = data.tasks
+      .filter((t) => !t.parentTaskId)
+      .filter((t) => {
+        if (ownerParam === "__none") return !t.ownerEmail;
+        if (ownerParam === "me") return t.ownerEmail === data.me;
+        if (ownerParam !== "any") return t.ownerEmail === ownerParam;
+        return true;
+      })
+      .filter((t) => projectParam === "any" || t.projectId === projectParam)
+      .filter((t) => {
+        const due = endDateMs(t.endDate);
+        if (statusParam === "open") return !t.completed;
+        if (statusParam === "completed") return t.completed;
+        if (statusParam === "overdue") return !t.completed && due != null && due < todayMs;
+        if (statusParam === "upcoming") return !t.completed && due != null && due >= todayMs && due <= weekEndMs;
+        return true;
+      })
+      .filter((t) => !titleQ || t.title.toLowerCase().includes(titleQ));
+
+    const cmp = (a: DashboardTask, b: DashboardTask) => {
+      let r = 0;
+      if (sortKey === "title") r = a.title.localeCompare(b.title);
+      else if (sortKey === "project") r = a.projectName.localeCompare(b.projectName);
+      else if (sortKey === "owner") {
+        const al = a.ownerEmail ? userMeta(a.ownerEmail, users)?.label ?? a.ownerEmail : "~~unassigned";
+        const bl = b.ownerEmail ? userMeta(b.ownerEmail, users)?.label ?? b.ownerEmail : "~~unassigned";
+        r = al.localeCompare(bl);
+      } else if (sortKey === "due") {
+        const da = endDateMs(a.endDate) ?? Number.POSITIVE_INFINITY;
+        const db = endDateMs(b.endDate) ?? Number.POSITIVE_INFINITY;
+        r = da - db;
+      } else if (sortKey === "status") {
+        // open > overdue > completed
+        const rank = (t: DashboardTask) => {
+          const due = endDateMs(t.endDate);
+          if (t.completed) return 2;
+          if (due != null && due < todayMs) return 0;
+          return 1;
+        };
+        r = rank(a) - rank(b);
+      }
+      return sortDir === "asc" ? r : -r;
+    };
+    return rows.sort(cmp);
+  }, [data.tasks, data.me, ownerParam, projectParam, statusParam, qTitle, sortKey, sortDir, todayMs, weekEndMs, users]);
+
+  function open(t: DashboardTask) {
+    if (openTask) openTask(t.id);
+    else router.push(`/workspace/${t.companyId}/${t.projectId}?task=${t.id}`);
+  }
+
+  const ownerOptionLabel =
+    ownerParam === "any" ? "Anyone" :
+    ownerParam === "me" ? "Me" :
+    ownerParam === "__none" ? "Unassigned" :
+    userMeta(ownerParam, users)?.label ?? ownerParam;
+
+  function rowStatusPill(t: DashboardTask) {
+    const due = endDateMs(t.endDate);
+    if (t.completed) return { label: "Done", color: "#065F46", bg: "#D1FAE5" };
+    if (due != null && due < todayMs) return { label: "Overdue", color: "#B91C1C", bg: "#FEE2E2" };
+    if (due != null && due >= todayMs && due <= weekEndMs) return { label: "This week", color: "#1E40AF", bg: "#DBEAFE" };
+    return { label: "Open", color: "var(--color-text-secondary)", bg: "rgba(0,0,0,0.04)" };
+  }
+
+  return (
+    <div>
+      {/* Top-level URL-driven filters */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <SimpleSelect ariaLabel="Filter by owner" value={ownerParam} onChange={(v) => setParam("owner", v)} display={ownerOptionLabel}>
+          <option value="any">Anyone</option>
+          <option value="me">Me ({userMeta(data.me, users)?.label ?? data.me})</option>
+          <option value="__none">Unassigned</option>
+          {users.map((u) => <option key={u.email} value={u.email}>{u.label}</option>)}
+        </SimpleSelect>
+        <SimpleSelect ariaLabel="Filter by status" value={statusParam} onChange={(v) => setParam("status", v)} display={STATUS_LABEL[statusParam]}>
+          {(["all", "open", "completed", "overdue", "upcoming"] as const).map((s) => (
+            <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+          ))}
+        </SimpleSelect>
+        <SimpleSelect
+          ariaLabel="Filter by project"
+          value={projectParam}
+          onChange={(v) => setParam("project", v)}
+          display={projectParam === "any" ? "All projects" : projects.find(([id]) => id === projectParam)?.[1] ?? "Project"}
+        >
+          <option value="any">All projects</option>
+          {projects.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+        </SimpleSelect>
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--color-text-tertiary)" }}>
+          {filtered.length} task{filtered.length === 1 ? "" : "s"}
+        </span>
+      </div>
+
+      <div style={{
+        background: "var(--bg-card)",
+        borderRadius: 18,
+        boxShadow: "var(--shadow-card)",
+        overflow: "hidden",
+      }}>
+        {/* Sortable header row */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: ALL_TASKS_GRID,
+          padding: "10px 16px",
+          borderBottom: "1px solid var(--color-border)",
+          background: "rgba(0,0,0,0.015)",
+        }}>
+          <div />
+          <SortHeader label="Task" k="title" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+          <SortHeader label="Project" k="project" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+          <SortHeader label="Owner" k="owner" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+          <SortHeader label="Due" k="due" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+          <SortHeader label="Status" k="status" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
+          <div />
+        </div>
+        {/* Title search row */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: ALL_TASKS_GRID,
+          padding: "6px 16px 8px",
+          borderBottom: "1px solid var(--color-border)",
+          background: "rgba(0,0,0,0.01)",
+          gap: 6,
+        }}>
+          <div />
+          <ColFilter value={qTitle} onChange={setQTitle} placeholder="Search title…" />
+          <div /><div /><div /><div /><div />
+        </div>
+        {filtered.length === 0 ? (
+          <div style={{ padding: 30, textAlign: "center", fontSize: 13, color: "var(--color-text-tertiary)", fontStyle: "italic" }}>
+            No tasks match these filters.
+          </div>
+        ) : (
+          filtered.map((t) => {
+            const owner = userMeta(t.ownerEmail, users);
+            const projColor = colorForEmail(t.projectId);
+            const due = endDateMs(t.endDate);
+            const overdue = due != null && due < todayMs && !t.completed;
+            const status = rowStatusPill(t);
+            return (
+              <button
+                key={t.id}
+                onClick={() => open(t)}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: ALL_TASKS_GRID,
+                  alignItems: "center",
+                  padding: "10px 16px", width: "100%",
+                  background: "transparent", border: "none",
+                  borderTop: "1px solid var(--color-border)",
+                  cursor: "pointer", fontFamily: "inherit", textAlign: "left",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.02)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              >
+                <span style={{
+                  width: 16, height: 16, borderRadius: "50%",
+                  border: `1.5px solid ${t.completed ? "#10B981" : "var(--color-text-tertiary)"}`,
+                  background: t.completed ? "#10B981" : "transparent",
+                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  {t.completed && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="5,12 10,17 19,7" /></svg>}
+                </span>
+                <span style={{
+                  fontSize: 13, fontWeight: 500,
+                  color: t.completed ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
+                  textDecoration: t.completed ? "line-through" : "none",
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0, paddingRight: 12,
+                }}>
+                  {t.title}
+                </span>
+                <span style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  fontSize: 11, fontWeight: 500,
+                  padding: "2px 8px", borderRadius: 999,
+                  background: `${projColor}1A`, color: projColor,
+                  maxWidth: 170,
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: projColor, flexShrink: 0 }} />
+                  {t.projectName}
+                </span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--color-text-secondary)", minWidth: 0 }}>
+                  {owner ? (
+                    <>
+                      <Avatar user={owner} size={20} />
+                      <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{owner.label}</span>
+                    </>
+                  ) : (
+                    <span style={{ fontStyle: "italic", color: "var(--color-text-tertiary)" }}>Unassigned</span>
+                  )}
+                </span>
+                <span style={{
+                  fontSize: 12, fontWeight: 500,
+                  color: overdue ? "#B91C1C" : "var(--color-text-secondary)",
+                  whiteSpace: "nowrap",
+                }}>
+                  {t.endDate ? fmtDate(t.endDate) : "—"}
+                </span>
+                <span style={{
+                  fontSize: 10, fontWeight: 600,
+                  padding: "3px 8px", borderRadius: 999,
+                  color: status.color, background: status.bg,
+                  whiteSpace: "nowrap", justifySelf: "start",
+                }}>
+                  {status.label}
+                </span>
+                <span style={{
+                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 10, fontWeight: 500, color: "var(--color-text-tertiary)",
+                }}>
+                  ›
+                </span>
+              </button>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SortHeader({ label, k, sortKey, sortDir, onClick }: {
+  label: string;
+  k: SortKey;
+  sortKey: SortKey;
+  sortDir: SortDir;
+  onClick: (k: SortKey) => void;
+}) {
+  const active = sortKey === k;
+  return (
+    <button
+      onClick={() => onClick(k)}
+      style={{
+        background: "transparent", border: "none", cursor: "pointer",
+        padding: 0, fontFamily: "inherit",
+        fontSize: 11, fontWeight: 600,
+        color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
+        textTransform: "uppercase", letterSpacing: 0.5,
+        textAlign: "left",
+        display: "inline-flex", alignItems: "center", gap: 4,
+      }}
+    >
+      {label}
+      <span style={{ fontSize: 9, opacity: active ? 1 : 0.3 }}>
+        {active && sortDir === "desc" ? "↓" : "↑"}
+      </span>
+    </button>
+  );
+}
+
+function ColFilter({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  return (
+    <input
+      type="search"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      style={{
+        width: "100%",
+        padding: "4px 8px",
+        borderRadius: 6,
+        border: "1px solid var(--color-border)",
+        background: "white",
+        fontFamily: "inherit", fontSize: 11,
+        color: "var(--color-text-primary)",
+        outline: "none",
+      }}
+    />
+  );
+}
+
+function SimpleSelect({
+  value, onChange, children, display, ariaLabel,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  children: React.ReactNode;
+  display: string;
+  ariaLabel: string;
+}) {
+  return (
+    <label style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={ariaLabel}
+        style={{
+          appearance: "none",
+          padding: "6px 28px 6px 12px",
+          borderRadius: 999,
+          border: "1px solid var(--color-border)",
+          background: "transparent",
+          fontFamily: "inherit", fontSize: 12, fontWeight: 500,
+          color: "var(--color-text-primary)",
+          cursor: "pointer",
+        }}
+      >
+        {children}
+      </select>
+      <svg
+        width="10" height="10" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth="2"
+        style={{ position: "absolute", right: 10, pointerEvents: "none", color: "var(--color-text-tertiary)" }}
+      >
+        <polyline points="6,9 12,15 18,9" />
+      </svg>
+      <span style={{ display: "none" }}>{display}</span>
+    </label>
+  );
+}
+
+/* ─── Kanban view ─── */
+/* Shares bucket logic with TasksBuckets but renders columns side-by-side. */
+
+function TasksKanban({
+  data, users, predicate,
+}: {
+  data: { me: string; tasks: DashboardTask[] };
+  users: DirectoryUser[];
+  predicate: (t: DashboardTask) => boolean;
+}) {
+  const buckets = useMemo<Record<BucketKey, DashboardTask[]>>(() => {
+    const todayEndMs = todayEnd().getTime();
+    const thisWeekEndMs = endOfWeek(new Date()).getTime();
+    const nextWeekStartMs = thisWeekEndMs + 1;
+    const nextWeekEndMs = endOfWeek(new Date(nextWeekStartMs + 24 * 3600 * 1000)).getTime();
+    const out: Record<BucketKey, DashboardTask[]> = { today: [], thisWeek: [], nextWeek: [], later: [], sometime: [], completed: [] };
+    for (const t of data.tasks) {
+      if (t.parentTaskId) continue;
+      if (!predicate(t)) continue;
+      if (t.completed) { out.completed.push(t); continue; }
+      const due = endDateMs(t.endDate);
+      if (due == null) out.sometime.push(t);
+      else if (due <= todayEndMs) out.today.push(t);
+      else if (due <= thisWeekEndMs) out.thisWeek.push(t);
+      else if (due >= nextWeekStartMs && due <= nextWeekEndMs) out.nextWeek.push(t);
+      else out.later.push(t);
+    }
+    const cmp = (a: DashboardTask, b: DashboardTask) => {
+      if (a.order !== b.order) return a.order - b.order;
+      const da = endDateMs(a.endDate) ?? Number.POSITIVE_INFINITY;
+      const db = endDateMs(b.endDate) ?? Number.POSITIVE_INFINITY;
+      return da - db;
+    };
+    (Object.keys(out) as BucketKey[]).forEach((k) => {
+      if (k === "completed") {
+        out[k].sort((a, b) => {
+          const da = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+          const db = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+          return db - da;
+        });
+      } else out[k].sort(cmp);
+    });
+    return out;
+  }, [data, predicate]);
+
+  return (
+    <div style={{
+      display: "flex", gap: 12,
+      overflowX: "auto",
+      paddingBottom: 8,
+      // Pull the columns flush with the page edge so the horizontal scroll
+      // doesn't truncate weirdly inside the inner padding.
+      scrollSnapType: "x proximity",
+    }}>
+      {BUCKETS.map((b) => (
+        <KanbanColumn
+          key={b.key}
+          label={b.label}
+          tasks={buckets[b.key]}
+          users={users}
+          emptyHint={b.emptyHint}
+          variant={b.key}
+        />
+      ))}
+    </div>
+  );
+}
+
+function KanbanColumn({
+  label, tasks, users, emptyHint, variant,
+}: {
+  label: string;
+  tasks: DashboardTask[];
+  users: DirectoryUser[];
+  emptyHint: string;
+  variant: BucketKey;
+}) {
+  const accent =
+    variant === "today" ? "#DC2626" :
+    variant === "thisWeek" ? "#0071E3" :
+    variant === "nextWeek" ? "#A855F7" :
+    variant === "later" ? "#6366F1" :
+    variant === "sometime" ? "#94A3B8" :
+    "#10B981";
+  const todayMs = todayStart().getTime();
+  const dragOps = useDragOps();
+  const [hovered, setHovered] = useState(false);
+
+  function handleDrop(anchorTaskId: string | null, edge: "before" | "after") {
+    const id = dragOps.draggedId;
+    if (!id) return;
+    const allInBucket = tasks.filter((t) => t.id !== id);
+    let insertAt: number;
+    if (anchorTaskId) {
+      const idx = allInBucket.findIndex((t) => t.id === anchorTaskId);
+      insertAt = idx < 0 ? allInBucket.length : idx + (edge === "after" ? 1 : 0);
+    } else {
+      insertAt = allInBucket.length;
+    }
+    if (variant === "completed") {
+      fetch(`/api/tasks/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ completed: true }),
+      }).catch(() => null);
+    } else {
+      dragOps.patchTask(id, { endDate: bucketDateFor(variant) });
+    }
+    const orderedIds = [...allInBucket.slice(0, insertAt).map((t) => t.id), id, ...allInBucket.slice(insertAt).map((t) => t.id)];
+    dragOps.reorderGroup(orderedIds);
+    dragOps.setDraggedId(null);
+    setHovered(false);
+  }
+
+  return (
+    <div
+      onDragOver={(e) => {
+        if (!dragOps.draggedId) return;
+        e.preventDefault();
+        setHovered(true);
+      }}
+      onDragLeave={(e) => {
+        if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
+        setHovered(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        handleDrop(null, "after");
+      }}
+      style={{
+        flex: "0 0 300px",
+        background: "var(--bg-card)",
+        borderRadius: 14,
+        boxShadow: "var(--shadow-card)",
+        overflow: "hidden",
+        outline: hovered ? `2px solid ${accent}` : "2px solid transparent",
+        outlineOffset: -2,
+        transition: "outline-color 100ms",
+        display: "flex", flexDirection: "column",
+        maxHeight: "calc(100vh - 240px)",
+        scrollSnapAlign: "start",
+      }}
+    >
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10,
+        padding: "10px 14px",
+        borderBottom: "1px solid var(--color-border)",
+        flexShrink: 0,
+      }}>
+        <span style={{ width: 8, height: 8, borderRadius: "50%", background: accent }} />
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{label}</span>
+        <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", background: "rgba(0,0,0,0.04)", padding: "2px 7px", borderRadius: 999 }}>
+          {tasks.length}
+        </span>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
+        {tasks.length === 0 ? (
+          <div style={{ padding: "12px 6px", fontSize: 12, color: "var(--color-text-tertiary)", fontStyle: "italic" }}>
+            {emptyHint}
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {tasks.map((t) => (
+              <KanbanTaskCard
+                key={t.id}
+                task={t}
+                users={users}
+                todayMs={todayMs}
+                onDropAt={(edge) => handleDrop(t.id, edge)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function KanbanTaskCard({
+  task, users, todayMs, onDropAt,
+}: {
+  task: DashboardTask;
+  users: DirectoryUser[];
+  todayMs: number;
+  onDropAt: (edge: "before" | "after") => void;
+}) {
+  const router = useRouter();
+  const openTask = useOpenTask();
+  const refresh = useTaskRefresh();
+  const allTags = useTags();
+  const projectColor = colorForEmail(task.projectId);
+  const due = endDateMs(task.endDate);
+  const overdue = due != null && due < todayMs && !task.completed;
+  const owner = userMeta(task.ownerEmail, users);
+  const dragOps = useDragOps();
+  const [over, setOver] = useState<"before" | "after" | null>(null);
+  const isDragging = dragOps.draggedId === task.id;
+  const { onContextMenu, menu } = useTaskContextMenu({
+    taskTitle: task.title,
+    currentStartDate: task.startDate,
+    currentEndDate: task.endDate,
+    currentProjectId: task.projectId,
+    currentSectionId: task.sectionId,
+    onDelete: async () => {
+      const res = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? `HTTP ${res.status}`);
+      }
+      await refresh?.();
+    },
+    onUpdate: async (patch) => {
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? `HTTP ${res.status}`);
+      }
+      await refresh?.();
+    },
+  });
+
+  function open() {
+    if (openTask) openTask(task.id);
+    else router.push(`/workspace/${task.companyId}/${task.projectId}?task=${task.id}`);
+  }
+  async function toggleComplete(e: React.MouseEvent) {
+    e.stopPropagation();
+    await fetch(`/api/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ completed: !task.completed }),
+    });
+    window.location.reload();
+  }
+
+  return (
+    <>
+      <div
+        onClick={open}
+        onContextMenu={onContextMenu}
+        draggable
+        onDragStart={(e) => {
+          dragOps.setDraggedId(task.id);
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", task.id);
+        }}
+        onDragEnd={() => dragOps.setDraggedId(null)}
+        onDragOver={(e) => {
+          if (!dragOps.draggedId || dragOps.draggedId === task.id) return;
+          e.preventDefault();
+          e.stopPropagation();
+          setOver(dropEdge(e));
+        }}
+        onDragLeave={() => setOver(null)}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const edge = dropEdge(e);
+          setOver(null);
+          onDropAt(edge);
+        }}
+        style={{
+          background: "white",
+          border: "1px solid var(--color-border)",
+          borderTopColor: over === "before" ? "var(--color-accent)" : "var(--color-border)",
+          borderTopWidth: over === "before" ? 2 : 1,
+          borderBottomColor: over === "after" ? "var(--color-accent)" : "var(--color-border)",
+          borderBottomWidth: over === "after" ? 2 : 1,
+          borderRadius: 10,
+          padding: "10px 12px",
+          cursor: isDragging ? "grabbing" : "pointer",
+          boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+          opacity: isDragging ? 0.4 : 1,
+          display: "flex", flexDirection: "column", gap: 8,
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.02)")}
+        onMouseLeave={(e) => (e.currentTarget.style.background = "white")}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+          <button
+            onClick={toggleComplete}
+            aria-label={task.completed ? "Mark incomplete" : "Mark complete"}
+            style={{
+              width: 16, height: 16, borderRadius: "50%",
+              border: `1.5px solid ${task.completed ? "#10B981" : "var(--color-text-tertiary)"}`,
+              background: task.completed ? "#10B981" : "transparent",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer", padding: 0, flexShrink: 0, marginTop: 2,
+            }}
+          >
+            {task.completed && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="5,12 10,17 19,7" /></svg>}
+          </button>
+          <div style={{
+            flex: 1, minWidth: 0,
+            fontSize: 13, fontWeight: 500, lineHeight: 1.35,
+            color: task.completed ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
+            textDecoration: task.completed ? "line-through" : "none",
+            wordBreak: "break-word",
+          }}>
+            {task.title}
+          </div>
+        </div>
+        {(task.tagIds.length > 0 || task.priority || task.endDate || owner) && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+            <span
+              title={`${task.companyName} › ${task.projectName}`}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 5,
+                fontSize: 10, fontWeight: 500,
+                padding: "2px 7px", borderRadius: 999,
+                background: `${projectColor}1A`, color: projectColor,
+                maxWidth: "100%",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}
+            >
+              <span style={{ width: 5, height: 5, borderRadius: "50%", background: projectColor, flexShrink: 0 }} />
+              {task.projectName}
+            </span>
+            {task.priority && (
+              <span style={{
+                fontSize: 10, fontWeight: 600,
+                color: PRIORITY_META[task.priority].color, background: PRIORITY_META[task.priority].bg,
+                padding: "2px 7px", borderRadius: 999,
+              }}>
+                {PRIORITY_META[task.priority].label}
+              </span>
+            )}
+            {task.tagIds.length > 0 && (
+              <TagPillList tagIds={task.tagIds} allTags={allTags} max={2} size="xs" />
+            )}
+            {task.endDate && (
+              <span style={{
+                fontSize: 10, fontWeight: 500,
+                padding: "2px 7px", borderRadius: 999,
+                color: overdue ? "#B91C1C" : "var(--color-text-secondary)",
+                background: overdue ? "#FEE2E2" : "rgba(0,0,0,0.04)",
+              }}>
+                {fmtDate(task.endDate)}
+              </span>
+            )}
+            {owner && (
+              <span style={{ marginLeft: "auto" }}>
+                <Avatar user={owner} size={20} />
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+      {menu}
+    </>
   );
 }
 
@@ -2345,11 +3418,13 @@ function AssignedRow({ task, users, me }: { task: DashboardTask; users: Director
 /* ── People widget ── */
 
 type PeopleWindow = "this_week" | "this_month";
+type StatBucket = "overdue" | "completed" | "upcoming";
 
 function PeopleWidget({ tasks, users }: { tasks: DashboardTask[]; users: DirectoryUser[] }) {
+  const router = useRouter();
   const [windowKey, setWindowKey] = useState<PeopleWindow>("this_week");
 
-  const stats = useMemo(() => {
+  const { winStartMs, winEndMs, todayMs } = useMemo(() => {
     const today = todayStart();
     const winStart =
       windowKey === "this_week" ? startOfWeek(today) :
@@ -2357,11 +3432,25 @@ function PeopleWidget({ tasks, users }: { tasks: DashboardTask[]; users: Directo
     const winEnd =
       windowKey === "this_week" ? endOfWeek(today) :
       new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+    return { winStartMs: winStart.getTime(), winEndMs: winEnd.getTime(), todayMs: today.getTime() };
+  }, [windowKey]);
 
-    const winStartMs = winStart.getTime();
-    const winEndMs = winEnd.getTime();
-    const todayMs = today.getTime();
+  // Returns true if `t` belongs in this person's bucket for the current window.
+  const matches = useCallback((t: DashboardTask, email: string, bucket: StatBucket) => {
+    if (t.parentTaskId) return false;
+    if (t.ownerEmail !== email) return false;
+    const due = endDateMs(t.endDate);
+    if (bucket === "completed") {
+      if (!t.completed) return false;
+      const completedAtMs = t.completedAt ? new Date(t.completedAt).getTime() : 0;
+      return completedAtMs >= winStartMs && completedAtMs <= winEndMs;
+    }
+    if (t.completed) return false;
+    if (bucket === "overdue") return due != null && due < todayMs;
+    return due != null && due >= todayMs && due <= winEndMs; // upcoming
+  }, [winStartMs, winEndMs, todayMs]);
 
+  const stats = useMemo(() => {
     type Row = { email: string; overdue: number; completed: number; upcoming: number };
     const map = new Map<string, Row>();
     function bump(email: string | null | undefined): Row | null {
@@ -2374,81 +3463,100 @@ function PeopleWidget({ tasks, users }: { tasks: DashboardTask[]; users: Directo
       if (t.parentTaskId) continue;
       const r = bump(t.ownerEmail);
       if (!r) continue;
-      const due = endDateMs(t.endDate);
-      if (t.completed) {
-        const completedAtMs = t.completedAt ? new Date(t.completedAt).getTime() : 0;
-        if (completedAtMs >= winStartMs && completedAtMs <= winEndMs) r.completed++;
-      } else {
-        if (due != null && due < todayMs) r.overdue++;
-        else if (due != null && due >= todayMs && due <= winEndMs) r.upcoming++;
-      }
+      if (matches(t, t.ownerEmail!, "overdue")) r.overdue++;
+      else if (matches(t, t.ownerEmail!, "completed")) r.completed++;
+      else if (matches(t, t.ownerEmail!, "upcoming")) r.upcoming++;
     }
     const rows = Array.from(map.values());
     rows.sort((a, b) => (b.overdue + b.upcoming + b.completed) - (a.overdue + a.upcoming + a.completed));
     return rows;
-  }, [tasks, windowKey]);
+  }, [tasks, matches]);
+
+  function openDrilldown(email: string, bucket: StatBucket) {
+    // Map (bucket × window) onto the All-tasks status filter.
+    // overdue/upcoming use server-side definition; completed only honors
+    // the date window approximately (status=completed shows all completed).
+    const status = bucket === "overdue" ? "overdue"
+      : bucket === "upcoming" ? "upcoming"
+      : "completed";
+    const sp = new URLSearchParams();
+    sp.set("view", "all");
+    sp.set("owner", email);
+    sp.set("status", status);
+    router.push(`/workspace?${sp.toString()}`);
+  }
 
   return (
-    <section style={{ background: "var(--bg-card)", borderRadius: 18, padding: "18px 20px", boxShadow: "var(--shadow-card)" }}>
-      <h2 style={{ fontSize: 16, fontWeight: 600, margin: "0 0 6px" }}>People</h2>
-      <div style={{ display: "flex", gap: 14, marginBottom: 8, borderBottom: "1px solid var(--color-border)" }}>
-        {(["this_week", "this_month"] as const).map((w) => (
-          <button
-            key={w}
-            onClick={() => setWindowKey(w)}
-            style={{
-              padding: "6px 0",
-              background: "transparent", border: "none",
-              borderBottom: windowKey === w ? "2px solid var(--color-text-primary)" : "2px solid transparent",
-              color: windowKey === w ? "var(--color-text-primary)" : "var(--color-text-secondary)",
-              fontWeight: windowKey === w ? 600 : 500,
-              fontSize: 12, cursor: "pointer", fontFamily: "inherit", marginBottom: -1,
-            }}
-          >
-            {w === "this_week" ? "This week" : "This month"}
-          </button>
-        ))}
-      </div>
-      {stats.length === 0 ? (
-        <div style={{ padding: "16px 4px", fontSize: 13, color: "var(--color-text-tertiary)", fontStyle: "italic" }}>
-          No tasks assigned to anyone yet.
+    <>
+      <section style={{ background: "var(--bg-card)", borderRadius: 18, padding: "18px 20px", boxShadow: "var(--shadow-card)" }}>
+        <h2 style={{ fontSize: 16, fontWeight: 600, margin: "0 0 6px" }}>People</h2>
+        <div style={{ display: "flex", gap: 14, marginBottom: 8, borderBottom: "1px solid var(--color-border)" }}>
+          {(["this_week", "this_month"] as const).map((w) => (
+            <button
+              key={w}
+              onClick={() => setWindowKey(w)}
+              style={{
+                padding: "6px 0",
+                background: "transparent", border: "none",
+                borderBottom: windowKey === w ? "2px solid var(--color-text-primary)" : "2px solid transparent",
+                color: windowKey === w ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+                fontWeight: windowKey === w ? 600 : 500,
+                fontSize: 12, cursor: "pointer", fontFamily: "inherit", marginBottom: -1,
+              }}
+            >
+              {w === "this_week" ? "This week" : "This month"}
+            </button>
+          ))}
         </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          {stats.map((s) => {
-            const u = userMeta(s.email, users);
-            return (
-              <div key={s.email} style={{
-                display: "flex", alignItems: "center", gap: 12,
-                padding: "10px 4px", borderTop: "1px solid var(--color-border)",
-              }}>
-                <Avatar user={u} size={28} />
-                <span style={{ fontSize: 13, fontWeight: 500, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {u?.label ?? s.email}
-                </span>
-                <Stat label="overdue" value={s.overdue} color="#B91C1C" bg="#FEE2E2" muted={s.overdue === 0} />
-                <Stat label="completed" value={s.completed} color="#065F46" bg="#D1FAE5" muted={s.completed === 0} />
-                <Stat label="upcoming" value={s.upcoming} color="var(--color-text-secondary)" bg="transparent" muted={s.upcoming === 0} />
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </section>
+        {stats.length === 0 ? (
+          <div style={{ padding: "16px 4px", fontSize: 13, color: "var(--color-text-tertiary)", fontStyle: "italic" }}>
+            No tasks assigned to anyone yet.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {stats.map((s) => {
+              const u = userMeta(s.email, users);
+              return (
+                <div key={s.email} style={{
+                  display: "flex", alignItems: "center", gap: 12,
+                  padding: "10px 4px", borderTop: "1px solid var(--color-border)",
+                }}>
+                  <Avatar user={u} size={28} />
+                  <span style={{ fontSize: 13, fontWeight: 500, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {u?.label ?? s.email}
+                  </span>
+                  <StatButton label="overdue" value={s.overdue} color="#B91C1C" bg="#FEE2E2" onClick={() => openDrilldown(s.email, "overdue")} />
+                  <StatButton label="completed" value={s.completed} color="#065F46" bg="#D1FAE5" onClick={() => openDrilldown(s.email, "completed")} />
+                  <StatButton label="upcoming" value={s.upcoming} color="var(--color-text-secondary)" bg="rgba(0,0,0,0.04)" onClick={() => openDrilldown(s.email, "upcoming")} />
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+    </>
   );
 }
 
-function Stat({ label, value, color, bg, muted }: { label: string; value: number; color: string; bg: string; muted: boolean }) {
+function StatButton({ label, value, color, bg, onClick }: { label: string; value: number; color: string; bg: string; onClick: () => void }) {
+  const muted = value === 0;
   return (
-    <span style={{
-      fontSize: 11, fontWeight: 500,
-      padding: "3px 9px", borderRadius: 999,
-      color: muted ? "var(--color-text-tertiary)" : color,
-      background: muted ? "transparent" : bg,
-      whiteSpace: "nowrap",
-    }}>
+    <button
+      onClick={onClick}
+      disabled={muted}
+      style={{
+        fontSize: 11, fontWeight: 500,
+        padding: "3px 9px", borderRadius: 999,
+        color: muted ? "var(--color-text-tertiary)" : color,
+        background: muted ? "transparent" : bg,
+        whiteSpace: "nowrap",
+        border: "none", fontFamily: "inherit",
+        cursor: muted ? "default" : "pointer",
+      }}
+    >
       {value} {label}
-    </span>
+    </button>
   );
 }
 

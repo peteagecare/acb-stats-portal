@@ -13,6 +13,7 @@ import {
   MultiUserPicker,
   PRIORITY_META,
   PROJECT_STATUS_META,
+  colorForEmail,
   dueState,
   fmtDate,
   inputStyle,
@@ -28,6 +29,7 @@ import {
   Comments,
   ProjectLinks,
   ProjectNotes,
+  RichTextField,
 } from "../../_collaboration";
 import {
   TRACKER_STYLE,
@@ -36,14 +38,15 @@ import {
   computeTracker,
   rollupTaskStatuses,
 } from "@/lib/tracker";
-import { RecurrenceRule, formatRecurrence } from "@/lib/recurrence";
+import { RecurrenceRule, formatISODate, formatRecurrence, nextOccurrence } from "@/lib/recurrence";
 import { RecurrencePicker } from "../../_recurrence-picker";
 import { TagFilterChips, TagPicker, TagPillList, useTags } from "../../_tags";
 import { DatePicker, EnumPicker, UserPicker } from "@/app/components/Pickers";
+import { useTimer } from "@/app/components/TimerProvider";
+import { useFavourites } from "@/app/components/use-favourites";
 import { useTaskContextMenu } from "../../_task-context-menu";
 import { InlineTaskTitle } from "../../_inline-title";
 import { MoveToButton } from "../../_move-to-button";
-import { LinkifiedTextarea } from "../../_linkified-textarea";
 
 type ProjectStatus = "planning" | "active" | "on_hold" | "done" | "archived";
 type Priority = "low" | "medium" | "high";
@@ -101,6 +104,8 @@ interface Project {
 }
 
 type Tab = "tasks" | "notes" | "files" | "links" | "comments";
+type ProjectViewMode = "list" | "kanban" | "calendar" | "gantt";
+const PROJECT_VIEW_KEY = "project-tasks-view";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "tasks", label: "Tasks" },
@@ -156,6 +161,18 @@ export default function ProjectPage({
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [tab, setTab] = useState<Tab>("tasks");
   const [me, setMe] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ProjectViewMode>("list");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = localStorage.getItem(PROJECT_VIEW_KEY);
+    if (stored === "list" || stored === "kanban" || stored === "calendar" || stored === "gantt") setViewMode(stored);
+  }, []);
+
+  function changeViewMode(next: ProjectViewMode) {
+    setViewMode(next);
+    if (typeof window !== "undefined") localStorage.setItem(PROJECT_VIEW_KEY, next);
+  }
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -338,103 +355,97 @@ export default function ProjectPage({
 
       {data && tab === "tasks" && (
         <>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-            <FilterChip label="Everyone" active={filterAssignee === "all"} onClick={() => setFilterAssignee("all")} />
-            {users.map((u) => (
-              <FilterChip key={u.email} label={u.label} color={u.color} active={filterAssignee === u.email} onClick={() => setFilterAssignee(u.email)} />
-            ))}
-            <FilterChip label="Unassigned" active={filterAssignee === ""} onClick={() => setFilterAssignee("")} />
-            <div style={{ width: 1, height: 22, background: "var(--color-border)", margin: "auto 4px" }} />
-            <button
-              onClick={() => setShowCompleted((v) => !v)}
-              style={{
-                display: "flex", alignItems: "center", gap: 6,
-                padding: "6px 12px", borderRadius: 999,
-                background: showCompleted ? "rgba(0,113,227,0.08)" : "transparent",
-                border: "1px solid var(--color-border)",
-                color: showCompleted ? "#0071E3" : "var(--color-text-secondary)",
-                fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
-              }}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><polyline points="4,12 9,17 20,6" /></svg>
-              {showCompleted ? "Hide completed" : "Show completed"}
-            </button>
-            <div style={{ marginLeft: "auto" }}>
-              <AddSectionInline projectId={projectId} onCreated={refresh} />
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18, alignItems: "center" }}>
+            <TaskFiltersDropdown
+              users={users}
+              filterAssignee={filterAssignee}
+              setFilterAssignee={setFilterAssignee}
+              showCompleted={showCompleted}
+              setShowCompleted={setShowCompleted}
+              trackerFilter={trackerFilter}
+              setTrackerFilter={setTrackerFilter}
+              rollup={rollup}
+            />
+            {(() => {
+              const tagsInProject = new Set<string>();
+              for (const t of data.tasks) for (const id of t.tagIds) tagsInProject.add(id);
+              if (tagsInProject.size === 0) return null;
+              return <TagFilterChips allTagIds={tagsInProject} active={tagFilter} onChange={setTagFilter} />;
+            })()}
+            <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
+              <ProjectViewSwitcher value={viewMode} onChange={changeViewMode} />
+              {viewMode === "list" && <AddSectionInline projectId={projectId} onCreated={refresh} />}
             </div>
           </div>
 
-          {rollup && rollup.total > 0 && (
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-              <TrackerChip label="All" active={trackerFilter === "all"} count={rollup.total} onClick={() => setTrackerFilter("all")} />
-              {(["overdue", "behind", "on_track", "ahead", "upcoming", "unscheduled"] as const).map((s) => {
-                const count = rollup[s];
-                if (count === 0) return null;
-                return (
-                  <TrackerChip
-                    key={s}
-                    label={s === "on_track" ? "On track" : s.charAt(0).toUpperCase() + s.slice(1).replace("_", " ")}
-                    active={trackerFilter === s}
-                    count={count}
-                    statusKey={s}
-                    onClick={() => setTrackerFilter(s)}
-                  />
-                );
-              })}
+          {viewMode === "list" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {data.sections.map((section) => (
+                <SectionCard
+                  key={section.id}
+                  section={section}
+                  tasks={tasksBySection[section.id] ?? []}
+                  users={users}
+                  projectId={projectId}
+                  sections={data.sections}
+                  collapsed={!!collapsed[section.id]}
+                  onToggleCollapse={() =>
+                    setCollapsed((c) => ({ ...c, [section.id]: !c[section.id] }))
+                  }
+                  onOpenTask={setOpenTaskId}
+                  onMutate={mutateApi}
+                  canDelete={data.sections.length > 1}
+                  childrenByParent={childrenByParent}
+                  allProjectTasks={allProjectTasks}
+                />
+              ))}
+              {(tasksBySection.unsectioned ?? []).length > 0 && (
+                <SectionCard
+                  key="unsectioned"
+                  section={{ id: "unsectioned", projectId, name: "Unsectioned", order: 999 }}
+                  tasks={tasksBySection.unsectioned}
+                  users={users}
+                  projectId={projectId}
+                  sections={data.sections}
+                  collapsed={!!collapsed.unsectioned}
+                  onToggleCollapse={() =>
+                    setCollapsed((c) => ({ ...c, unsectioned: !c.unsectioned }))
+                  }
+                  onOpenTask={setOpenTaskId}
+                  onMutate={mutateApi}
+                  canDelete={false}
+                  isUnsectioned
+                  childrenByParent={childrenByParent}
+                  allProjectTasks={allProjectTasks}
+                />
+              )}
             </div>
           )}
-
-          {(() => {
-            const tagsInProject = new Set<string>();
-            for (const t of data.tasks) for (const id of t.tagIds) tagsInProject.add(id);
-            return (
-              <div style={{ marginBottom: 18 }}>
-                <TagFilterChips allTagIds={tagsInProject} active={tagFilter} onChange={setTagFilter} />
-              </div>
-            );
-          })()}
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {data.sections.map((section) => (
-              <SectionCard
-                key={section.id}
-                section={section}
-                tasks={tasksBySection[section.id] ?? []}
-                users={users}
-                projectId={projectId}
-                sections={data.sections}
-                collapsed={!!collapsed[section.id]}
-                onToggleCollapse={() =>
-                  setCollapsed((c) => ({ ...c, [section.id]: !c[section.id] }))
-                }
-                onOpenTask={setOpenTaskId}
-                onMutate={mutateApi}
-                canDelete={data.sections.length > 1}
-                childrenByParent={childrenByParent}
-                allProjectTasks={allProjectTasks}
-              />
-            ))}
-            {(tasksBySection.unsectioned ?? []).length > 0 && (
-              <SectionCard
-                key="unsectioned"
-                section={{ id: "unsectioned", projectId, name: "Unsectioned", order: 999 }}
-                tasks={tasksBySection.unsectioned}
-                users={users}
-                projectId={projectId}
-                sections={data.sections}
-                collapsed={!!collapsed.unsectioned}
-                onToggleCollapse={() =>
-                  setCollapsed((c) => ({ ...c, unsectioned: !c.unsectioned }))
-                }
-                onOpenTask={setOpenTaskId}
-                onMutate={mutateApi}
-                canDelete={false}
-                isUnsectioned
-                childrenByParent={childrenByParent}
-                allProjectTasks={allProjectTasks}
-              />
-            )}
-          </div>
+          {viewMode === "kanban" && (
+            <ProjectKanban
+              sections={data.sections}
+              tasksBySection={tasksBySection}
+              users={users}
+              projectId={projectId}
+              onOpenTask={setOpenTaskId}
+              onMutate={mutateApi}
+            />
+          )}
+          {viewMode === "calendar" && (
+            <ProjectCalendar
+              tasks={data.tasks.filter((t) => !t.parentTaskId)}
+              users={users}
+              onOpenTask={setOpenTaskId}
+            />
+          )}
+          {viewMode === "gantt" && (
+            <ProjectGantt
+              tasks={data.tasks.filter((t) => !t.parentTaskId)}
+              sections={data.sections}
+              users={users}
+              onOpenTask={setOpenTaskId}
+            />
+          )}
         </>
       )}
 
@@ -502,6 +513,8 @@ function ProjectHeader({
   const owner = userMeta(project.ownerEmail, users);
   const status = PROJECT_STATUS_META[project.status];
   const trackerStyle = projectTracker ? TRACKER_STYLE[projectTracker.status] : null;
+  const { favourites, toggle } = useFavourites();
+  const isPinned = favourites.has(project.id);
   return (
     <div style={{
       background: "var(--bg-card)", borderRadius: 18, padding: "20px 22px",
@@ -511,6 +524,20 @@ function ProjectHeader({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
             <h1 style={{ fontSize: 22, fontWeight: 600, margin: 0 }}>{project.name}</h1>
+            <button
+              onClick={() => toggle(project.id)}
+              aria-label={isPinned ? "Unpin from favourites" : "Pin to favourites"}
+              title={isPinned ? "Unpin from favourites" : "Pin to favourites"}
+              style={{
+                background: "transparent", border: "none", cursor: "pointer",
+                padding: 4, display: "flex", alignItems: "center",
+                color: isPinned ? "#EF4444" : "var(--color-text-tertiary)",
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill={isPinned ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+                <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+              </svg>
+            </button>
             <span style={{
               fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999,
               color: status.color, background: status.bg,
@@ -759,7 +786,7 @@ function SectionCard({
 
   function startRename() { setEditName(section.name); setRenaming(true); }
 
-  async function commitAdd() {
+  async function commitAdd(opts?: { keepFocus?: boolean }) {
     const title = draft.trim();
     if (!title) { setAdding(false); setDraft(""); return; }
     await onMutate("/api/tasks", {
@@ -772,7 +799,8 @@ function SectionCard({
       }),
     });
     setDraft("");
-    inputRef.current?.focus();
+    if (opts?.keepFocus) inputRef.current?.focus();
+    else setAdding(false);
   }
 
   async function commitRename() {
@@ -834,7 +862,7 @@ function SectionCard({
           </button>
         )}
         <span style={{ fontSize: 12, color: "var(--color-text-tertiary)", background: "rgba(0,0,0,0.04)", padding: "2px 8px", borderRadius: 999 }}>
-          {tasks.filter((t) => !t.completed).length}
+          {tasks.length}
         </span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
           {!collapsed && (
@@ -878,10 +906,10 @@ function SectionCard({
                 ref={inputRef}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                placeholder="Type a task name and press Enter"
-                onBlur={() => { if (!draft.trim()) { setAdding(false); setDraft(""); } }}
+                placeholder="Type a task name and press Enter (or click off to save)"
+                onBlur={() => commitAdd()}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") { e.preventDefault(); commitAdd(); }
+                  if (e.key === "Enter") { e.preventDefault(); commitAdd({ keepFocus: true }); }
                   if (e.key === "Escape") { setAdding(false); setDraft(""); }
                 }}
                 style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: 14, fontFamily: "inherit", color: "var(--color-text-primary)" }}
@@ -1335,7 +1363,7 @@ function SubtasksSection({
 
   useEffect(() => { if (adding) inputRef.current?.focus(); }, [adding]);
 
-  async function commitAdd() {
+  async function commitAdd(opts?: { keepFocus?: boolean }) {
     const v = draft.trim();
     if (!v) { setAdding(false); setDraft(""); return; }
     await onMutate("/api/tasks", {
@@ -1349,7 +1377,8 @@ function SubtasksSection({
       }),
     });
     setDraft("");
-    inputRef.current?.focus();
+    if (opts?.keepFocus) inputRef.current?.focus();
+    else setAdding(false);
   }
 
   return (
@@ -1398,12 +1427,12 @@ function SubtasksSection({
             ref={inputRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            onBlur={() => { if (!draft.trim()) { setAdding(false); setDraft(""); } }}
+            onBlur={() => commitAdd()}
             onKeyDown={(e) => {
-              if (e.key === "Enter") { e.preventDefault(); commitAdd(); }
+              if (e.key === "Enter") { e.preventDefault(); commitAdd({ keepFocus: true }); }
               if (e.key === "Escape") { setAdding(false); setDraft(""); }
             }}
-            placeholder="Subtask title…"
+            placeholder="Subtask title… (Enter or click off to save)"
             style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: 13, fontFamily: "inherit" }}
           />
         </div>
@@ -1441,7 +1470,7 @@ function SubtaskRow({
     });
   }
 
-  async function commitAdd() {
+  async function commitAdd(opts?: { keepFocus?: boolean }) {
     const v = draft.trim();
     if (!v) { setAdding(false); setDraft(""); return; }
     await onMutate("/api/tasks", {
@@ -1455,7 +1484,8 @@ function SubtaskRow({
       }),
     });
     setDraft("");
-    inputRef.current?.focus();
+    if (opts?.keepFocus) inputRef.current?.focus();
+    else setAdding(false);
   }
 
   return (
@@ -1579,12 +1609,12 @@ function SubtaskRow({
             ref={inputRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            onBlur={() => { if (!draft.trim()) { setAdding(false); setDraft(""); } }}
+            onBlur={() => commitAdd()}
             onKeyDown={(e) => {
-              if (e.key === "Enter") { e.preventDefault(); commitAdd(); }
+              if (e.key === "Enter") { e.preventDefault(); commitAdd({ keepFocus: true }); }
               if (e.key === "Escape") { setAdding(false); setDraft(""); }
             }}
-            placeholder="Subtask title…"
+            placeholder="Subtask title… (Enter or click off to save)"
             style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: 12, fontFamily: "inherit" }}
           />
         </div>
@@ -1607,7 +1637,6 @@ function TaskPanel({
   onOpenTask: (id: string) => void;
 }) {
   const [title, setTitle] = useState(task.title);
-  const [description, setDescription] = useState(task.description ?? "");
   const [goal, setGoal] = useState(task.goal ?? "");
   const [outcome, setOutcome] = useState(task.expectedOutcome ?? "");
 
@@ -1632,10 +1661,6 @@ function TaskPanel({
     const v = title.trim();
     if (!v || v === task.title) { setTitle(task.title); return; }
     await patch({ title: v });
-  }
-  async function commitDesc() {
-    if ((description ?? "") === (task.description ?? "")) return;
-    await patch({ description });
   }
   async function commitGoal() {
     if (goal === (task.goal ?? "")) return;
@@ -1750,16 +1775,12 @@ function TaskPanel({
             ]}
           />
 
-          <PanelLabel>Est. hours</PanelLabel>
-          <input
-            className="task-panel-control"
-            type="number"
-            min={0}
-            step={0.25}
-            value={task.estimatedHours ?? ""}
-            onChange={(e) => patch({ estimatedHours: e.target.value ? Number(e.target.value) : null })}
-            style={panelControlStyle}
-            placeholder="—"
+          <PanelLabel>Est. time</PanelLabel>
+          <EstTimeInput
+            valueHours={task.estimatedHours}
+            onChange={(next) => patch({ estimatedHours: next })}
+            taskId={task.id}
+            taskTitle={task.title}
           />
 
           <PanelLabel>Section</PanelLabel>
@@ -1788,7 +1809,20 @@ function TaskPanel({
           <div style={{ padding: "4px 0" }}>
             <RecurrencePicker
               value={task.recurrence}
-              onChange={(next) => patch({ recurrence: next })}
+              onChange={(next) => {
+                // Whenever the rule changes, re-seed the due date with the
+                // next matching occurrence (e.g. switching Thu→Fri should
+                // update the deadline to next Fri). Clearing the rule leaves
+                // the existing deadline alone.
+                if (next) {
+                  const seed = nextOccurrence(next, new Date());
+                  if (seed) {
+                    patch({ recurrence: next, endDate: formatISODate(seed) });
+                    return;
+                  }
+                }
+                patch({ recurrence: next });
+              }}
             />
           </div>
 
@@ -1810,13 +1844,15 @@ function TaskPanel({
         />
 
         <Field label="Description">
-          <LinkifiedTextarea
-            value={description}
-            onChange={setDescription}
-            onCommit={commitDesc}
-            rows={4}
-            placeholder="Add a description, links, or context…"
-            style={{ ...inputStyle, resize: "vertical" }}
+          <RichTextField
+            key={task.id}
+            initialHtml={task.description ?? ""}
+            parentType="task"
+            parentId={task.id}
+            placeholder="Add a description, links, or context… (paste images)"
+            onCommit={async (html) => {
+              await patch({ description: html });
+            }}
           />
         </Field>
         <div style={{ height: 12 }} />
@@ -2191,6 +2227,934 @@ function EditProjectModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+/* ─── View switcher + alternative views ─── */
+
+function ProjectViewSwitcher({ value, onChange }: { value: ProjectViewMode; onChange: (m: ProjectViewMode) => void }) {
+  const Btn = ({ mode, label, children }: { mode: ProjectViewMode; label: string; children: React.ReactNode }) => (
+    <button
+      onClick={() => onChange(mode)}
+      title={label}
+      aria-label={label}
+      style={{
+        padding: 6,
+        background: value === mode ? "rgba(0,113,227,0.1)" : "transparent",
+        border: "none", borderRadius: 8,
+        color: value === mode ? "var(--color-accent)" : "var(--color-text-secondary)",
+        cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+    >{children}</button>
+  );
+  return (
+    <div style={{ display: "flex", gap: 2 }}>
+      <Btn mode="list" label="List view">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+          <circle cx="4" cy="6" r="1" fill="currentColor" /><circle cx="4" cy="12" r="1" fill="currentColor" /><circle cx="4" cy="18" r="1" fill="currentColor" />
+        </svg>
+      </Btn>
+      <Btn mode="kanban" label="Kanban view">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="4" width="5" height="16" rx="1" /><rect x="10" y="4" width="5" height="10" rx="1" /><rect x="17" y="4" width="4" height="13" rx="1" />
+        </svg>
+      </Btn>
+      <Btn mode="calendar" label="Calendar view">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="5" width="18" height="16" rx="2" /><line x1="3" y1="10" x2="21" y2="10" />
+          <line x1="8" y1="3" x2="8" y2="7" /><line x1="16" y1="3" x2="16" y2="7" />
+        </svg>
+      </Btn>
+      <Btn mode="gantt" label="Gantt view">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <line x1="3" y1="6" x2="3" y2="20" />
+          <rect x="6" y="6" width="9" height="3" rx="1" />
+          <rect x="9" y="11" width="11" height="3" rx="1" />
+          <rect x="6" y="16" width="7" height="3" rx="1" />
+        </svg>
+      </Btn>
+    </div>
+  );
+}
+
+function ProjectKanban({
+  sections, tasksBySection, users, projectId, onOpenTask, onMutate,
+}: {
+  sections: Section[];
+  tasksBySection: Record<string, Task[]>;
+  users: DirectoryUser[];
+  projectId: string;
+  onOpenTask: (id: string) => void;
+  onMutate: (url: string, init: RequestInit) => Promise<unknown>;
+}) {
+  // Show every section as a column, plus an "Unsectioned" column if it has tasks.
+  const columns: { id: string; name: string; tasks: Task[]; isUnsectioned?: boolean }[] = [
+    ...sections.map((s) => ({ id: s.id, name: s.name, tasks: tasksBySection[s.id] ?? [] })),
+  ];
+  if ((tasksBySection.unsectioned ?? []).length > 0) {
+    columns.push({ id: "unsectioned", name: "Unsectioned", tasks: tasksBySection.unsectioned, isUnsectioned: true });
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 8 }}>
+      {columns.map((c) => (
+        <KanbanSectionColumn
+          key={c.id}
+          sectionId={c.isUnsectioned ? null : c.id}
+          name={c.name}
+          tasks={c.tasks}
+          users={users}
+          projectId={projectId}
+          onOpenTask={onOpenTask}
+          onMutate={onMutate}
+        />
+      ))}
+    </div>
+  );
+}
+
+function KanbanSectionColumn({
+  sectionId, name, tasks, users, projectId, onOpenTask, onMutate,
+}: {
+  sectionId: string | null;
+  name: string;
+  tasks: Task[];
+  users: DirectoryUser[];
+  projectId: string;
+  onOpenTask: (id: string) => void;
+  onMutate: (url: string, init: RequestInit) => Promise<unknown>;
+}) {
+  const [dropActive, setDropActive] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => { if (adding) inputRef.current?.focus(); }, [adding]);
+
+  function onDragOver(e: React.DragEvent) {
+    if (!e.dataTransfer.types.includes("application/x-task-id")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (!dropActive) setDropActive(true);
+  }
+  function onDragLeave(e: React.DragEvent) {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setDropActive(false);
+  }
+  async function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDropActive(false);
+    const taskId = e.dataTransfer.getData("application/x-task-id");
+    const fromSectionId = e.dataTransfer.getData("application/x-from-section");
+    if (!taskId) return;
+    if ((fromSectionId || null) === sectionId) return;
+    await onMutate(`/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sectionId }),
+    });
+  }
+  async function commitAdd(opts?: { keepFocus?: boolean }) {
+    const title = draft.trim();
+    if (!title) { setAdding(false); setDraft(""); return; }
+    await onMutate("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId, sectionId, title }),
+    });
+    setDraft("");
+    if (opts?.keepFocus) inputRef.current?.focus();
+    else setAdding(false);
+  }
+
+  return (
+    <div
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      style={{
+        flex: "0 0 300px",
+        background: "var(--bg-card)",
+        borderRadius: 14,
+        boxShadow: dropActive ? "0 0 0 2px var(--color-accent)" : "var(--shadow-card)",
+        overflow: "hidden",
+        display: "flex", flexDirection: "column",
+        maxHeight: "calc(100vh - 280px)",
+        transition: "box-shadow 100ms",
+      }}
+    >
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10,
+        padding: "12px 14px",
+        borderBottom: "1px solid var(--color-border)",
+        flexShrink: 0,
+      }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{name}</span>
+        <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", background: "rgba(0,0,0,0.04)", padding: "2px 7px", borderRadius: 999 }}>
+          {tasks.filter((t) => !t.completed).length}
+        </span>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+        {tasks.length === 0 && !adding && (
+          <div style={{ padding: "10px 6px", fontSize: 12, color: "var(--color-text-tertiary)", fontStyle: "italic" }}>
+            Empty.
+          </div>
+        )}
+        {tasks.map((t) => (
+          <ProjectKanbanCard key={t.id} task={t} users={users} onOpen={() => onOpenTask(t.id)} onMutate={onMutate} />
+        ))}
+        {adding ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", border: "1px solid var(--color-accent)", borderRadius: 10, background: "rgba(0,113,227,0.04)" }}>
+            <input
+              ref={inputRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Task name… (Enter or click off to save)"
+              onBlur={() => commitAdd()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); commitAdd({ keepFocus: true }); }
+                if (e.key === "Escape") { setAdding(false); setDraft(""); }
+              }}
+              style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: 13, fontFamily: "inherit", color: "var(--color-text-primary)" }}
+            />
+          </div>
+        ) : (
+          <button
+            onClick={() => setAdding(true)}
+            style={{
+              padding: "8px 10px", borderRadius: 10,
+              background: "transparent", border: "1px dashed var(--color-border)",
+              cursor: "pointer", fontFamily: "inherit",
+              fontSize: 12, color: "var(--color-text-tertiary)", textAlign: "left",
+            }}
+          >
+            + Add task
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProjectKanbanCard({
+  task, users, onOpen, onMutate,
+}: {
+  task: Task;
+  users: DirectoryUser[];
+  onOpen: () => void;
+  onMutate: (url: string, init: RequestInit) => Promise<unknown>;
+}) {
+  const allTags = useTags();
+  const owner = userMeta(task.ownerEmail, users);
+  const dStat = dueState(task.endDate);
+  const dueLabel = fmtDate(task.endDate);
+  async function toggleComplete(e: React.MouseEvent) {
+    e.stopPropagation();
+    await onMutate(`/api/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ completed: !task.completed }),
+    });
+  }
+  return (
+    <div
+      onClick={onOpen}
+      draggable
+      onDragStart={(e) => {
+        e.stopPropagation();
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("application/x-task-id", task.id);
+        e.dataTransfer.setData("application/x-from-section", task.sectionId ?? "");
+        e.currentTarget.style.opacity = "0.5";
+      }}
+      onDragEnd={(e) => { e.currentTarget.style.opacity = "1"; }}
+      style={{
+        background: "white",
+        border: "1px solid var(--color-border)",
+        borderRadius: 10,
+        padding: "10px 12px",
+        cursor: "pointer",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+        display: "flex", flexDirection: "column", gap: 8,
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.02)")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = "white")}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+        <button
+          onClick={toggleComplete}
+          aria-label={task.completed ? "Mark incomplete" : "Mark complete"}
+          style={{
+            width: 16, height: 16, borderRadius: "50%",
+            border: `1.5px solid ${task.completed ? "#10B981" : "var(--color-text-tertiary)"}`,
+            background: task.completed ? "#10B981" : "transparent",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", padding: 0, flexShrink: 0, marginTop: 2,
+          }}
+        >
+          {task.completed && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="5,12 10,17 19,7" /></svg>}
+        </button>
+        <div style={{
+          flex: 1, minWidth: 0,
+          fontSize: 13, fontWeight: 500, lineHeight: 1.35,
+          color: task.completed ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
+          textDecoration: task.completed ? "line-through" : "none",
+          wordBreak: "break-word",
+        }}>
+          {task.title}
+        </div>
+      </div>
+      {(task.priority || task.tagIds.length > 0 || task.endDate || owner) && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+          {task.priority && (
+            <span style={{
+              fontSize: 10, fontWeight: 600,
+              color: PRIORITY_META[task.priority].color, background: PRIORITY_META[task.priority].bg,
+              padding: "2px 7px", borderRadius: 999,
+            }}>
+              {PRIORITY_META[task.priority].label}
+            </span>
+          )}
+          {task.tagIds.length > 0 && (
+            <TagPillList tagIds={task.tagIds} allTags={allTags} max={2} size="xs" />
+          )}
+          {task.endDate && (
+            <span style={{
+              fontSize: 10, fontWeight: 500,
+              padding: "2px 7px", borderRadius: 999,
+              ...(dStat ? { color: DUE_STYLE[dStat].color, background: DUE_STYLE[dStat].bg } : { color: "var(--color-text-secondary)", background: "rgba(0,0,0,0.04)" }),
+            }}>
+              {dueLabel}
+            </span>
+          )}
+          {owner && (
+            <span style={{ marginLeft: "auto" }}>
+              <Avatar user={owner} size={20} />
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const PROJECT_CAL_WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const PROJECT_CAL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+function ProjectCalendar({
+  tasks, users, onOpenTask,
+}: {
+  tasks: Task[];
+  users: DirectoryUser[];
+  onOpenTask: (id: string) => void;
+}) {
+  const [view, setView] = useState(() => {
+    const t = new Date();
+    return new Date(t.getFullYear(), t.getMonth(), 1);
+  });
+  const monthLabel = `${PROJECT_CAL_MONTHS[view.getMonth()]} ${view.getFullYear()}`;
+  const firstWeekday = ((view.getDay() + 6) % 7); // Mon-first
+  const daysInMonth = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
+
+  // Group tasks by ISO date string
+  const tasksByDate = useMemo(() => {
+    const m = new Map<string, Task[]>();
+    for (const t of tasks) {
+      if (!t.endDate) continue;
+      const list = m.get(t.endDate) ?? [];
+      list.push(t);
+      m.set(t.endDate, list);
+    }
+    return m;
+  }, [tasks]);
+
+  const cells: { iso: string | null; day: number | null }[] = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push({ iso: null, day: null });
+  for (let d = 1; d <= daysInMonth; d++) {
+    const iso = `${view.getFullYear()}-${String(view.getMonth() + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    cells.push({ iso, day: d });
+  }
+  while (cells.length % 7 !== 0) cells.push({ iso: null, day: null });
+
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  return (
+    <div style={{ background: "var(--bg-card)", borderRadius: 18, padding: 18, boxShadow: "var(--shadow-card)" }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 14 }}>
+        <button
+          onClick={() => setView((v) => new Date(v.getFullYear(), v.getMonth() - 1, 1))}
+          style={{ background: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: "var(--color-text-secondary)" }}
+        >‹</button>
+        <h3 style={{ flex: 1, textAlign: "center", margin: 0, fontSize: 15, fontWeight: 600 }}>{monthLabel}</h3>
+        <button
+          onClick={() => setView((v) => new Date(v.getFullYear(), v.getMonth() + 1, 1))}
+          style={{ background: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: "var(--color-text-secondary)" }}
+        >›</button>
+        <button
+          onClick={() => { const t = new Date(); setView(new Date(t.getFullYear(), t.getMonth(), 1)); }}
+          style={{ marginLeft: 8, background: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: "var(--color-text-secondary)" }}
+        >Today</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1, background: "var(--color-border)", borderRadius: 10, overflow: "hidden" }}>
+        {PROJECT_CAL_WEEKDAYS.map((w) => (
+          <div key={w} style={{ background: "rgba(0,0,0,0.02)", padding: "8px 6px", textAlign: "center", fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)" }}>{w}</div>
+        ))}
+        {cells.map((c, i) => {
+          const dayTasks = c.iso ? (tasksByDate.get(c.iso) ?? []) : [];
+          const isToday = c.iso === todayIso;
+          return (
+            <div key={i} style={{
+              background: c.day == null ? "rgba(0,0,0,0.015)" : "white",
+              minHeight: 90, padding: 6,
+              display: "flex", flexDirection: "column", gap: 4,
+              outline: isToday ? "2px solid var(--color-accent)" : "none",
+              outlineOffset: -2,
+            }}>
+              {c.day != null && (
+                <div style={{ fontSize: 11, fontWeight: 500, color: isToday ? "var(--color-accent)" : "var(--color-text-secondary)" }}>{c.day}</div>
+              )}
+              {dayTasks.map((t) => {
+                const owner = userMeta(t.ownerEmail, users);
+                const ownerColor = owner?.color ?? "#94A3B8";
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => onOpenTask(t.id)}
+                    title={t.title}
+                    style={{
+                      textAlign: "left",
+                      background: `${ownerColor}1A`,
+                      color: t.completed ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
+                      textDecoration: t.completed ? "line-through" : "none",
+                      border: `1px solid ${ownerColor}40`,
+                      borderRadius: 6,
+                      padding: "3px 6px", fontSize: 11, fontWeight: 500,
+                      cursor: "pointer", fontFamily: "inherit",
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    }}
+                  >
+                    {t.title}
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const PROJ_GANTT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function ProjectGantt({
+  tasks, sections, users, onOpenTask,
+}: {
+  tasks: Task[];
+  sections: Section[];
+  users: DirectoryUser[];
+  onOpenTask: (id: string) => void;
+}) {
+  // Default span: 2 months centered on today (1 month back, 1 month forward).
+  const [anchorMonth, setAnchorMonth] = useState(() => {
+    const t = new Date();
+    return new Date(t.getFullYear(), t.getMonth() - 1, 1);
+  });
+  const monthSpan = 3;
+  const months: Date[] = [];
+  for (let i = 0; i < monthSpan; i++) {
+    months.push(new Date(anchorMonth.getFullYear(), anchorMonth.getMonth() + i, 1));
+  }
+  const rangeStart = months[0].getTime();
+  const rangeEnd = new Date(months[monthSpan - 1].getFullYear(), months[monthSpan - 1].getMonth() + 1, 0, 23, 59).getTime();
+  const totalMs = rangeEnd - rangeStart;
+
+  function parseIso(iso: string | null): number | null {
+    if (!iso) return null;
+    const [y, m, d] = iso.split("-").map(Number);
+    if (!y || !m || !d) return null;
+    return new Date(y, m - 1, d).getTime();
+  }
+
+  const sectionName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of sections) m.set(s.id, s.name);
+    return m;
+  }, [sections]);
+
+  const dated: { t: Task; startMs: number; endMs: number }[] = [];
+  const undated: Task[] = [];
+  for (const t of tasks) {
+    const s = parseIso(t.startDate);
+    const e = parseIso(t.endDate);
+    if (s == null && e == null) { undated.push(t); continue; }
+    const startMs = s ?? e!;
+    const endMs = e ?? s!;
+    if (endMs < rangeStart || startMs > rangeEnd) continue;
+    dated.push({ t, startMs, endMs });
+  }
+  // Sort by section then start date
+  dated.sort((a, b) => {
+    const sa = a.t.sectionId ?? "";
+    const sb = b.t.sectionId ?? "";
+    if (sa !== sb) return sa.localeCompare(sb);
+    return a.startMs - b.startMs;
+  });
+
+  const todayMs = Date.now();
+  const todayPct = todayMs >= rangeStart && todayMs <= rangeEnd ? ((todayMs - rangeStart) / totalMs) * 100 : null;
+
+  return (
+    <div style={{ background: "var(--bg-card)", borderRadius: 18, padding: 18, boxShadow: "var(--shadow-card)" }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 14, gap: 8 }}>
+        <button
+          onClick={() => setAnchorMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
+          style={{ background: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: "var(--color-text-secondary)" }}
+        >‹</button>
+        <h3 style={{ flex: 1, textAlign: "center", margin: 0, fontSize: 14, fontWeight: 600 }}>
+          {PROJ_GANTT_MONTHS[months[0].getMonth()]} {months[0].getFullYear()} – {PROJ_GANTT_MONTHS[months[monthSpan - 1].getMonth()]} {months[monthSpan - 1].getFullYear()}
+        </h3>
+        <button
+          onClick={() => setAnchorMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
+          style={{ background: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: "var(--color-text-secondary)" }}
+        >›</button>
+        <button
+          onClick={() => { const t = new Date(); setAnchorMonth(new Date(t.getFullYear(), t.getMonth() - 1, 1)); }}
+          style={{ background: "transparent", border: "1px solid var(--color-border)", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: "var(--color-text-secondary)" }}
+        >Today</button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${monthSpan}, 1fr)`, marginLeft: 240, borderBottom: "1px solid var(--color-border)" }}>
+        {months.map((m, i) => (
+          <div key={i} style={{
+            padding: "6px 8px", fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)",
+            borderLeft: "1px solid var(--color-border)", textAlign: "center",
+          }}>
+            {PROJ_GANTT_MONTHS[m.getMonth()]} {m.getFullYear()}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ position: "relative" }}>
+        {todayPct != null && (
+          <div style={{
+            position: "absolute",
+            left: `calc(240px + ${todayPct}% * (100% - 240px) / 100)`,
+            top: 0, bottom: 0, width: 1.5,
+            background: "var(--color-accent)", zIndex: 1, pointerEvents: "none",
+          }} />
+        )}
+        {dated.length === 0 ? (
+          <div style={{ padding: "24px 16px", textAlign: "center", fontSize: 12, color: "var(--color-text-tertiary)", fontStyle: "italic" }}>
+            No scheduled tasks in this range.
+          </div>
+        ) : (
+          dated.map(({ t, startMs, endMs }) => {
+            const leftPct = Math.max(0, ((startMs - rangeStart) / totalMs) * 100);
+            const widthPct = Math.max(1.5, ((Math.min(endMs, rangeEnd) - Math.max(startMs, rangeStart)) / totalMs) * 100);
+            const owner = userMeta(t.ownerEmail, users);
+            const ownerColor = owner?.color ?? "#94A3B8";
+            const sectionLabel = t.sectionId ? sectionName.get(t.sectionId) ?? "" : "Unsectioned";
+            return (
+              <div key={t.id} style={{
+                display: "grid", gridTemplateColumns: "240px 1fr", borderBottom: "1px solid var(--color-border)",
+                alignItems: "center", minHeight: 32,
+              }}>
+                <button
+                  onClick={() => onOpenTask(t.id)}
+                  style={{
+                    background: "transparent", border: "none", padding: "6px 10px", cursor: "pointer", fontFamily: "inherit",
+                    textAlign: "left", display: "flex", alignItems: "center", gap: 6, minWidth: 0,
+                  }}
+                >
+                  <span style={{
+                    fontSize: 10, fontWeight: 500, color: "var(--color-text-tertiary)",
+                    background: "rgba(0,0,0,0.04)", padding: "1px 6px", borderRadius: 999,
+                    flexShrink: 0, maxWidth: 80, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  }}>
+                    {sectionLabel}
+                  </span>
+                  <span style={{
+                    fontSize: 12, fontWeight: 500,
+                    color: t.completed ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
+                    textDecoration: t.completed ? "line-through" : "none",
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0,
+                  }}>
+                    {t.title}
+                  </span>
+                </button>
+                <div style={{ position: "relative", height: 24 }}>
+                  <button
+                    onClick={() => onOpenTask(t.id)}
+                    title={`${fmtDate(t.startDate)} → ${fmtDate(t.endDate)}`}
+                    style={{
+                      position: "absolute",
+                      left: `${leftPct}%`, width: `${widthPct}%`,
+                      top: 4, bottom: 4,
+                      background: t.completed ? "rgba(0,0,0,0.15)" : `${ownerColor}DD`,
+                      border: "none", borderRadius: 5,
+                      cursor: "pointer", fontFamily: "inherit",
+                      color: "white", fontSize: 10, fontWeight: 600,
+                      padding: "0 6px", textAlign: "left",
+                      display: "flex", alignItems: "center",
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    }}
+                  >
+                    {widthPct > 6 ? t.title : ""}
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {undated.length > 0 && (
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--color-border)" }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+            No scheduled dates
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {undated.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => onOpenTask(t.id)}
+                style={{
+                  background: "rgba(0,0,0,0.04)", border: "1px solid var(--color-border)",
+                  borderRadius: 999, padding: "4px 10px", fontSize: 11, fontWeight: 500,
+                  color: "var(--color-text-secondary)", cursor: "pointer", fontFamily: "inherit",
+                }}
+              >
+                {t.title}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Estimated time input + start-timer button ─── */
+
+function EstTimeInput({
+  valueHours, onChange, taskId, taskTitle,
+}: {
+  valueHours: number | null;
+  onChange: (next: number | null) => void;
+  taskId: string;
+  taskTitle: string;
+}) {
+  const totalMinutes = valueHours == null ? null : Math.round(valueHours * 60);
+  const hPart = totalMinutes == null ? "" : String(Math.floor(totalMinutes / 60));
+  const mPart = totalMinutes == null ? "" : String(totalMinutes % 60);
+  const { startTimer, active } = useTimer();
+  const isActiveForThisTask = active?.taskId === taskId;
+
+  function commit(nextH: string, nextM: string) {
+    const h = nextH === "" ? 0 : Math.max(0, Number(nextH) || 0);
+    const m = nextM === "" ? 0 : Math.max(0, Number(nextM) || 0);
+    const minutes = h * 60 + m;
+    if (minutes <= 0) {
+      onChange(null);
+      return;
+    }
+    onChange(minutes / 60);
+  }
+
+  const inputStyle: React.CSSProperties = {
+    ...panelControlStyle,
+    width: 56, textAlign: "right", padding: "6px 8px",
+  };
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      <input
+        type="number" min={0} step={1}
+        value={hPart}
+        onChange={(e) => commit(e.target.value, mPart)}
+        style={inputStyle}
+        placeholder="0"
+        aria-label="Hours"
+      />
+      <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>h</span>
+      <input
+        type="number" min={0} max={59} step={1}
+        value={mPart}
+        onChange={(e) => commit(hPart, e.target.value)}
+        style={inputStyle}
+        placeholder="0"
+        aria-label="Minutes"
+      />
+      <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>m</span>
+      {totalMinutes != null && totalMinutes > 0 && !isActiveForThisTask && (
+        <button
+          onClick={() => startTimer(taskId, taskTitle, totalMinutes * 60)}
+          title="Start countdown timer"
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 4,
+            padding: "6px 10px", borderRadius: 8,
+            background: "var(--color-accent)", color: "white",
+            border: "none", cursor: "pointer", fontFamily: "inherit",
+            fontSize: 12, fontWeight: 600,
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="6,4 20,12 6,20" />
+          </svg>
+          Start
+        </button>
+      )}
+      {isActiveForThisTask && (
+        <span style={{ fontSize: 11, color: "var(--color-accent)", fontWeight: 600 }}>Timer running…</span>
+      )}
+    </div>
+  );
+}
+
+/* ─── Filters dropdown ─── */
+
+const TRACKER_OPTIONS = [
+  { key: "overdue" as TrackerStatus, label: "Overdue" },
+  { key: "behind" as TrackerStatus, label: "Behind" },
+  { key: "on_track" as TrackerStatus, label: "On track" },
+  { key: "ahead" as TrackerStatus, label: "Ahead" },
+  { key: "upcoming" as TrackerStatus, label: "Upcoming" },
+  { key: "unscheduled" as TrackerStatus, label: "Unscheduled" },
+];
+
+function TaskFiltersDropdown({
+  users, filterAssignee, setFilterAssignee, showCompleted, setShowCompleted,
+  trackerFilter, setTrackerFilter, rollup,
+}: {
+  users: DirectoryUser[];
+  filterAssignee: string | "all";
+  setFilterAssignee: (v: string | "all") => void;
+  showCompleted: boolean;
+  setShowCompleted: (v: boolean | ((p: boolean) => boolean)) => void;
+  trackerFilter: TrackerStatus | "all";
+  setTrackerFilter: (v: TrackerStatus | "all") => void;
+  rollup: ReturnType<typeof rollupTaskStatuses> | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    function onClick(e: MouseEvent) {
+      const t = e.target as Node;
+      if (buttonRef.current?.contains(t)) return;
+      if (popoverRef.current?.contains(t)) return;
+      setOpen(false);
+    }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
+
+  // Active filter count (excludes defaults)
+  const activeCount =
+    (filterAssignee !== "all" ? 1 : 0) +
+    (trackerFilter !== "all" ? 1 : 0) +
+    (showCompleted ? 1 : 0);
+
+  const assigneeLabel =
+    filterAssignee === "all" ? "Everyone"
+    : filterAssignee === "" ? "Unassigned"
+    : userMeta(filterAssignee, users)?.label ?? filterAssignee;
+
+  function clearAll() {
+    setFilterAssignee("all");
+    setTrackerFilter("all");
+    setShowCompleted(true);
+  }
+
+  return (
+    <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 8 }}>
+      <button
+        ref={buttonRef}
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 6,
+          padding: "6px 12px", borderRadius: 999,
+          background: open ? "rgba(0,113,227,0.08)" : "transparent",
+          border: `1px solid ${open ? "var(--color-accent)" : "var(--color-border)"}`,
+          color: open ? "var(--color-accent)" : "var(--color-text-secondary)",
+          fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
+        }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M3 5h18M6 12h12M10 19h4" />
+        </svg>
+        Filters
+        {activeCount > 0 && (
+          <span style={{
+            background: "var(--color-accent)", color: "white",
+            fontSize: 10, fontWeight: 700,
+            padding: "1px 6px", borderRadius: 999, minWidth: 16,
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+          }}>{activeCount}</span>
+        )}
+      </button>
+
+      {/* Active filter pills (only shown for non-default values) */}
+      {filterAssignee !== "all" && (
+        <ActivePill label={`Assignee: ${assigneeLabel}`} onClear={() => setFilterAssignee("all")} />
+      )}
+      {trackerFilter !== "all" && (
+        <ActivePill label={`Status: ${TRACKER_OPTIONS.find((o) => o.key === trackerFilter)?.label ?? trackerFilter}`} onClear={() => setTrackerFilter("all")} />
+      )}
+      {showCompleted && (
+        <ActivePill label="Showing completed" onClear={() => setShowCompleted(false)} />
+      )}
+
+      {open && (
+        <div
+          ref={popoverRef}
+          style={{
+            position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 30,
+            width: 280,
+            background: "white",
+            border: "1px solid var(--color-border)",
+            borderRadius: 12,
+            boxShadow: "0 10px 32px rgba(0,0,0,0.15)",
+            padding: 14,
+            display: "flex", flexDirection: "column", gap: 14,
+            maxHeight: "min(70vh, 480px)", overflowY: "auto",
+          }}
+        >
+          <FilterSection label="Assignee">
+            <FilterRadio active={filterAssignee === "all"} onClick={() => setFilterAssignee("all")} label="Everyone" />
+            <FilterRadio active={filterAssignee === ""} onClick={() => setFilterAssignee("")} label="Unassigned" />
+            {users.map((u) => (
+              <FilterRadio
+                key={u.email}
+                active={filterAssignee === u.email}
+                onClick={() => setFilterAssignee(u.email)}
+                label={u.label}
+                colorDot={u.color}
+              />
+            ))}
+          </FilterSection>
+
+          {rollup && rollup.total > 0 && (
+            <FilterSection label="Status">
+              <FilterRadio active={trackerFilter === "all"} onClick={() => setTrackerFilter("all")} label={`All (${rollup.total})`} />
+              {TRACKER_OPTIONS.map((o) => {
+                const count = rollup[o.key];
+                if (count === 0) return null;
+                return (
+                  <FilterRadio
+                    key={o.key}
+                    active={trackerFilter === o.key}
+                    onClick={() => setTrackerFilter(o.key)}
+                    label={`${o.label} (${count})`}
+                    colorDot={TRACKER_STYLE[o.key].dot}
+                  />
+                );
+              })}
+            </FilterSection>
+          )}
+
+          <FilterSection label="Display">
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--color-text-primary)", cursor: "pointer", padding: "4px 0" }}>
+              <input
+                type="checkbox"
+                checked={showCompleted}
+                onChange={(e) => setShowCompleted(e.target.checked)}
+                style={{ margin: 0 }}
+              />
+              Show completed
+            </label>
+          </FilterSection>
+
+          {activeCount > 0 && (
+            <button
+              onClick={clearAll}
+              style={{
+                background: "transparent", border: "1px solid var(--color-border)",
+                borderRadius: 8, padding: "6px 10px",
+                fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)",
+                cursor: "pointer", fontFamily: "inherit",
+              }}
+            >
+              Reset all filters
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FilterSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+        {label}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function FilterRadio({ active, onClick, label, colorDot }: { active: boolean; onClick: () => void; label: string; colorDot?: string }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "flex", alignItems: "center", gap: 8,
+        padding: "6px 8px", borderRadius: 6,
+        background: active ? "rgba(0,113,227,0.08)" : "transparent",
+        border: "none", cursor: "pointer", fontFamily: "inherit",
+        fontSize: 13, color: active ? "var(--color-accent)" : "var(--color-text-primary)",
+        fontWeight: active ? 600 : 400,
+        textAlign: "left", width: "100%",
+      }}
+      onMouseEnter={(e) => { if (!active) (e.currentTarget.style.background = "rgba(0,0,0,0.04)"); }}
+      onMouseLeave={(e) => { if (!active) (e.currentTarget.style.background = "transparent"); }}
+    >
+      {colorDot && <span style={{ width: 8, height: 8, borderRadius: "50%", background: colorDot, flexShrink: 0 }} />}
+      <span style={{ flex: 1 }}>{label}</span>
+      {active && (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <polyline points="5,12 10,17 19,7" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
+function ActivePill({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 4,
+      padding: "4px 6px 4px 10px", borderRadius: 999,
+      background: "rgba(0,113,227,0.08)",
+      color: "var(--color-accent)",
+      fontSize: 11, fontWeight: 500,
+    }}>
+      {label}
+      <button
+        onClick={onClear}
+        aria-label={`Clear ${label}`}
+        style={{
+          background: "transparent", border: "none", padding: 2,
+          cursor: "pointer", color: "inherit", display: "flex",
+          borderRadius: "50%",
+        }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <path d="M18 6L6 18M6 6l12 12" />
+        </svg>
+      </button>
+    </span>
   );
 }
 

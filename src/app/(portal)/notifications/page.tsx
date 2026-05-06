@@ -2,12 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  clearAll as clearAllDismissals,
-  dismiss,
-  getDismissed,
-  restore,
-} from "@/lib/notifications-dismissed";
 
 interface Notification {
   id: string;
@@ -34,76 +28,83 @@ interface Notification {
     parentUrl?: string;
   } | null;
   readAt: string | null;
+  archivedAt: string | null;
   createdAt: string;
 }
 
-type Filter = "all" | "active" | "dismissed";
+type Filter = "all" | "unread" | "archived";
 
 export default function NotificationsHistoryPage() {
   const [notifs, setNotifs] = useState<Notification[] | null>(null);
-  const [me, setMe] = useState<string | null>(null);
-  const [dismissedSet, setDismissedSet] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<Filter>("all");
 
   const refresh = useCallback(async () => {
-    const res = await fetch("/api/notifications", { cache: "no-store" });
+    const res = await fetch("/api/notifications?include=all", { cache: "no-store" });
     if (!res.ok) return;
     const j = (await res.json()) as { notifications: Notification[] };
     setNotifs(j.notifications);
   }, []);
 
-  useEffect(() => {
-    fetch("/api/auth/me", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j: { email: string | null } | null) => {
-        if (j?.email) {
-          setMe(j.email);
-          setDismissedSet(getDismissed(j.email));
-        }
-      })
-      .catch(() => {});
-    refresh();
-  }, [refresh]);
+  useEffect(() => { refresh(); }, [refresh]);
 
-  useEffect(() => {
-    if (!me) return;
-    function sync() { setDismissedSet(getDismissed(me)); }
-    window.addEventListener("storage", sync);
-    window.addEventListener("acb-notifications-dismissed-changed", sync);
-    return () => {
-      window.removeEventListener("storage", sync);
-      window.removeEventListener("acb-notifications-dismissed-changed", sync);
-    };
-  }, [me]);
+  const counts = useMemo(() => {
+    if (!notifs) return { all: 0, unread: 0, archived: 0 };
+    let all = 0, unread = 0, archived = 0;
+    for (const n of notifs) {
+      if (n.archivedAt) archived++;
+      else {
+        all++;
+        if (!n.readAt) unread++;
+      }
+    }
+    return { all, unread, archived };
+  }, [notifs]);
 
   const filtered = useMemo(() => {
     if (!notifs) return null;
-    if (filter === "active") return notifs.filter((n) => !dismissedSet.has(n.id));
-    if (filter === "dismissed") return notifs.filter((n) => dismissedSet.has(n.id));
-    return notifs;
-  }, [notifs, dismissedSet, filter]);
+    if (filter === "archived") return notifs.filter((n) => n.archivedAt);
+    if (filter === "unread") return notifs.filter((n) => !n.archivedAt && !n.readAt);
+    return notifs.filter((n) => !n.archivedAt);
+  }, [notifs, filter]);
 
-  const counts = useMemo(() => {
-    if (!notifs) return { all: 0, active: 0, dismissed: 0 };
-    let active = 0, d = 0;
-    for (const n of notifs) {
-      if (dismissedSet.has(n.id)) d++; else active++;
-    }
-    return { all: notifs.length, active, dismissed: d };
-  }, [notifs, dismissedSet]);
-
-  function handleDismiss(id: string) {
-    if (!me) return;
-    dismiss(me, id);
+  async function archiveIds(ids: string[]) {
+    if (ids.length === 0) return;
+    const res = await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archiveIds: ids }),
+    });
+    if (res.ok) refresh();
   }
-  function handleRestore(id: string) {
-    if (!me) return;
-    restore(me, id);
+  async function restoreIds(ids: string[]) {
+    if (ids.length === 0) return;
+    const res = await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ restoreIds: ids }),
+    });
+    if (res.ok) refresh();
   }
-  function handleRestoreAll() {
-    if (!me) return;
-    if (!confirm("Restore every dismissed notification?")) return;
-    clearAllDismissals(me);
+  async function deleteOne(id: string) {
+    const res = await fetch(`/api/notifications/${id}`, { method: "DELETE" });
+    if (res.ok) refresh();
+  }
+  async function archiveAllRead() {
+    if (!confirm("Archive every read notification?")) return;
+    const res = await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archiveAllRead: true }),
+    });
+    if (res.ok) refresh();
+  }
+  async function deleteAllArchived() {
+    if (!notifs) return;
+    const archivedCount = notifs.filter((n) => n.archivedAt).length;
+    if (archivedCount === 0) return;
+    if (!confirm(`Permanently delete all ${archivedCount} archived notifications? This cannot be undone.`)) return;
+    const res = await fetch("/api/notifications?all=archived", { method: "DELETE" });
+    if (res.ok) refresh();
   }
 
   return (
@@ -113,27 +114,30 @@ export default function NotificationsHistoryPage() {
           Notifications
         </h1>
         <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--color-text-secondary)" }}>
-          Your full history. Dismissed notifications stay here so you can find them again.
+          Your full history. Archived notifications are kept here so you can find them again.
         </p>
       </div>
 
       <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
         <FilterPill label={`All (${counts.all})`} active={filter === "all"} onClick={() => setFilter("all")} />
-        <FilterPill label={`Active (${counts.active})`} active={filter === "active"} onClick={() => setFilter("active")} />
-        <FilterPill label={`Dismissed (${counts.dismissed})`} active={filter === "dismissed"} onClick={() => setFilter("dismissed")} />
-        {counts.dismissed > 0 && (
-          <button
-            onClick={handleRestoreAll}
-            style={{
-              marginLeft: "auto",
-              background: "transparent", border: "1px solid var(--color-border)",
-              padding: "5px 10px", borderRadius: 999, fontSize: 12, fontWeight: 600,
-              color: "var(--color-text-secondary)", cursor: "pointer", fontFamily: "inherit",
-            }}
-          >
-            Restore all dismissed
-          </button>
-        )}
+        <FilterPill label={`Unread (${counts.unread})`} active={filter === "unread"} onClick={() => setFilter("unread")} />
+        <FilterPill label={`Archived (${counts.archived})`} active={filter === "archived"} onClick={() => setFilter("archived")} />
+        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+          {filter !== "archived" && filtered && filtered.some((n) => n.readAt) && (
+            <BulkButton onClick={archiveAllRead}>Archive all read</BulkButton>
+          )}
+          {filter !== "archived" && filtered && filtered.length > 0 && (
+            <BulkButton onClick={() => archiveIds(filtered.map((n) => n.id))}>Clear all</BulkButton>
+          )}
+          {filter === "archived" && counts.archived > 0 && (
+            <>
+              <BulkButton onClick={() => restoreIds(notifs!.filter((n) => n.archivedAt).map((n) => n.id))}>
+                Restore all
+              </BulkButton>
+              <BulkButton onClick={deleteAllArchived} danger>Delete all</BulkButton>
+            </>
+          )}
+        </div>
       </div>
 
       <div style={{
@@ -149,16 +153,19 @@ export default function NotificationsHistoryPage() {
         )}
         {filtered && filtered.length === 0 && (
           <div style={{ padding: 40, textAlign: "center", fontSize: 13, color: "var(--color-text-tertiary)" }}>
-            {filter === "dismissed" ? "Nothing dismissed yet." : "Nothing here yet."}
+            {filter === "archived" ? "Nothing archived yet." : filter === "unread" ? "No unread notifications." : "Nothing here yet."}
           </div>
         )}
         {filtered && filtered.map((n) => (
           <HistoryRow
             key={n.id}
             n={n}
-            isDismissed={dismissedSet.has(n.id)}
-            onDismiss={() => handleDismiss(n.id)}
-            onRestore={() => handleRestore(n.id)}
+            onArchive={() => archiveIds([n.id])}
+            onRestore={() => restoreIds([n.id])}
+            onDelete={() => {
+              if (!confirm("Permanently delete this notification?")) return;
+              deleteOne(n.id);
+            }}
           />
         ))}
       </div>
@@ -183,26 +190,44 @@ function FilterPill({ label, active, onClick }: { label: string; active: boolean
   );
 }
 
+function BulkButton({ children, onClick, danger }: { children: React.ReactNode; onClick: () => void; danger?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        background: "transparent",
+        border: `1px solid ${danger ? "#FCA5A5" : "var(--color-border)"}`,
+        padding: "5px 10px", borderRadius: 999, fontSize: 12, fontWeight: 600,
+        color: danger ? "#B91C1C" : "var(--color-text-secondary)",
+        cursor: "pointer", fontFamily: "inherit",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 function HistoryRow({
-  n, isDismissed, onDismiss, onRestore,
+  n, onArchive, onRestore, onDelete,
 }: {
   n: Notification;
-  isDismissed: boolean;
-  onDismiss: () => void;
+  onArchive: () => void;
   onRestore: () => void;
+  onDelete: () => void;
 }) {
+  const isArchived = !!n.archivedAt;
   const { text, href } = describeNotification(n);
 
   const inner = (
     <div style={{
       display: "flex", gap: 10,
       padding: "12px 16px",
-      opacity: isDismissed ? 0.55 : 1,
+      opacity: isArchived ? 0.6 : 1,
     }}>
       <span style={{
         flexShrink: 0, marginTop: 5,
         width: 8, height: 8, borderRadius: "50%",
-        background: n.readAt === null && !isDismissed ? "var(--color-accent)" : "transparent",
+        background: !n.readAt && !isArchived ? "var(--color-accent)" : "transparent",
       }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, color: "var(--color-text-primary)", lineHeight: 1.45 }}>
@@ -221,7 +246,7 @@ function HistoryRow({
         )}
         <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 6 }}>
           {new Date(n.createdAt).toLocaleString()}
-          {isDismissed && " · dismissed"}
+          {isArchived && " · archived"}
         </div>
       </div>
     </div>
@@ -239,24 +264,53 @@ function HistoryRow({
       ) : (
         <div style={{ flex: 1, minWidth: 0 }}>{inner}</div>
       )}
-      <button
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); isDismissed ? onRestore() : onDismiss(); }}
-        title={isDismissed ? "Restore" : "Dismiss"}
-        aria-label={isDismissed ? "Restore notification" : "Dismiss notification"}
-        style={{
-          background: "transparent", border: "none", cursor: "pointer",
-          color: "var(--color-text-tertiary)", padding: "0 14px",
-          display: "flex", alignItems: "center", flexShrink: 0,
-          fontSize: 11, fontWeight: 600,
-        }}
-      >
-        {isDismissed ? "Restore" : (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        )}
-      </button>
+      {isArchived ? (
+        <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+          <RowAction label="Restore" onClick={onRestore} />
+          <RowAction label="Delete" onClick={onDelete} danger />
+        </div>
+      ) : (
+        <RowAction
+          label=""
+          ariaLabel="Archive notification"
+          title="Archive"
+          onClick={onArchive}
+          icon={
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          }
+        />
+      )}
     </div>
+  );
+}
+
+function RowAction({
+  label, onClick, danger, icon, ariaLabel, title,
+}: {
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+  icon?: React.ReactNode;
+  ariaLabel?: string;
+  title?: string;
+}) {
+  return (
+    <button
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClick(); }}
+      title={title ?? label}
+      aria-label={ariaLabel ?? label}
+      style={{
+        background: "transparent", border: "none", cursor: "pointer",
+        color: danger ? "#B91C1C" : "var(--color-text-tertiary)",
+        padding: "0 14px",
+        display: "flex", alignItems: "center", flexShrink: 0,
+        fontSize: 11, fontWeight: 600, fontFamily: "inherit",
+      }}
+    >
+      {icon ?? label}
+    </button>
   );
 }
 

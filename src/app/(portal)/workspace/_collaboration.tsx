@@ -5,6 +5,7 @@ import { upload } from "@vercel/blob/client";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
+import Image from "@tiptap/extension-image";
 import {
   Avatar,
   DirectoryUser,
@@ -20,6 +21,34 @@ export type ParentType = "project" | "task";
 
 function commentBodyIsHtml(body: string): boolean {
   return /^\s*<(p|ul|ol|h[1-6]|blockquote|pre|div|span)\b/i.test(body);
+}
+
+const INLINE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+
+/** Upload an image inline (no Attachment row created — just gets back a hosted URL).
+ *  Used by the comment composer + task description rich-text editor for paste/drop.
+ *  Goes server-side via /api/inline-images/upload so no cross-origin PUT is needed. */
+async function uploadInlineImage(file: File, parentType: ParentType, parentId: string): Promise<string | null> {
+  if (file.size > INLINE_UPLOAD_MAX_BYTES) {
+    alert(`Image too large (max ${Math.round(INLINE_UPLOAD_MAX_BYTES / 1024 / 1024)} MB)`);
+    return null;
+  }
+  try {
+    const fd = new FormData();
+    fd.append("file", file, file.name || "pasted-image");
+    fd.append("parentType", parentType);
+    fd.append("parentId", parentId);
+    const res = await fetch("/api/inline-images/upload", { method: "POST", body: fd });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      throw new Error((j as { error?: string }).error || `HTTP ${res.status}`);
+    }
+    const json = (await res.json()) as { url: string };
+    return json.url;
+  } catch (e) {
+    alert("Image upload failed: " + (e instanceof Error ? e.message : "unknown"));
+    return null;
+  }
 }
 
 /* ─────────────────────────────────── */
@@ -47,10 +76,12 @@ export function Comments({
   const [list, setList] = useState<Comment[] | null>(null);
   const [posting, setPosting] = useState(false);
 
+  const editorRef = useRef<Editor | null>(null);
   const editor = useEditor({
     extensions: [
       StarterKit,
-      Placeholder.configure({ placeholder: "Add a comment… (use @ to mention)" }),
+      Placeholder.configure({ placeholder: "Add a comment… (use @ to mention, paste images)" }),
+      Image.configure({ HTMLAttributes: { style: "max-width:100%;height:auto;border-radius:8px;" } }),
       CommentMention,
     ],
     immediatelyRender: false,
@@ -66,8 +97,49 @@ export function Comments({
         }
         return false;
       },
+      handlePaste(_view, event) {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
+        const imageItems = Array.from(items).filter((i) => i.type.startsWith("image/"));
+        if (imageItems.length === 0) return false;
+        event.preventDefault();
+        (async () => {
+          for (const item of imageItems) {
+            const file = item.getAsFile();
+            if (!file) continue;
+            const url = await uploadInlineImage(file, parentType, parentId);
+            if (!url) continue;
+            editorRef.current?.chain().focus().setImage({ src: url, alt: file.name || "pasted-image" }).run();
+          }
+        })();
+        return true;
+      },
+      handleDrop(view, event) {
+        const dragEvent = event as DragEvent;
+        const files = dragEvent.dataTransfer?.files;
+        if (!files || files.length === 0) return false;
+        const imageFiles = Array.from(files).filter((f) => f.type.startsWith("image/"));
+        if (imageFiles.length === 0) return false;
+        event.preventDefault();
+        const coords = view.posAtCoords({ left: dragEvent.clientX, top: dragEvent.clientY });
+        const insertPos = coords?.pos ?? view.state.selection.from;
+        (async () => {
+          for (const file of imageFiles) {
+            const url = await uploadInlineImage(file, parentType, parentId);
+            if (!url) continue;
+            editorRef.current
+              ?.chain()
+              .focus()
+              .insertContentAt(insertPos, { type: "image", attrs: { src: url, alt: file.name } })
+              .run();
+          }
+        })();
+        return true;
+      },
     },
   });
+
+  useEffect(() => { editorRef.current = editor; }, [editor]);
 
   const refresh = useCallback(async () => {
     const res = await fetch(
@@ -163,6 +235,23 @@ export function Comments({
 
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
         <div
+          onDragOver={(e) => {
+            if (Array.from(e.dataTransfer.items).some((i) => i.kind === "file")) {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "copy";
+            }
+          }}
+          onDrop={async (e) => {
+            const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
+            if (files.length === 0) return;
+            e.preventDefault();
+            e.stopPropagation();
+            for (const file of files) {
+              const url = await uploadInlineImage(file, parentType, parentId);
+              if (!url) continue;
+              editorRef.current?.chain().focus().setImage({ src: url, alt: file.name || "image" }).run();
+            }
+          }}
           style={{
             ...inputStyle,
             flex: 1,
@@ -669,6 +758,118 @@ function NotesToolbar({ editor }: { editor: Editor }) {
       {btn(editor.isActive("orderedList"), () => editor.chain().focus().toggleOrderedList().run(), "1. List")}
       {btn(editor.isActive("blockquote"), () => editor.chain().focus().toggleBlockquote().run(), "Quote")}
       {btn(editor.isActive("codeBlock"), () => editor.chain().focus().toggleCodeBlock().run(), "Code")}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────── */
+/* Compact rich-text field             */
+/* For task descriptions etc. — supports paste/drop images, no toolbar. */
+/* ─────────────────────────────────── */
+
+export function RichTextField({
+  initialHtml, parentType, parentId, onCommit, placeholder, minHeight = 90,
+}: {
+  initialHtml: string;
+  parentType: ParentType;
+  parentId: string;
+  /** Called with the latest HTML, debounced 600ms after the last edit. */
+  onCommit: (html: string) => void | Promise<void>;
+  placeholder?: string;
+  minHeight?: number;
+}) {
+  const editorRef = useRef<Editor | null>(null);
+  const lastSavedRef = useRef<string>(initialHtml);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const initialContent = (() => {
+    const s = initialHtml ?? "";
+    if (!s.trim()) return "";
+    if (looksLikeHtml(s)) return s;
+    return `<p>${s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br/>")}</p>`;
+  })();
+
+  function scheduleSave() {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      const html = editorRef.current?.getHTML() ?? "";
+      const normalized = html === "<p></p>" ? "" : html;
+      if (normalized === lastSavedRef.current) return;
+      lastSavedRef.current = normalized;
+      void onCommit(normalized);
+    }, 600);
+  }
+
+  async function insertImageAtCursor(file: File) {
+    const url = await uploadInlineImage(file, parentType, parentId);
+    if (!url) return;
+    editorRef.current?.chain().focus().setImage({ src: url, alt: file.name || "image" }).run();
+    // Image insert may not fire onUpdate (depending on tiptap version) — explicitly
+    // schedule a save so the URL persists.
+    scheduleSave();
+  }
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({ link: { openOnClick: false } }),
+      Placeholder.configure({ placeholder: placeholder ?? "Add a description, links, or context… (paste images)" }),
+      Image.configure({ HTMLAttributes: { style: "max-width:100%;height:auto;border-radius:8px;" } }),
+    ],
+    content: initialContent,
+    immediatelyRender: false,
+    editorProps: {
+      handlePaste(_view, event) {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
+        const imageItems = Array.from(items).filter((i) => i.type.startsWith("image/"));
+        if (imageItems.length === 0) return false;
+        event.preventDefault();
+        (async () => {
+          for (const item of imageItems) {
+            const file = item.getAsFile();
+            if (!file) continue;
+            await insertImageAtCursor(file);
+          }
+        })();
+        return true;
+      },
+    },
+    onUpdate: () => scheduleSave(),
+  });
+
+  useEffect(() => { editorRef.current = editor; }, [editor]);
+  useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
+
+  // Wrapper-level drop handler — handles drops on the padding around the
+  // ProseMirror element (otherwise the browser navigates to the file URL).
+  function onWrapperDragOver(e: React.DragEvent) {
+    if (Array.from(e.dataTransfer.items).some((i) => i.kind === "file")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    }
+  }
+  async function onWrapperDrop(e: React.DragEvent) {
+    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
+    if (files.length === 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    for (const file of files) await insertImageAtCursor(file);
+  }
+
+  return (
+    <div
+      className="tiptap-wrap"
+      onDragOver={onWrapperDragOver}
+      onDrop={onWrapperDrop}
+      style={{
+        ...inputStyle,
+        padding: "10px 12px",
+        minHeight,
+        fontSize: 14,
+        lineHeight: 1.5,
+      }}
+    >
+      <EditorContent editor={editor} />
     </div>
   );
 }

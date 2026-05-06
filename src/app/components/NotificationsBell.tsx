@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { dismiss as dismissNotif, getDismissed } from "@/lib/notifications-dismissed";
 
 interface Notification {
   id: string;
@@ -40,37 +39,10 @@ export default function NotificationsBell() {
   const [unread, setUnread] = useState(0);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const [mounted, setMounted] = useState(false);
-  const [me, setMe] = useState<string | null>(null);
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => setMounted(true), []);
-
-  // Load current email so we can scope dismissals to the right user
-  useEffect(() => {
-    fetch("/api/auth/me", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j: { email: string | null } | null) => {
-        if (j?.email) {
-          setMe(j.email);
-          setDismissed(getDismissed(j.email));
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  // Re-sync dismissed set when localStorage changes (other tabs, dismiss/clear)
-  useEffect(() => {
-    if (!me) return;
-    function sync() { setDismissed(getDismissed(me)); }
-    window.addEventListener("storage", sync);
-    window.addEventListener("acb-notifications-dismissed-changed", sync);
-    return () => {
-      window.removeEventListener("storage", sync);
-      window.removeEventListener("acb-notifications-dismissed-changed", sync);
-    };
-  }, [me]);
 
   const refresh = useCallback(async () => {
     try {
@@ -89,11 +61,6 @@ export default function NotificationsBell() {
     const t = setInterval(refresh, 60_000);
     return () => clearInterval(t);
   }, [refresh]);
-
-  const visibleNotifs = useMemo(
-    () => notifs.filter((n) => !dismissed.has(n.id)),
-    [notifs, dismissed],
-  );
 
   // Close on outside click + reposition on resize/scroll while open
   useEffect(() => {
@@ -126,15 +93,25 @@ export default function NotificationsBell() {
     refresh();
   }
 
-  function clearAll() {
-    if (!me) return;
-    dismissNotif(me, visibleNotifs.map((n) => n.id));
-    if (unread > 0) markAllRead();
+  async function clearAll() {
+    if (notifs.length === 0) return;
+    await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archiveIds: notifs.map((n) => n.id) }),
+    });
+    refresh();
   }
 
-  function clearOne(id: string) {
-    if (!me) return;
-    dismissNotif(me, id);
+  async function clearOne(id: string) {
+    // Optimistic — drop the row immediately, then sync.
+    setNotifs((prev) => prev.filter((n) => n.id !== id));
+    await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archiveIds: [id] }),
+    });
+    refresh();
   }
 
   function togglePanel() {
@@ -206,7 +183,7 @@ export default function NotificationsBell() {
           }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>Notifications</div>
             <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-              {visibleNotifs.length > 0 && (
+              {notifs.length > 0 && (
                 <button
                   onClick={clearAll}
                   style={{
@@ -222,12 +199,12 @@ export default function NotificationsBell() {
             </div>
           </div>
           <div style={{ flex: 1, overflowY: "auto" }}>
-            {visibleNotifs.length === 0 ? (
+            {notifs.length === 0 ? (
               <div style={{ padding: "24px 16px", textAlign: "center", fontSize: 12, color: "var(--color-text-tertiary)" }}>
-                {notifs.length === 0 ? "Nothing yet." : "All clear — nothing new."}
+                Nothing here — you&rsquo;re all caught up.
               </div>
             ) : (
-              visibleNotifs.map((n) => (
+              notifs.map((n) => (
                 <NotifRow
                   key={n.id}
                   n={n}

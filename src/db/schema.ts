@@ -125,6 +125,19 @@ export const projectCollaborators = pgTable(
   (t) => [primaryKey({ columns: [t.projectId, t.userEmail] })],
 );
 
+/** Per-user "pinned" projects. Each row = one user has favourited one project. */
+export const projectFavourites = pgTable(
+  "project_favourites",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    userEmail: text("user_email").notNull(),
+    pinnedAt: timestamp("pinned_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.userEmail] })],
+);
+
 export const taskCollaborators = pgTable(
   "task_collaborators",
   {
@@ -291,6 +304,7 @@ export const notifications = pgTable("notifications", {
   actorEmail: text("actor_email").notNull(),
   payload: jsonb("payload"),
   readAt: timestamp("read_at", { withTimezone: true }),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

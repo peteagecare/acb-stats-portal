@@ -132,6 +132,10 @@ export function InlineTaskTitle({
         setEditing(true);
       }}
       style={{
+        // Block-level so double-click triggers anywhere in the surrounding
+        // cell, not just on the rendered text glyphs.
+        display: "block",
+        width: "100%",
         flex: 1, minWidth: 0,
         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
         fontSize,

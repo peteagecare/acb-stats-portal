@@ -61,7 +61,9 @@ export async function POST(request: NextRequest) {
       parentTaskId: body.parentTaskId || null,
       title,
       description: body.description?.trim() || null,
-      ownerEmail: body.ownerEmail || null,
+      // Default new tasks to the creator. An explicit null/empty in the body
+      // (i.e. "Unassigned" picked in the UI) is preserved as null.
+      ownerEmail: "ownerEmail" in body ? (body.ownerEmail || null) : user.email,
       startDate: body.startDate || null,
       endDate: body.endDate || null,
       priority: body.priority ?? null,

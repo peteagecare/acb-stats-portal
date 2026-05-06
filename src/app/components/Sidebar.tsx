@@ -4,6 +4,7 @@ import Link from "next/link";
 import NotificationsBell from "./NotificationsBell";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useFavourites } from "./use-favourites";
 
 type NavItem = { href: string; label: string; icon: React.ReactNode };
 
@@ -236,6 +237,8 @@ export default function Sidebar() {
   const [workspaceCollapsed, setWorkspaceCollapsed] = useState<boolean>(true);
   const [taskDashboardCollapsed, setTaskDashboardCollapsed] = useState<boolean>(true);
   const [projectsByCompany, setProjectsByCompany] = useState<Record<string, { id: string; name: string; status?: string }[]>>({});
+  const [favouritesCollapsed, setFavouritesCollapsed] = useState<boolean>(false);
+  const { list: favouritesList, toggle: toggleFavourite } = useFavourites();
 
   useEffect(() => {
     fetch("/api/companies")
@@ -458,6 +461,76 @@ export default function Sidebar() {
                       >Team tasks</Link>
                     </div>
                   )}
+
+                  {/* Favourites — pinned projects, per user */}
+                  {favouritesList.length > 0 && (
+                    <div style={{ marginTop: 4 }}>
+                      <button
+                        onClick={() => setFavouritesCollapsed((c) => !c)}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 6,
+                          width: "100%", padding: "5px 10px", borderRadius: 8,
+                          background: "transparent", border: "none",
+                          color: "var(--color-text-secondary)", cursor: "pointer",
+                          fontFamily: "inherit", fontSize: 12, fontWeight: 600,
+                          textAlign: "left",
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="#EF4444" stroke="#EF4444" strokeWidth="2">
+                          <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+                        </svg>
+                        Favourites
+                        <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", color: "var(--color-text-tertiary)", transform: favouritesCollapsed ? "rotate(-90deg)" : "rotate(0deg)", transition: "transform 120ms" }}>
+                          {Icon.chevron}
+                        </span>
+                      </button>
+                      {!favouritesCollapsed && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 1, marginLeft: 16, marginTop: 2, marginBottom: 2 }}>
+                          {favouritesList.map((p) => {
+                            const href = `/workspace/${p.companyId}/${p.projectId}`;
+                            const active = pathname === href;
+                            return (
+                              <div key={p.projectId} style={{ display: "flex", alignItems: "center", gap: 4, paddingRight: 4 }}>
+                                <Link
+                                  href={href}
+                                  onClick={() => setMobileOpen(false)}
+                                  style={{
+                                    flex: 1, minWidth: 0,
+                                    display: "block", padding: "5px 10px", borderRadius: 8,
+                                    fontSize: 12,
+                                    color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
+                                    background: active ? "rgba(0,113,227,0.08)" : "transparent",
+                                    fontWeight: active ? 600 : 400,
+                                    textDecoration: "none",
+                                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                                  }}
+                                  onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "rgba(0,0,0,0.035)"; }}
+                                  onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
+                                >
+                                  {p.name}
+                                </Link>
+                                <button
+                                  onClick={() => toggleFavourite(p.projectId)}
+                                  aria-label={`Unpin ${p.name}`}
+                                  title="Unpin"
+                                  style={{
+                                    background: "transparent", border: "none", padding: 4,
+                                    cursor: "pointer", color: "#EF4444", display: "flex",
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2">
+                                    <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+                                  </svg>
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {companies.map((c) => {
                     const isOpen = expanded.has(c.id);
                     const isActiveCompany = pathname === `/workspace/${c.id}` || pathname.startsWith(`/workspace/${c.id}/`);
