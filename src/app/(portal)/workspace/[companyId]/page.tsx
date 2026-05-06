@@ -89,6 +89,7 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [editingCompany, setEditingCompany] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -191,9 +192,41 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
         </div>
       )}
 
-      {projects && projects.length > 0 && (
-        <GroupedProjects projects={projects} users={users} />
-      )}
+      {projects && projects.length > 0 && (() => {
+        const active = projects.filter((p) => p.status !== "archived");
+        const archived = projects.filter((p) => p.status === "archived");
+        return (
+          <>
+            {active.length > 0 ? (
+              <GroupedProjects projects={active} users={users} />
+            ) : (
+              <div style={{ padding: "36px 20px", textAlign: "center", background: "var(--bg-card)", borderRadius: 18, boxShadow: "var(--shadow-card)" }}>
+                <div style={{ fontSize: 14, color: "var(--color-text-secondary)" }}>No active projects.</div>
+              </div>
+            )}
+            {archived.length > 0 && (
+              <div style={{ marginTop: 28 }}>
+                <button
+                  onClick={() => setShowArchived((v) => !v)}
+                  style={{
+                    background: "transparent", border: "none", padding: "6px 0",
+                    fontSize: 13, color: "var(--color-text-secondary)", cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: 6,
+                  }}
+                >
+                  <span style={{ display: "inline-block", transform: showArchived ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>›</span>
+                  {showArchived ? "Hide" : "Show"} archived ({archived.length})
+                </button>
+                {showArchived && (
+                  <div style={{ marginTop: 12, opacity: 0.75 }}>
+                    <GroupedProjects projects={archived} users={users} />
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {creating && company && (
         <NewProjectModal
@@ -295,7 +328,7 @@ function CompanyTasks({
         </FilterSelect>
         <FilterSelect value={filterProject} onChange={setFilterProject} ariaLabel="Project filter">
           <option value="">All projects</option>
-          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {projects.filter((p) => p.status !== "archived").map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </FilterSelect>
         <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--color-text-secondary)", cursor: "pointer" }}>
           <input

@@ -2033,9 +2033,34 @@ function EditProjectModal({
   }
 
   async function handleDelete() {
-    if (!confirm(`Delete project "${project.name}" and all its tasks?`)) return;
+    if (!confirm(`Delete project "${project.name}" and all its tasks? This cannot be undone — use Archive if you might want it back.`)) return;
     const res = await fetch(`/api/projects/${project.id}`, { method: "DELETE" });
     if (res.ok) window.location.href = `/workspace/${project.companyId}`;
+  }
+
+  async function handleArchiveToggle() {
+    const next: ProjectStatus = status === "archived" ? "active" : "archived";
+    setSaving(true); setErr(null);
+    try {
+      const res = await fetch(`/api/projects/${project.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: next }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error((j as { error?: string }).error || `HTTP ${res.status}`);
+      }
+      setStatus(next);
+      if (next === "archived") {
+        window.location.href = `/workspace/${project.companyId}`;
+      } else {
+        onSaved();
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to save");
+      setSaving(false);
+    }
   }
 
   return (
@@ -2153,8 +2178,11 @@ function EditProjectModal({
           </Field>
         )}
         {err && <div style={{ fontSize: 12, color: "#B91C1C" }}>{err}</div>}
-        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-          <button onClick={handleDelete} style={{ ...secondaryButtonStyle, borderColor: "#FCA5A5", color: "#B91C1C" }}>Delete project</button>
+        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+          <button onClick={handleArchiveToggle} style={secondaryButtonStyle} disabled={saving}>
+            {status === "archived" ? "Unarchive" : "Archive"}
+          </button>
+          <button onClick={handleDelete} style={{ ...secondaryButtonStyle, borderColor: "#FCA5A5", color: "#B91C1C" }} disabled={saving}>Delete</button>
           <div style={{ flex: 1 }} />
           <button onClick={onClose} style={secondaryButtonStyle} disabled={saving}>Cancel</button>
           <button onClick={submit} style={primaryButtonStyle} disabled={saving || !name.trim()}>

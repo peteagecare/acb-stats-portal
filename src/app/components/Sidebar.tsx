@@ -235,7 +235,7 @@ export default function Sidebar() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [workspaceCollapsed, setWorkspaceCollapsed] = useState<boolean>(true);
   const [taskDashboardCollapsed, setTaskDashboardCollapsed] = useState<boolean>(true);
-  const [projectsByCompany, setProjectsByCompany] = useState<Record<string, { id: string; name: string }[]>>({});
+  const [projectsByCompany, setProjectsByCompany] = useState<Record<string, { id: string; name: string; status?: string }[]>>({});
 
   useEffect(() => {
     fetch("/api/companies")
@@ -268,9 +268,10 @@ export default function Sidebar() {
       if (projectsByCompany[id]) continue;
       fetch(`/api/projects?companyId=${id}`)
         .then((r) => (r.ok ? r.json() : null))
-        .then((data: { projects?: { id: string; name: string }[] } | null) => {
+        .then((data: { projects?: { id: string; name: string; status?: string }[] } | null) => {
           if (data?.projects) {
-            setProjectsByCompany((prev) => ({ ...prev, [id]: data.projects! }));
+            const visible = data.projects.filter((p) => p.status !== "archived");
+            setProjectsByCompany((prev) => ({ ...prev, [id]: visible }));
           }
         })
         .catch(() => {});

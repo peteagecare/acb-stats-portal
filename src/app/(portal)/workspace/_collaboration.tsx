@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { upload } from "@vercel/blob/client";
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import {
@@ -546,8 +546,12 @@ export function ProjectLinks({ projectId }: { projectId: string }) {
 }
 
 /* ─────────────────────────────────── */
-/* Project notes (textarea + save)     */
+/* Project notes (rich text + save)    */
 /* ─────────────────────────────────── */
+
+function looksLikeHtml(s: string): boolean {
+  return /^\s*<(p|ul|ol|h[1-6]|blockquote|pre|div|span)\b/i.test(s);
+}
 
 export function ProjectNotes({
   projectId, initialNotes,
@@ -555,23 +559,47 @@ export function ProjectNotes({
   projectId: string;
   initialNotes: string | null;
 }) {
-  const [notes, setNotes] = useState(initialNotes ?? "");
-  const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
-  const initial = useRef(initialNotes ?? "");
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function save() {
-    if (notes === initial.current) return;
+  // Plain-text notes from before the rich-text upgrade need wrapping in <p>
+  // so TipTap renders them as a paragraph rather than dropping the content.
+  const initialContent =
+    initialNotes && initialNotes.trim().length > 0
+      ? looksLikeHtml(initialNotes)
+        ? initialNotes
+        : `<p>${initialNotes.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br/>")}</p>`
+      : "";
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({ link: { openOnClick: false } }),
+      Placeholder.configure({ placeholder: "Plan, brief, agenda, anything you want kept with the project…" }),
+    ],
+    content: initialContent,
+    immediatelyRender: false,
+    onUpdate: ({ editor }) => {
+      setDirty(true);
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => {
+        void save(editor.getHTML());
+      }, 600);
+    },
+  });
+
+  async function save(html: string) {
     setSaving(true);
     try {
       const res = await fetch(`/api/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes }),
+        body: JSON.stringify({ notes: html }),
       });
       if (res.ok) {
-        initial.current = notes;
         setSavedAt(new Date());
+        setDirty(false);
       }
     } finally {
       setSaving(false);
@@ -580,17 +608,67 @@ export function ProjectNotes({
 
   return (
     <div>
-      <textarea
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        onBlur={save}
-        placeholder="Plan, brief, agenda, anything you want kept with the project…"
-        rows={16}
-        style={{ ...inputStyle, resize: "vertical", minHeight: 280, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 13, lineHeight: 1.55 }}
-      />
-      <div style={{ marginTop: 8, fontSize: 11, color: "var(--color-text-tertiary)" }}>
-        {saving ? "Saving…" : notes === initial.current ? (savedAt ? `Saved at ${savedAt.toLocaleTimeString()}` : "Auto-saves on blur") : "Unsaved changes"}
+      {editor && <NotesToolbar editor={editor} />}
+      <div
+        className="tiptap-wrap"
+        style={{
+          ...inputStyle,
+          padding: "12px 14px",
+          minHeight: 280,
+          fontSize: 14,
+          lineHeight: 1.55,
+        }}
+      >
+        <EditorContent editor={editor} />
       </div>
+      <div style={{ marginTop: 8, fontSize: 11, color: "var(--color-text-tertiary)" }}>
+        {saving
+          ? "Saving…"
+          : dirty
+            ? "Unsaved changes"
+            : savedAt
+              ? `Saved at ${savedAt.toLocaleTimeString()}`
+              : "Auto-saves as you type"}
+      </div>
+    </div>
+  );
+}
+
+function NotesToolbar({ editor }: { editor: Editor }) {
+  const btn = (active: boolean, onClick: () => void, label: string) => (
+    <button
+      key={label}
+      type="button"
+      onMouseDown={(e) => { e.preventDefault(); onClick(); }}
+      style={{
+        padding: "5px 9px",
+        background: active ? "rgba(0,113,227,0.1)" : "transparent",
+        color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
+        border: "none", borderRadius: 7, cursor: "pointer",
+        fontFamily: "inherit", fontSize: 12, fontWeight: 500,
+      }}
+    >{label}</button>
+  );
+  return (
+    <div style={{
+      display: "flex", gap: 2, marginBottom: 10,
+      padding: 4, borderRadius: 10,
+      background: "rgba(0,0,0,0.03)",
+      flexWrap: "wrap",
+    }}>
+      {btn(editor.isActive("heading", { level: 1 }), () => editor.chain().focus().toggleHeading({ level: 1 }).run(), "H1")}
+      {btn(editor.isActive("heading", { level: 2 }), () => editor.chain().focus().toggleHeading({ level: 2 }).run(), "H2")}
+      {btn(editor.isActive("heading", { level: 3 }), () => editor.chain().focus().toggleHeading({ level: 3 }).run(), "H3")}
+      <span style={{ width: 1, background: "var(--color-border)", margin: "0 4px" }} />
+      {btn(editor.isActive("bold"), () => editor.chain().focus().toggleBold().run(), "Bold")}
+      {btn(editor.isActive("italic"), () => editor.chain().focus().toggleItalic().run(), "Italic")}
+      {btn(editor.isActive("underline"), () => editor.chain().focus().toggleUnderline().run(), "Underline")}
+      {btn(editor.isActive("strike"), () => editor.chain().focus().toggleStrike().run(), "Strike")}
+      <span style={{ width: 1, background: "var(--color-border)", margin: "0 4px" }} />
+      {btn(editor.isActive("bulletList"), () => editor.chain().focus().toggleBulletList().run(), "• List")}
+      {btn(editor.isActive("orderedList"), () => editor.chain().focus().toggleOrderedList().run(), "1. List")}
+      {btn(editor.isActive("blockquote"), () => editor.chain().focus().toggleBlockquote().run(), "Quote")}
+      {btn(editor.isActive("codeBlock"), () => editor.chain().focus().toggleCodeBlock().run(), "Code")}
     </div>
   );
 }
