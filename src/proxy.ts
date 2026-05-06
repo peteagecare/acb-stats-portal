@@ -17,6 +17,12 @@ function isPublic(pathname: string): boolean {
   if (pathname.startsWith("/_next/")) return true;
   // Cron endpoints handle their own auth via CRON_SECRET / admin-session check
   if (pathname.startsWith("/api/cron/")) return true;
+  // Public flipbook viewer (anyone with link can view)
+  if (pathname.startsWith("/v/")) return true;
+  // Vercel Blob client uploads: handleUpload also receives webhook callbacks
+  // from Vercel itself (signed via HMAC, no user cookie). The handler enforces
+  // user auth for the initial token request.
+  if (pathname === "/api/flipbooks/upload") return true;
   return false;
 }
 

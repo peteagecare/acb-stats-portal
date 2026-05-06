@@ -164,6 +164,13 @@ const Icon = {
       <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
     </svg>
   ),
+  flipbook: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={ICON_STYLE}>
+      <path d="M4 4h7v16H4z" />
+      <path d="M13 4h7v16h-7z" />
+      <path d="M11 4v16" />
+    </svg>
+  ),
 };
 
 type NavGroup = { label?: string; items: NavItem[] };
@@ -203,6 +210,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/feedback", label: "Outreach Feedback", icon: Icon.feedback },
       { href: "/reviews-social", label: "Reviews & Social", icon: Icon.reviews },
       { href: "/subscriptions", label: "Subscriptions", icon: Icon.subscriptions },
+      { href: "/flipbooks", label: "Flipbooks", icon: Icon.flipbook },
     ],
   },
   {

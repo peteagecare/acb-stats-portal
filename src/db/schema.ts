@@ -331,6 +331,20 @@ export const inboxTasks = pgTable("inbox_tasks", {
   createdByEmail: text("created_by_email").notNull(),
 });
 
+export const flipbooks = pgTable("flipbooks", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  ownerEmail: text("owner_email").notNull(),
+  pageCount: integer("page_count").notNull(),
+  pageWidth: integer("page_width").notNull(),
+  pageHeight: integer("page_height").notNull(),
+  sourcePdfUrl: text("source_pdf_url").notNull(),
+  pageUrls: jsonb("page_urls").notNull(),
+  settings: jsonb("settings").notNull(),
+  overlays: jsonb("overlays").notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type Company = typeof companies.$inferSelect;
 export type NewCompany = typeof companies.$inferInsert;
 export type Project = typeof projects.$inferSelect;
@@ -341,3 +355,5 @@ export type Task = typeof tasks.$inferSelect;
 export type NewTask = typeof tasks.$inferInsert;
 export type MeetingNote = typeof meetingNotes.$inferSelect;
 export type NewMeetingNote = typeof meetingNotes.$inferInsert;
+export type Flipbook = typeof flipbooks.$inferSelect;
+export type NewFlipbook = typeof flipbooks.$inferInsert;
