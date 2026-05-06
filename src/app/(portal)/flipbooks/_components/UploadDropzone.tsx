@@ -5,7 +5,7 @@ import { nanoid } from "nanoid";
 import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 
-const RENDER_SCALE = 2.0;
+const RENDER_SCALE = 3.0;
 const PARALLEL_PAGES = 4;
 
 type Progress = { stage: string; done: number; total: number } | null;
