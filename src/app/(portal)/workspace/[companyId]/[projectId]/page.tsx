@@ -41,9 +41,11 @@ import { RecurrencePicker } from "../../_recurrence-picker";
 import { TagFilterChips, TagPicker, TagPillList, useTags } from "../../_tags";
 import { DatePicker, EnumPicker, UserPicker } from "@/app/components/Pickers";
 import { useTaskContextMenu } from "../../_task-context-menu";
+import { InlineTaskTitle } from "../../_inline-title";
+import { MoveToButton } from "../../_move-to-button";
+import { LinkifiedTextarea } from "../../_linkified-textarea";
 
 type ProjectStatus = "planning" | "active" | "on_hold" | "done" | "archived";
-type TaskStatus = "todo" | "doing" | "blocked" | "done";
 type Priority = "low" | "medium" | "high";
 
 interface Section {
@@ -65,7 +67,6 @@ interface Task {
   endDate: string | null;
   priority: Priority | null;
   estimatedHours: number | null;
-  status: TaskStatus;
   completed: boolean;
   completedAt: string | null;
   goal: string | null;
@@ -212,7 +213,6 @@ export default function ProjectPage({
           startDate: t.startDate,
           endDate: t.endDate,
           completed: t.completed,
-          status: t.status,
         });
         if (tr.status !== trackerFilter) continue;
       }
@@ -263,7 +263,6 @@ export default function ProjectPage({
         startDate: t.startDate,
         endDate: t.endDate,
         completed: t.completed,
-        status: t.status,
       }));
     return rollupTaskStatuses(taskResults);
   }, [data]);
@@ -925,7 +924,6 @@ function TaskRow({
     startDate: task.startDate,
     endDate: task.endDate,
     completed: task.completed,
-    status: task.status,
   });
   const showTrackerBadge =
     !task.completed &&
@@ -941,8 +939,20 @@ function TaskRow({
 
   const { onContextMenu: onContextMenuRow, menu: contextMenu } = useTaskContextMenu({
     taskTitle: task.title,
+    currentStartDate: task.startDate,
+    currentEndDate: task.endDate,
+    currentRecurrence: task.recurrence,
+    currentProjectId: task.projectId,
+    currentSectionId: task.sectionId,
     onDelete: async () => {
       await onMutate(`/api/tasks/${task.id}`, { method: "DELETE" });
+    },
+    onUpdate: async (patch) => {
+      await onMutate(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
     },
   });
 
@@ -1031,9 +1041,19 @@ function TaskRow({
         {task.completed && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="5,12 10,17 19,7" /></svg>}
       </button>
 
-      <span style={{ flex: 1, fontSize: 14, color: task.completed ? "var(--color-text-tertiary)" : "var(--color-text-primary)", textDecoration: task.completed ? "line-through" : "none", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-        {task.title}
-      </span>
+      <InlineTaskTitle
+        title={task.title}
+        completed={task.completed}
+        fontSize={14}
+        onSingleClick={() => onOpenTask(task.id)}
+        onSave={async (next) => {
+          await onMutate(`/api/tasks/${task.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: next }),
+          });
+        }}
+      />
 
       {showTrackerBadge && (
         <span
@@ -1098,6 +1118,21 @@ function TaskRow({
       )}
 
       <Avatar user={owner} size={24} />
+
+      <MoveToButton
+        currentProjectId={task.projectId}
+        currentSectionId={task.sectionId}
+        onMove={async (projectId, sectionId) => {
+          await onMutate(`/api/tasks/${task.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...(projectId !== task.projectId ? { projectId } : {}),
+              sectionId,
+            }),
+          });
+        }}
+      />
 
       <div
         style={{
@@ -1468,14 +1503,33 @@ function SubtaskRow({
         >
           {task.completed && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="5,12 10,17 19,7" /></svg>}
         </button>
-        <span style={{
-          flex: 1, fontSize: 13, minWidth: 0,
-          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-          color: task.completed ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
-          textDecoration: task.completed ? "line-through" : "none",
-        }}>
-          {task.title}
-        </span>
+        <InlineTaskTitle
+          title={task.title}
+          completed={task.completed}
+          fontSize={13}
+          onSingleClick={() => onOpenTask(task.id)}
+          onSave={async (next) => {
+            await onMutate(`/api/tasks/${task.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ title: next }),
+            });
+          }}
+        />
+        <MoveToButton
+          currentProjectId={task.projectId}
+          currentSectionId={task.sectionId}
+          onMove={async (projectId, sectionId) => {
+            await onMutate(`/api/tasks/${task.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ...(projectId !== task.projectId ? { projectId } : {}),
+                sectionId,
+              }),
+            });
+          }}
+        />
         <button
           onClick={(e) => { e.stopPropagation(); setAdding(true); }}
           aria-label="Add subtask"
@@ -1561,7 +1615,6 @@ function TaskPanel({
     startDate: task.startDate,
     endDate: task.endDate,
     completed: task.completed,
-    status: task.status,
   });
   const trackerStyle = TRACKER_STYLE[tracker.status];
 
@@ -1709,18 +1762,6 @@ function TaskPanel({
             placeholder="—"
           />
 
-          <PanelLabel>Status</PanelLabel>
-          <PillSelect
-            value={task.status}
-            onChange={(v) => patch({ status: v as TaskStatus })}
-            options={[
-              { value: "todo", label: "To do", bg: "#F1F5F9", color: "#475569" },
-              { value: "doing", label: "Doing", bg: "#DBEAFE", color: "#1E40AF" },
-              { value: "blocked", label: "Blocked", bg: "#FEE2E2", color: "#991B1B" },
-              { value: "done", label: "Done", bg: "#D1FAE5", color: "#065F46" },
-            ]}
-          />
-
           <PanelLabel>Section</PanelLabel>
           <EnumPicker
             selected={task.sectionId ?? ""}
@@ -1769,7 +1810,14 @@ function TaskPanel({
         />
 
         <Field label="Description">
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} onBlur={commitDesc} rows={4} placeholder="Add a description, links, or context…" style={{ ...inputStyle, resize: "vertical" }} />
+          <LinkifiedTextarea
+            value={description}
+            onChange={setDescription}
+            onCommit={commitDesc}
+            rows={4}
+            placeholder="Add a description, links, or context…"
+            style={{ ...inputStyle, resize: "vertical" }}
+          />
         </Field>
         <div style={{ height: 12 }} />
         <Field label="Goal (optional)">

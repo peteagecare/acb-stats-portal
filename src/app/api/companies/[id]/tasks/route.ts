@@ -28,7 +28,6 @@ export async function GET(request: NextRequest, { params }: Params) {
       startDate: tasks.startDate,
       endDate: tasks.endDate,
       priority: tasks.priority,
-      status: tasks.status,
       completed: tasks.completed,
       completedAt: tasks.completedAt,
       createdAt: tasks.createdAt,

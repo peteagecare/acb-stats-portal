@@ -23,7 +23,6 @@ export const projectStatusEnum = pgEnum("project_status", [
 ]);
 export const projectTypeEnum = pgEnum("project_type", ["quarterly", "initiative", "ongoing"]);
 export const departmentEnum = pgEnum("department", ["ppc", "seo", "content", "web"]);
-export const taskStatusEnum = pgEnum("task_status", ["todo", "doing", "blocked", "done"]);
 export const priorityEnum = pgEnum("priority", ["low", "medium", "high"]);
 
 export const companies = pgTable("companies", {
@@ -79,7 +78,6 @@ export const tasks = pgTable("tasks", {
   endDate: date("end_date"),
   priority: priorityEnum("priority"),
   estimatedHours: real("estimated_hours"),
-  status: taskStatusEnum("status").notNull().default("todo"),
   completed: boolean("completed").notNull().default(false),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   goal: text("goal"),
@@ -303,6 +301,18 @@ export const projectLinks = pgTable("project_links", {
     .references(() => projects.id, { onDelete: "cascade" }),
   label: text("label").notNull(),
   url: text("url").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  createdByEmail: text("created_by_email").notNull(),
+});
+
+export const inboxTasks = pgTable("inbox_tasks", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  title: text("title").notNull(),
+  ownerEmail: text("owner_email").notNull(),
+  completed: boolean("completed").notNull().default(false),
+  endDate: date("end_date"),
+  promotedTaskId: uuid("promoted_task_id"),
+  order: integer("order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   createdByEmail: text("created_by_email").notNull(),
 });

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
 import { tasks, taskCollaborators, sections, taskTags } from "@/db/schema";
 import { requireUser, canSeeProject } from "@/lib/workspace-auth";
@@ -56,6 +56,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   type Body = {
     title?: string;
     description?: string | null;
+    projectId?: string;
     sectionId?: string | null;
     ownerEmail?: string | null;
     startDate?: string | null;
@@ -64,7 +65,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     estimatedHours?: number | null;
     goal?: string | null;
     expectedOutcome?: string | null;
-    status?: "todo" | "doing" | "blocked" | "done";
     completed?: boolean;
     parentTaskId?: string | null;
     order?: number;
@@ -87,7 +87,60 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   }
   if (body.description !== undefined)
     updates.description = body.description?.toString().trim() || null;
+
+  // Cross-project move: reassign projectId. Validate access to the new project,
+  // detach the task from any old parent (cross-project parent links are invalid),
+  // and reset section refs since sections don't transfer between projects.
+  // Subtasks are cascaded below after the main update lands.
+  let movingToNewProject = false;
+  if (body.projectId !== undefined && body.projectId !== task.projectId) {
+    if (!body.projectId) {
+      return Response.json({ error: "projectId required" }, { status: 400 });
+    }
+    if (!(await canSeeProject(user.email, body.projectId))) {
+      return Response.json({ error: "Forbidden" }, { status: 403 });
+    }
+    if (body.sectionId) {
+      const [s] = await db
+        .select()
+        .from(sections)
+        .where(eq(sections.id, body.sectionId))
+        .limit(1);
+      if (!s || s.projectId !== body.projectId) {
+        return Response.json(
+          { error: "Section does not belong to the destination project" },
+          { status: 400 },
+        );
+      }
+    }
+    updates.projectId = body.projectId;
+    updates.parentTaskId = null;
+    if (body.sectionId === undefined) updates.sectionId = null;
+    updates.preCompletionSectionId = null;
+    movingToNewProject = true;
+  }
+
   if (body.sectionId !== undefined) updates.sectionId = body.sectionId || null;
+
+  // Mirror of the existing "complete → move to Done section" behaviour: if the
+  // caller explicitly moves the task INTO a Done-named section, mark it
+  // complete. We synthesize body.completed so the downstream blocks
+  // (recurrence spawn, completion notification) run as if the user ticked it.
+  if (
+    body.sectionId &&
+    body.completed === undefined &&
+    !task.completed
+  ) {
+    const [destSection] = await db
+      .select()
+      .from(sections)
+      .where(eq(sections.id, body.sectionId))
+      .limit(1);
+    if (destSection && DONE_SECTION_NAMES.has(destSection.name.trim().toLowerCase())) {
+      body.completed = true;
+    }
+  }
+
   if (body.ownerEmail !== undefined) updates.ownerEmail = body.ownerEmail || null;
   if (body.startDate !== undefined) updates.startDate = body.startDate || null;
   if (body.endDate !== undefined) updates.endDate = body.endDate || null;
@@ -101,7 +154,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (body.goal !== undefined) updates.goal = body.goal?.toString().trim() || null;
   if (body.expectedOutcome !== undefined)
     updates.expectedOutcome = body.expectedOutcome?.toString().trim() || null;
-  if (body.status) updates.status = body.status;
   if (typeof body.order === "number") updates.order = body.order;
   if (body.parentTaskId !== undefined) {
     if (body.parentTaskId === id) {
@@ -113,7 +165,17 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (typeof body.completed === "boolean" && body.completed !== task.completed) {
     updates.completed = body.completed;
     updates.completedAt = body.completed ? new Date() : null;
-    if (body.completed && !body.status) updates.status = "done";
+
+    // Claim ownership: if an unowned task is being completed, attribute it to
+    // whoever ticked it so the People analytics widget counts it for them.
+    // Skip if the same PATCH explicitly sets ownerEmail.
+    if (
+      body.completed &&
+      !task.ownerEmail &&
+      body.ownerEmail === undefined
+    ) {
+      updates.ownerEmail = user.email;
+    }
 
     if (body.completed && body.sectionId === undefined) {
       // Auto-move to a "Done"-named section on completion (unless the same
@@ -144,6 +206,31 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   if (Object.keys(updates).length) {
     await db.update(tasks).set(updates).where(eq(tasks.id, id));
+  }
+
+  if (movingToNewProject && updates.projectId) {
+    const newProjectId = updates.projectId;
+    const allTasks = await db.select({ id: tasks.id, parentTaskId: tasks.parentTaskId }).from(tasks);
+    const childrenOf = new Map<string, string[]>();
+    for (const t of allTasks) {
+      if (!t.parentTaskId) continue;
+      const list = childrenOf.get(t.parentTaskId) ?? [];
+      list.push(t.id);
+      childrenOf.set(t.parentTaskId, list);
+    }
+    const descendants: string[] = [];
+    const queue: string[] = [...(childrenOf.get(id) ?? [])];
+    while (queue.length) {
+      const next = queue.shift()!;
+      descendants.push(next);
+      for (const c of childrenOf.get(next) ?? []) queue.push(c);
+    }
+    if (descendants.length) {
+      await db
+        .update(tasks)
+        .set({ projectId: newProjectId, sectionId: null, preCompletionSectionId: null })
+        .where(inArray(tasks.id, descendants));
+    }
   }
 
   // If task was just completed AND has a recurrence rule, spawn the next instance.
@@ -185,7 +272,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           endDate: newEnd,
           priority: task.priority,
           estimatedHours: task.estimatedHours,
-          status: "todo",
           completed: false,
           completedAt: null,
           goal: task.goal,

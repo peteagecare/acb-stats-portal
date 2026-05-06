@@ -24,8 +24,8 @@ export interface TrackerInput {
   startDate: string | null | undefined;
   endDate: string | null | undefined;
   completed: boolean;
-  status?: "todo" | "doing" | "blocked" | "done";
-  /** 0–1 — overrides status-based progress when provided (e.g. subtask ratio) */
+  /** 0–1. Used for `actual` progress when the task isn't already complete
+   *  (e.g. ratio of completed subtasks). Defaults to 0. */
   progressOverride?: number | null;
 }
 
@@ -53,19 +53,6 @@ function parseDate(d: string | null | undefined): number | null {
   return Date.UTC(y, m - 1, day);
 }
 
-function statusToProgress(status?: TrackerInput["status"]): number {
-  switch (status) {
-    case "done":
-      return 1;
-    case "doing":
-      return 0.5;
-    case "todo":
-    case "blocked":
-    default:
-      return 0;
-  }
-}
-
 export function computeTracker(input: TrackerInput, now: Date = new Date()): TrackerResult {
   if (input.completed) {
     return { status: "done", expected: 1, actual: 1, delta: 0, label: "Done" };
@@ -76,13 +63,13 @@ export function computeTracker(input: TrackerInput, now: Date = new Date()): Tra
   const today = startOfDayUTC(now);
 
   if (start == null || end == null || end < start) {
-    const actual = input.progressOverride ?? statusToProgress(input.status);
+    const actual = input.progressOverride ?? 0;
     return { status: "unscheduled", expected: 0, actual, delta: 0, label: "No schedule" };
   }
 
   // Past end date, not done → overdue (takes priority)
   if (today > end) {
-    const actual = input.progressOverride ?? statusToProgress(input.status);
+    const actual = input.progressOverride ?? 0;
     return {
       status: "overdue",
       expected: 1,
@@ -100,7 +87,7 @@ export function computeTracker(input: TrackerInput, now: Date = new Date()): Tra
   const totalMs = end - start;
   const elapsedMs = today - start;
   const expected = totalMs === 0 ? 1 : Math.min(1, Math.max(0, elapsedMs / totalMs));
-  const actual = Math.max(0, Math.min(1, input.progressOverride ?? statusToProgress(input.status)));
+  const actual = Math.max(0, Math.min(1, input.progressOverride ?? 0));
   const delta = actual - expected;
 
   let status: TrackerStatus;

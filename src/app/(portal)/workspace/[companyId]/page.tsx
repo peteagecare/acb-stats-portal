@@ -71,7 +71,6 @@ interface CompanyTask {
   startDate: string | null;
   endDate: string | null;
   priority: "low" | "medium" | "high" | null;
-  status: "todo" | "doing" | "blocked" | "done";
   completed: boolean;
   completedAt: string | null;
   createdAt: string;

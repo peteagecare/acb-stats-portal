@@ -19,6 +19,9 @@ import {
 import { TagPicker, TagPillList, useTags } from "./_tags";
 import { Comments } from "./_collaboration";
 import { useTaskContextMenu } from "./_task-context-menu";
+import { InlineTaskTitle } from "./_inline-title";
+import { MoveToButton } from "./_move-to-button";
+import { LinkifiedTextarea } from "./_linkified-textarea";
 import { DatePicker, EnumPicker, ProjectPicker, UserPicker } from "@/app/components/Pickers";
 
 /* Dashboard-wide handler for opening a task in a side panel without
@@ -41,9 +44,9 @@ interface DashboardTask {
   title: string;
   ownerEmail: string | null;
   createdByEmail: string;
+  sectionId: string | null;
   startDate: string | null;
   endDate: string | null;
-  status: "todo" | "doing" | "blocked" | "done";
   priority: "low" | "medium" | "high" | null;
   completed: boolean;
   completedAt: string | null;
@@ -78,6 +81,16 @@ interface UnsortedNoteTask {
   noteMeetingDate: string | null;
 }
 
+interface InboxTask {
+  id: string;
+  title: string;
+  ownerEmail: string;
+  completed: boolean;
+  endDate: string | null;
+  order: number;
+  createdAt: string;
+}
+
 interface CompanyWithProjects {
   id: string;
   name: string;
@@ -90,25 +103,29 @@ export default function WorkspacePage() {
   const [companies, setCompanies] = useState<CompanyRow[] | null>(null);
   const [companiesWithProjects, setCompaniesWithProjects] = useState<CompanyWithProjects[]>([]);
   const [unsorted, setUnsorted] = useState<UnsortedNoteTask[]>([]);
+  const [inbox, setInbox] = useState<InboxTask[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [creatingCompany, setCreatingCompany] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [dRes, cRes, uRes] = await Promise.all([
+      const [dRes, cRes, uRes, iRes] = await Promise.all([
         fetch("/api/workspace/dashboard", { cache: "no-store" }),
         fetch("/api/companies", { cache: "no-store" }),
         fetch("/api/notes/unsorted-tasks", { cache: "no-store" }),
+        fetch("/api/inbox-tasks", { cache: "no-store" }),
       ]);
       if (!dRes.ok) throw new Error(`HTTP ${dRes.status}`);
       if (!cRes.ok) throw new Error(`HTTP ${cRes.status}`);
       const d = (await dRes.json()) as { me: string; tasks: DashboardTask[] };
       const c = (await cRes.json()) as { companies: CompanyRow[] };
       const u = uRes.ok ? ((await uRes.json()) as { tasks: UnsortedNoteTask[] }) : { tasks: [] };
+      const i = iRes.ok ? ((await iRes.json()) as { tasks: InboxTask[] }) : { tasks: [] };
       setData(d);
       setCompanies(c.companies);
       setUnsorted(u.tasks);
+      setInbox(i.tasks);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
@@ -159,6 +176,11 @@ export default function WorkspacePage() {
 
       {data && companies && (
         <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+          <QuickInbox
+            tasks={inbox}
+            companies={companiesWithProjects}
+            onChanged={refresh}
+          />
           {unsorted.length > 0 && (
             <UnsortedNotes
               tasks={unsorted}
@@ -293,6 +315,409 @@ function UnsortedNotes({
         />
       )}
     </section>
+  );
+}
+
+/* ── Quick Inbox: personal unsorted to-dos, not tied to a project ── */
+
+function QuickInbox({
+  tasks, companies, onChanged,
+}: {
+  tasks: InboxTask[];
+  companies: CompanyWithProjects[];
+  onChanged: () => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = tasks.find((t) => t.id === selectedId) ?? null;
+
+  async function add() {
+    const v = draft.trim();
+    if (!v || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/inbox-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: v }),
+      });
+      if (res.ok) {
+        setDraft("");
+        onChanged();
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function patch(id: string, body: object) {
+    const res = await fetch(`/api/inbox-tasks/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) onChanged();
+  }
+  async function remove(id: string) {
+    const res = await fetch(`/api/inbox-tasks/${id}`, { method: "DELETE" });
+    if (res.ok) onChanged();
+  }
+  async function promote(id: string, projectId: string) {
+    const res = await fetch(`/api/inbox-tasks/${id}/promote`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId }),
+    });
+    if (res.ok) onChanged();
+  }
+
+  return (
+    <section style={{
+      background: "var(--bg-card)", borderRadius: 18,
+      padding: "16px 20px 8px",
+      boxShadow: "var(--shadow-card)",
+      border: "1px solid #93C5FD",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+        <span style={{
+          fontSize: 11, fontWeight: 700,
+          padding: "2px 8px", borderRadius: 999,
+          background: "#DBEAFE", color: "#1E40AF",
+          textTransform: "uppercase", letterSpacing: 0.5,
+        }}>
+          {tasks.length} {tasks.length === 1 ? "to sort" : "to sort"}
+        </span>
+        <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Quick Inbox</h2>
+      </div>
+      <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
+        A quick place to capture to-dos. Add to a project when you&apos;re ready.
+      </p>
+
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void add(); } }}
+        disabled={busy}
+        placeholder="Add a quick to-do and press Enter…"
+        style={{
+          width: "100%",
+          padding: "8px 10px", borderRadius: 8,
+          border: "1px solid var(--color-border)",
+          background: "white",
+          fontSize: 13, fontFamily: "inherit",
+          marginBottom: 8,
+        }}
+      />
+
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {tasks.map((t) => (
+          <InboxRow
+            key={t.id}
+            task={t}
+            companies={companies}
+            onOpen={() => setSelectedId(t.id)}
+            onComplete={() => patch(t.id, { completed: true })}
+            onDelete={() => remove(t.id)}
+            onSetEndDate={(iso) => patch(t.id, { endDate: iso })}
+            onSetTitle={(title) => patch(t.id, { title })}
+            onPromote={(pid) => promote(t.id, pid)}
+          />
+        ))}
+        {tasks.length === 0 && (
+          <div style={{ padding: "8px 4px", fontSize: 12, color: "var(--color-text-tertiary)" }}>
+            Nothing in your inbox.
+          </div>
+        )}
+      </div>
+
+      {selected && (
+        <InboxTaskPanel
+          task={selected}
+          companies={companies}
+          onClose={() => setSelectedId(null)}
+          onSetTitle={(title) => patch(selected.id, { title })}
+          onSetEndDate={(iso) => patch(selected.id, { endDate: iso })}
+          onComplete={() => { patch(selected.id, { completed: true }); setSelectedId(null); }}
+          onDelete={() => { remove(selected.id); setSelectedId(null); }}
+          onPromote={(pid) => { promote(selected.id, pid); setSelectedId(null); }}
+        />
+      )}
+    </section>
+  );
+}
+
+function InboxRow({
+  task, companies, onOpen, onComplete, onDelete, onSetEndDate, onSetTitle, onPromote,
+}: {
+  task: InboxTask;
+  companies: CompanyWithProjects[];
+  onOpen: () => void;
+  onComplete: () => void;
+  onDelete: () => void;
+  onSetEndDate: (iso: string | null) => void;
+  onSetTitle: (title: string) => void;
+  onPromote: (projectId: string) => void;
+}) {
+  const { onContextMenu, menu } = useTaskContextMenu({
+    taskTitle: task.title,
+    onDelete,
+  });
+  return (
+    <>
+    <div
+      className="unsorted-row"
+      onContextMenu={onContextMenu}
+      style={{
+        display: "flex", alignItems: "center", gap: 4,
+        padding: "6px 4px", borderTop: "1px solid var(--color-border)",
+      }}
+    >
+      <button
+        onClick={onComplete}
+        aria-label="Mark complete"
+        title="Mark complete"
+        style={{
+          width: 18, height: 18, borderRadius: "50%",
+          border: "1.5px solid var(--color-text-tertiary)",
+          background: "transparent",
+          cursor: "pointer", padding: 0, flexShrink: 0,
+          marginRight: 6,
+        }}
+      />
+      <div style={{ flex: 1, minWidth: 200, padding: "4px 6px" }}>
+        <InlineTaskTitle
+          title={task.title}
+          fontSize={14}
+          onSingleClick={onOpen}
+          onSave={async (next) => onSetTitle(next)}
+        />
+      </div>
+
+      <DatePicker value={task.endDate} onChange={onSetEndDate}>
+        {({ onClick, ref }) => (
+          <button
+            ref={ref}
+            onClick={onClick}
+            type="button"
+            className="task-panel-control"
+            title={task.endDate ? `Due ${fmtDate(task.endDate)}` : "Set due date"}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "4px 8px", borderRadius: 999, height: 28,
+              cursor: "pointer", fontSize: 12, fontFamily: "inherit",
+              color: task.endDate ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
+            }}
+          >
+            <span style={{
+              width: 20, height: 20, borderRadius: "50%",
+              border: task.endDate ? "1.5px solid var(--color-text-tertiary)" : "1.5px dashed var(--color-border)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="5" width="18" height="16" rx="2" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+                <line x1="8" y1="3" x2="8" y2="7" />
+                <line x1="16" y1="3" x2="16" y2="7" />
+              </svg>
+            </span>
+            {task.endDate && <span>{fmtDate(task.endDate)}</span>}
+          </button>
+        )}
+      </DatePicker>
+
+      <ProjectPicker
+        selected={null}
+        companies={companies}
+        onChange={(v) => { if (v) onPromote(v); }}
+      >
+        {({ onClick, ref }) => (
+          <button
+            ref={ref}
+            onClick={onClick}
+            type="button"
+            className="task-panel-control"
+            title="Add to project"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "4px 12px", borderRadius: 999, height: 28,
+              cursor: "pointer", fontSize: 12, fontWeight: 500, fontFamily: "inherit",
+              color: "var(--color-text-secondary)",
+            }}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Add to project
+          </button>
+        )}
+      </ProjectPicker>
+
+      <button
+        onClick={onDelete}
+        aria-label="Delete"
+        title="Delete"
+        className="unsorted-row-delete"
+        style={{
+          background: "transparent", border: "none", cursor: "pointer",
+          color: "var(--color-text-tertiary)", padding: 6,
+          display: "flex", alignItems: "center",
+          opacity: 0,
+          transition: "opacity 100ms var(--ease-apple)",
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <line x1="6" y1="6" x2="18" y2="18" />
+          <line x1="6" y1="18" x2="18" y2="6" />
+        </svg>
+      </button>
+    </div>
+    {menu}
+    </>
+  );
+}
+
+function InboxTaskPanel({
+  task, companies, onClose, onSetTitle, onSetEndDate, onComplete, onDelete, onPromote,
+}: {
+  task: InboxTask;
+  companies: CompanyWithProjects[];
+  onClose: () => void;
+  onSetTitle: (title: string) => void;
+  onSetEndDate: (iso: string | null) => void;
+  onComplete: () => void;
+  onDelete: () => void;
+  onPromote: (projectId: string) => void;
+}) {
+  const [title, setTitle] = useState(task.title);
+  useEffect(() => { setTitle(task.title); }, [task.id, task.title]);
+
+  function commitTitle() {
+    const v = title.trim();
+    if (!v || v === task.title) { setTitle(task.title); return; }
+    onSetTitle(v);
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.2)", zIndex: 60,
+        display: "flex", justifyContent: "flex-end",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 480, height: "100%",
+          background: "white", boxShadow: "var(--shadow-modal)",
+          padding: "20px 24px 24px", overflowY: "auto",
+          animation: "slideIn 220ms var(--ease-apple)",
+          display: "flex", flexDirection: "column",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
+          <button
+            onClick={onComplete}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "5px 12px", borderRadius: 999,
+              background: "transparent",
+              border: "1px solid var(--color-border)",
+              color: "var(--color-text-secondary)",
+              fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><polyline points="4,12 9,17 20,6" /></svg>
+            Mark complete
+          </button>
+          <span style={{ flex: 1 }} />
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--color-text-tertiary)", padding: 4 }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="6" y1="6" x2="18" y2="18" />
+              <line x1="6" y1="18" x2="18" y2="6" />
+            </svg>
+          </button>
+        </div>
+
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={commitTitle}
+          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+          style={{
+            fontSize: 22, fontWeight: 600, fontFamily: "inherit",
+            border: "none", outline: "none", padding: "4px 0",
+            marginBottom: 14, background: "transparent",
+            color: "var(--color-text-primary)",
+          }}
+        />
+
+        <div style={{ display: "grid", gridTemplateColumns: "100px 1fr", gap: 10, alignItems: "center", fontSize: 13 }}>
+          <span style={{ color: "var(--color-text-tertiary)" }}>Due date</span>
+          <DatePicker value={task.endDate} onChange={onSetEndDate}>
+            {({ onClick, ref }) => (
+              <button
+                ref={ref} onClick={onClick} type="button"
+                style={{
+                  padding: "6px 10px", borderRadius: 8,
+                  border: "1px solid var(--color-border)",
+                  background: "white", textAlign: "left",
+                  cursor: "pointer", fontFamily: "inherit", fontSize: 13,
+                  color: task.endDate ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
+                }}
+              >
+                {task.endDate ? fmtDate(task.endDate) : "—"}
+              </button>
+            )}
+          </DatePicker>
+
+          <span style={{ color: "var(--color-text-tertiary)" }}>Project</span>
+          <ProjectPicker
+            selected={null}
+            companies={companies}
+            onChange={(v) => { if (v) onPromote(v); }}
+          >
+            {({ onClick, ref }) => (
+              <button
+                ref={ref} onClick={onClick} type="button"
+                style={{
+                  padding: "6px 10px", borderRadius: 8,
+                  border: "1px dashed var(--color-border)",
+                  background: "transparent", textAlign: "left",
+                  cursor: "pointer", fontFamily: "inherit", fontSize: 13,
+                  color: "var(--color-text-secondary)",
+                }}
+              >
+                + Add to project
+              </button>
+            )}
+          </ProjectPicker>
+        </div>
+
+        <div style={{ flex: 1 }} />
+
+        <button
+          onClick={onDelete}
+          style={{
+            marginTop: 24,
+            padding: "8px 14px", borderRadius: 8,
+            border: "1px solid #FCA5A5",
+            background: "transparent",
+            color: "#B91C1C",
+            fontSize: 13, fontWeight: 500, fontFamily: "inherit",
+            cursor: "pointer", alignSelf: "flex-start",
+          }}
+        >
+          Delete task
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -808,7 +1233,7 @@ function endDateMs(iso?: string | null) {
   return new Date(y, m - 1, d).getTime();
 }
 
-type ViewMode = "list" | "kanban" | "calendar";
+type ViewMode = "list" | "calendar";
 const VIEW_KEY = "workspace-tasks-view";
 
 /* ── Drag & drop helpers ──────────────────────────────────────────── */
@@ -817,7 +1242,7 @@ type DragOps = {
   draggedId: string | null;
   setDraggedId: (id: string | null) => void;
   /** Apply a partial update locally (optimistic) and PATCH the server. */
-  patchTask: (id: string, patch: Partial<Pick<DashboardTask, "status" | "endDate" | "order">>) => Promise<void>;
+  patchTask: (id: string, patch: Partial<Pick<DashboardTask, "endDate" | "order">>) => Promise<void>;
   /** Re-number `order` for a list of task IDs (in the new visual order) using 10-step gaps. */
   reorderGroup: (orderedIds: string[]) => Promise<void>;
 };
@@ -882,7 +1307,6 @@ function TasksTabs({
             t.id === id
               ? {
                   ...t,
-                  ...(patch.status !== undefined ? { status: patch.status } : null),
                   ...(patch.endDate !== undefined ? { endDate: patch.endDate } : null),
                   ...(patch.order !== undefined ? { order: patch.order } : null),
                 }
@@ -955,7 +1379,7 @@ function TasksTabsInner({ data, users }: { data: { me: string; tasks: DashboardT
   useEffect(() => {
     if (typeof window === "undefined") return;
     const stored = localStorage.getItem(VIEW_KEY);
-    if (stored === "kanban" || stored === "calendar" || stored === "list") setMode(stored);
+    if (stored === "calendar" || stored === "list") setMode(stored);
   }, []);
 
   function changeMode(next: ViewMode) {
@@ -1006,7 +1430,6 @@ function TasksTabsInner({ data, users }: { data: { me: string; tasks: DashboardT
       )}
 
       {mode === "list" && <TasksBuckets data={data} users={users} predicate={predicate} />}
-      {mode === "kanban" && <KanbanView data={data} users={users} predicate={predicate} />}
       {mode === "calendar" && <CalendarView data={data} users={users} predicate={predicate} />}
     </section>
   );
@@ -1043,13 +1466,6 @@ function ViewModeSwitcher({ value, onChange }: { value: ViewMode; onChange: (m: 
           <circle cx="4" cy="18" r="1" fill="currentColor" />
         </svg>
       </Btn>
-      <Btn mode="kanban" label="Kanban view">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="3" y="4" width="5" height="16" rx="1" />
-          <rect x="10" y="4" width="5" height="10" rx="1" />
-          <rect x="17" y="4" width="4" height="13" rx="1" />
-        </svg>
-      </Btn>
       <Btn mode="calendar" label="Calendar view">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <rect x="3" y="5" width="18" height="16" rx="2" />
@@ -1059,276 +1475,6 @@ function ViewModeSwitcher({ value, onChange }: { value: ViewMode; onChange: (m: 
         </svg>
       </Btn>
     </div>
-  );
-}
-
-/* ─── Kanban view ─── */
-
-const KANBAN_COLUMNS: { key: DashboardTask["status"]; label: string; color: string }[] = [
-  { key: "todo",    label: "To do",   color: "#94A3B8" },
-  { key: "doing",   label: "Doing",   color: "#0071E3" },
-  { key: "blocked", label: "Blocked", color: "#DC2626" },
-  { key: "done",    label: "Done",    color: "#10B981" },
-];
-
-function KanbanView({
-  data, users, predicate,
-}: {
-  data: { me: string; tasks: DashboardTask[] };
-  users: DirectoryUser[];
-  predicate: (t: DashboardTask) => boolean;
-}) {
-  const dragOps = useDragOps();
-  const [hoverCol, setHoverCol] = useState<DashboardTask["status"] | null>(null);
-
-  const grouped = useMemo(() => {
-    const out: Record<DashboardTask["status"], DashboardTask[]> = { todo: [], doing: [], blocked: [], done: [] };
-    for (const t of data.tasks) {
-      if (t.parentTaskId) continue;
-      if (!predicate(t)) continue;
-      out[t.status].push(t);
-    }
-    const cmp = (a: DashboardTask, b: DashboardTask) => {
-      if (a.order !== b.order) return a.order - b.order;
-      const da = endDateMs(a.endDate) ?? Number.POSITIVE_INFINITY;
-      const db = endDateMs(b.endDate) ?? Number.POSITIVE_INFINITY;
-      return da - db;
-    };
-    for (const k of Object.keys(out) as (keyof typeof out)[]) out[k].sort(cmp);
-    return out;
-  }, [data, predicate]);
-
-  function handleDropOnColumn(colKey: DashboardTask["status"], anchorTaskId: string | null, edge: "before" | "after") {
-    const id = dragOps.draggedId;
-    if (!id) return;
-    const dragged = data.tasks.find((t) => t.id === id);
-    if (!dragged) return;
-    const isCrossColumn = dragged.status !== colKey;
-
-    // Build new order list for target column. `target` is the column WITHOUT the dragged task.
-    const target = grouped[colKey].filter((t) => t.id !== id);
-    let insertAt: number;
-    if (anchorTaskId) {
-      const idx = target.findIndex((t) => t.id === anchorTaskId);
-      insertAt = idx < 0 ? target.length : idx + (edge === "after" ? 1 : 0);
-    } else {
-      insertAt = target.length;
-    }
-    const ordered = [...target.slice(0, insertAt), dragged, ...target.slice(insertAt)];
-    const orderedIds = ordered.map((t) => t.id);
-
-    if (isCrossColumn) dragOps.patchTask(id, { status: colKey });
-    dragOps.reorderGroup(orderedIds);
-    dragOps.setDraggedId(null);
-    setHoverCol(null);
-  }
-
-  return (
-    <div style={{
-      display: "grid",
-      gridTemplateColumns: "repeat(4, minmax(240px, 1fr))",
-      gap: 12,
-      overflowX: "auto",
-      paddingBottom: 8,
-    }}>
-      {KANBAN_COLUMNS.map((col) => {
-        const tasks = grouped[col.key];
-        const isHovered = hoverCol === col.key;
-        return (
-          <div
-            key={col.key}
-            onDragOver={(e) => {
-              if (!dragOps.draggedId) return;
-              e.preventDefault();
-              setHoverCol(col.key);
-            }}
-            onDragLeave={(e) => {
-              if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
-              setHoverCol((c) => (c === col.key ? null : c));
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              handleDropOnColumn(col.key, null, "after");
-            }}
-            style={{
-              background: "var(--bg-card)", borderRadius: 14,
-              boxShadow: "var(--shadow-card)",
-              display: "flex", flexDirection: "column",
-              minHeight: 200, maxHeight: "calc(100vh - 280px)",
-              outline: isHovered ? `2px solid ${col.color}` : "2px solid transparent",
-              outlineOffset: -2,
-              transition: "outline-color 100ms",
-            }}
-          >
-            <div style={{
-              display: "flex", alignItems: "center", gap: 8,
-              padding: "12px 14px",
-              borderBottom: "1px solid var(--color-border)",
-            }}>
-              <span style={{ width: 8, height: 8, borderRadius: "50%", background: col.color }} />
-              <span style={{ fontSize: 13, fontWeight: 600 }}>{col.label}</span>
-              <span style={{
-                fontSize: 11, color: "var(--color-text-tertiary)",
-                background: "rgba(0,0,0,0.04)", padding: "2px 8px", borderRadius: 999,
-              }}>{tasks.length}</span>
-            </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-              {tasks.length === 0 ? (
-                <div style={{ padding: "20px 8px", fontSize: 12, fontStyle: "italic", color: "var(--color-text-tertiary)", textAlign: "center" }}>
-                  Empty
-                </div>
-              ) : (
-                tasks.map((t) => (
-                  <DraggableKanbanCard
-                    key={t.id}
-                    task={t}
-                    users={users}
-                    onDropAt={(edge) => handleDropOnColumn(col.key, t.id, edge)}
-                  />
-                ))
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function DraggableKanbanCard({
-  task,
-  users,
-  onDropAt,
-}: {
-  task: DashboardTask;
-  users: DirectoryUser[];
-  onDropAt: (edge: "before" | "after") => void;
-}) {
-  const dragOps = useDragOps();
-  const [over, setOver] = useState<"before" | "after" | null>(null);
-  const isDragging = dragOps.draggedId === task.id;
-  return (
-    <div
-      draggable
-      onDragStart={(e) => {
-        dragOps.setDraggedId(task.id);
-        e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", task.id);
-      }}
-      onDragEnd={() => dragOps.setDraggedId(null)}
-      onDragOver={(e) => {
-        if (!dragOps.draggedId || dragOps.draggedId === task.id) return;
-        e.preventDefault();
-        e.stopPropagation();
-        setOver(dropEdge(e));
-      }}
-      onDragLeave={() => setOver(null)}
-      onDrop={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const edge = dropEdge(e);
-        setOver(null);
-        onDropAt(edge);
-      }}
-      style={{
-        opacity: isDragging ? 0.4 : 1,
-        borderTop: over === "before" ? "2px solid var(--color-accent)" : "2px solid transparent",
-        borderBottom: over === "after" ? "2px solid var(--color-accent)" : "2px solid transparent",
-      }}
-    >
-      <KanbanCard task={task} users={users} />
-    </div>
-  );
-}
-
-function KanbanCard({ task, users }: { task: DashboardTask; users: DirectoryUser[] }) {
-  const router = useRouter();
-  const openTask = useOpenTask();
-  const refresh = useTaskRefresh();
-  const allTags = useTags();
-  const owner = userMeta(task.ownerEmail, users);
-  const projectColor = colorForEmail(task.projectId);
-  const due = endDateMs(task.endDate);
-  const overdue = due != null && due < todayStart().getTime() && !task.completed;
-  const { onContextMenu, menu } = useTaskContextMenu({
-    taskTitle: task.title,
-    onDelete: async () => {
-      const res = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const j = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(j.error ?? `HTTP ${res.status}`);
-      }
-      await refresh?.();
-    },
-  });
-  function open() {
-    if (openTask) openTask(task.id);
-    else router.push(`/workspace/${task.companyId}/${task.projectId}?task=${task.id}`);
-  }
-  return (
-    <>
-    <div
-      onClick={open}
-      onContextMenu={onContextMenu}
-      style={{
-        background: "white", borderRadius: 10, padding: 10,
-        border: "1px solid var(--color-border)",
-        cursor: "pointer",
-        transition: "box-shadow 100ms var(--ease-apple), transform 100ms var(--ease-apple)",
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.06)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "none"; }}
-    >
-      <div style={{
-        fontSize: 13, fontWeight: 500,
-        color: task.completed ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
-        textDecoration: task.completed ? "line-through" : "none",
-        lineHeight: 1.4, marginBottom: 6,
-      }}>
-        {task.title}
-      </div>
-      {task.tagIds.length > 0 && (
-        <div style={{ marginBottom: 6 }}>
-          <TagPillList tagIds={task.tagIds} allTags={allTags} max={3} size="xs" />
-        </div>
-      )}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
-        fontSize: 11,
-      }}>
-        <span style={{
-          display: "inline-flex", alignItems: "center", gap: 4,
-          padding: "2px 7px", borderRadius: 999,
-          background: `${projectColor}1A`, color: projectColor,
-          maxWidth: 160,
-          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        }}>
-          <span style={{ width: 5, height: 5, borderRadius: "50%", background: projectColor, flexShrink: 0 }} />
-          {task.projectName}
-        </span>
-        {task.priority && (
-          <span style={{
-            fontWeight: 600,
-            color: PRIORITY_META[task.priority].color, background: PRIORITY_META[task.priority].bg,
-            padding: "2px 7px", borderRadius: 999,
-          }}>{PRIORITY_META[task.priority].label}</span>
-        )}
-        {task.endDate && (
-          <span style={{
-            fontWeight: 500,
-            padding: "2px 7px", borderRadius: 999,
-            color: overdue ? "#B91C1C" : "var(--color-text-secondary)",
-            background: overdue ? "#FEE2E2" : "transparent",
-          }}>
-            {fmtDate(task.endDate)}
-          </span>
-        )}
-        <span style={{ flex: 1 }} />
-        {owner && <Avatar user={owner} size={20} />}
-      </div>
-    </div>
-    {menu}
-    </>
   );
 }
 
@@ -1812,8 +1958,24 @@ function BucketTaskRow({
   const isDragging = dragOps.draggedId === task.id;
   const { onContextMenu, menu } = useTaskContextMenu({
     taskTitle: task.title,
+    currentStartDate: task.startDate,
+    currentEndDate: task.endDate,
+    currentProjectId: task.projectId,
+    currentSectionId: task.sectionId,
     onDelete: async () => {
       const res = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? `HTTP ${res.status}`);
+      }
+      await refresh?.();
+    },
+    onUpdate: async (patch) => {
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(j.error ?? `HTTP ${res.status}`);
@@ -1887,14 +2049,24 @@ function BucketTaskRow({
       >
         {task.completed && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="5,12 10,17 19,7" /></svg>}
       </button>
-      <span style={{
-        flex: 1, fontSize: 14, minWidth: 0,
-        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        color: task.completed ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
-        textDecoration: task.completed ? "line-through" : "none",
-      }}>
-        {task.title}
-      </span>
+      <InlineTaskTitle
+        title={task.title}
+        completed={task.completed}
+        fontSize={14}
+        onSingleClick={open}
+        onSave={async (next) => {
+          const res = await fetch(`/api/tasks/${task.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: next }),
+          });
+          if (!res.ok) {
+            const j = (await res.json().catch(() => ({}))) as { error?: string };
+            throw new Error(j.error ?? `HTTP ${res.status}`);
+          }
+          await refresh?.();
+        }}
+      />
       {task.tagIds.length > 0 && (
         <TagPillList tagIds={task.tagIds} allTags={allTags} max={3} size="xs" />
       )}
@@ -1933,6 +2105,25 @@ function BucketTaskRow({
         </span>
       )}
       {owner && <Avatar user={owner} size={22} />}
+      <MoveToButton
+        currentProjectId={task.projectId}
+        currentSectionId={task.sectionId}
+        onMove={async (projectId, sectionId) => {
+          const res = await fetch(`/api/tasks/${task.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...(projectId !== task.projectId ? { projectId } : {}),
+              sectionId,
+            }),
+          });
+          if (!res.ok) {
+            const j = (await res.json().catch(() => ({}))) as { error?: string };
+            throw new Error(j.error ?? `HTTP ${res.status}`);
+          }
+          await refresh?.();
+        }}
+      />
     </div>
     {menu}
     </>
@@ -2035,8 +2226,24 @@ function AssignedRow({ task, users, me }: { task: DashboardTask; users: Director
   const owner = userMeta(task.ownerEmail, users);
   const { onContextMenu, menu } = useTaskContextMenu({
     taskTitle: task.title,
+    currentStartDate: task.startDate,
+    currentEndDate: task.endDate,
+    currentProjectId: task.projectId,
+    currentSectionId: task.sectionId,
     onDelete: async () => {
       const res = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? `HTTP ${res.status}`);
+      }
+      await refresh?.();
+    },
+    onUpdate: async (patch) => {
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(j.error ?? `HTTP ${res.status}`);
@@ -2063,14 +2270,24 @@ function AssignedRow({ task, users, me }: { task: DashboardTask; users: Director
       onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.02)")}
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
     >
-      <span style={{
-        flex: 1, fontSize: 14, minWidth: 0,
-        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        color: task.completed ? "var(--color-text-tertiary)" : "var(--color-text-primary)",
-        textDecoration: task.completed ? "line-through" : "none",
-      }}>
-        {task.title}
-      </span>
+      <InlineTaskTitle
+        title={task.title}
+        completed={task.completed}
+        fontSize={14}
+        onSingleClick={open}
+        onSave={async (next) => {
+          const res = await fetch(`/api/tasks/${task.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: next }),
+          });
+          if (!res.ok) {
+            const j = (await res.json().catch(() => ({}))) as { error?: string };
+            throw new Error(j.error ?? `HTTP ${res.status}`);
+          }
+          await refresh?.();
+        }}
+      />
       {task.tagIds.length > 0 && (
         <TagPillList tagIds={task.tagIds} allTags={allTags} max={3} size="xs" />
       )}
@@ -2100,6 +2317,25 @@ function AssignedRow({ task, users, me }: { task: DashboardTask; users: Director
         </span>
       )}
       {owner && owner.email !== me && <Avatar user={owner} size={22} />}
+      <MoveToButton
+        currentProjectId={task.projectId}
+        currentSectionId={task.sectionId}
+        onMove={async (projectId, sectionId) => {
+          const res = await fetch(`/api/tasks/${task.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...(projectId !== task.projectId ? { projectId } : {}),
+              sectionId,
+            }),
+          });
+          if (!res.ok) {
+            const j = (await res.json().catch(() => ({}))) as { error?: string };
+            throw new Error(j.error ?? `HTTP ${res.status}`);
+          }
+          await refresh?.();
+        }}
+      />
     </div>
     {menu}
     </>
@@ -2232,7 +2468,6 @@ interface FullTask {
   endDate: string | null;
   priority: "low" | "medium" | "high" | null;
   estimatedHours: number | null;
-  status: "todo" | "doing" | "blocked" | "done";
   completed: boolean;
   completedAt: string | null;
   goal: string | null;
@@ -2477,25 +2712,6 @@ function DashboardTaskPanel({
                 )}
               </DatePicker>
 
-              <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>Status</span>
-              <EnumPicker
-                selected={task.status}
-                options={[
-                  { value: "todo", label: "To do", color: "#94A3B8" },
-                  { value: "doing", label: "Doing", color: "#0071E3" },
-                  { value: "blocked", label: "Blocked", color: "#DC2626" },
-                  { value: "done", label: "Done", color: "#10B981" },
-                ]}
-                onChange={(v) => patch({ status: v })}
-              >
-                {({ onClick, ref }) => (
-                  <button ref={ref} onClick={onClick} type="button" className="task-panel-control"
-                    style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid transparent", background: "transparent", cursor: "pointer", width: "100%", textAlign: "left", fontFamily: "inherit" }}>
-                    <StatusPill status={task.status} />
-                  </button>
-                )}
-              </EnumPicker>
-
               <span style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>Priority</span>
               <EnumPicker
                 selected={task.priority ?? ""}
@@ -2523,9 +2739,9 @@ function DashboardTaskPanel({
 
             <div style={{ marginBottom: 18 }}>
               <div style={{ fontSize: 12, color: "var(--color-text-tertiary)", marginBottom: 6 }}>Description</div>
-              <textarea
+              <LinkifiedTextarea
                 value={description}
-                onChange={(e) => saveDescSoon(e.target.value)}
+                onChange={saveDescSoon}
                 placeholder="Add a description, links, or context…"
                 rows={4}
                 style={{ ...inputStyle, resize: "vertical" }}
@@ -2579,23 +2795,6 @@ function DashboardTaskPanel({
         </div>
       )}
     </div>
-  );
-}
-
-function StatusPill({ status }: { status: "todo" | "doing" | "blocked" | "done" }) {
-  const meta = {
-    todo: { label: "To do", bg: "#F1F5F9", color: "#475569" },
-    doing: { label: "Doing", bg: "#DBEAFE", color: "#1E40AF" },
-    blocked: { label: "Blocked", bg: "#FEE2E2", color: "#991B1B" },
-    done: { label: "Done", bg: "#D1FAE5", color: "#065F46" },
-  }[status];
-  return (
-    <span style={{
-      display: "inline-flex", alignItems: "center",
-      padding: "3px 10px", borderRadius: 999,
-      fontSize: 12, fontWeight: 600,
-      background: meta.bg, color: meta.color,
-    }}>{meta.label}</span>
   );
 }
 
