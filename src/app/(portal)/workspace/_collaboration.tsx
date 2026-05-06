@@ -350,7 +350,7 @@ export function Attachments({
     setUploading({ name: file.name, pct: 0 });
     try {
       const blob = await upload(file.name, file, {
-        access: "public",
+        access: "private",
         handleUploadUrl: "/api/attachments/upload",
         clientPayload: JSON.stringify({ parentType, parentId }),
         onUploadProgress: (e) => {

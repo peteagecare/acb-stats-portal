@@ -1233,7 +1233,7 @@ function AssetField({ value, onChange }: { value: string; onChange: (v: string) 
     setUploading({ name: file.name, pct: 0 });
     try {
       const blob = await upload(file.name, file, {
-        access: "public",
+        access: "private",
         handleUploadUrl: "/api/content-calendar/upload",
         onUploadProgress: (e) => {
           const pct = "percentage" in e ? e.percentage : 0;

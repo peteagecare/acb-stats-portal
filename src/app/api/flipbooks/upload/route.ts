@@ -26,6 +26,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     const jsonResponse = await handleUpload({
       body,
       request,
+      token: process.env.FLIPBOOKS_READ_WRITE_TOKEN,
       onBeforeGenerateToken: async (pathname) => {
         if (!PATHNAME_RE.test(pathname)) {
           throw new Error("Invalid pathname");
