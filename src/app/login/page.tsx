@@ -11,19 +11,6 @@ export default function LoginPage() {
   );
 }
 
-type Tab = "email" | "authenticator";
-
-type PeriodOption = "this_month" | "last_month" | "last_7" | "last_30" | "last_90" | "this_year";
-
-const PERIOD_OPTIONS: { value: PeriodOption; label: string }[] = [
-  { value: "this_month", label: "This Month" },
-  { value: "last_month", label: "Last Month" },
-  { value: "last_7", label: "Last 7 Days" },
-  { value: "last_30", label: "Last 30 Days" },
-  { value: "last_90", label: "Last 90 Days" },
-  { value: "this_year", label: "This Year" },
-];
-
 function LoginForm() {
   const params = useSearchParams();
   const router = useRouter();
@@ -31,36 +18,9 @@ function LoginForm() {
     ? "That sign-in link has expired or is invalid. Request a new one below."
     : null;
 
-  const [tab, setTab] = useState<Tab>("authenticator");
-  const [email, setEmail] = useState("");
-  const [emailStatus, setEmailStatus] = useState<"idle" | "sending" | "sent">("idle");
   const [code, setCode] = useState("");
   const [codeStatus, setCodeStatus] = useState<"idle" | "checking">("idle");
   const [error, setError] = useState<string | null>(initialError);
-  const [period, setPeriod] = useState<PeriodOption>("this_month");
-
-  async function requestLink(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setEmailStatus("sending");
-    try {
-      const res = await fetch("/api/login/request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim() }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setError(body.error ?? "Could not send sign-in link.");
-        setEmailStatus("idle");
-        return;
-      }
-      setEmailStatus("sent");
-    } catch {
-      setError("Network error. Please try again.");
-      setEmailStatus("idle");
-    }
-  }
 
   async function verifyCode(e: React.FormEvent) {
     e.preventDefault();
@@ -78,32 +38,12 @@ function LoginForm() {
         setCodeStatus("idle");
         return;
       }
-      const base = params.get("next") || "/";
-      const sep = base.includes("?") ? "&" : "?";
-      router.push(`${base}${sep}period=${period}`);
+      router.push(params.get("next") || "/");
     } catch {
       setError("Network error. Please try again.");
       setCodeStatus("idle");
     }
   }
-
-  function switchTab(t: Tab) {
-    setTab(t);
-    setError(null);
-  }
-
-  const tabStyle = (active: boolean): React.CSSProperties => ({
-    flex: 1,
-    padding: "12px 0",
-    fontSize: "14px",
-    fontWeight: active ? 500 : 400,
-    border: "none",
-    borderBottom: active ? "2px solid #1D1D1F" : "2px solid transparent",
-    background: "transparent",
-    color: active ? "#1D1D1F" : "#AEAEB2",
-    cursor: "pointer",
-    transition: "all 0.25s cubic-bezier(0.25, 0.1, 0.25, 1)",
-  });
 
   const inputStyle: React.CSSProperties = {
     width: "100%",
@@ -166,45 +106,6 @@ function LoginForm() {
           Age Care Marketing Hub
         </h1>
 
-        {/* Tabs */}
-        <div style={{ display: "flex", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
-          <button type="button" onClick={() => switchTab("authenticator")} style={tabStyle(tab === "authenticator")}>
-            Authenticator
-          </button>
-          <button type="button" onClick={() => switchTab("email")} style={tabStyle(tab === "email")}>
-            Email link
-          </button>
-        </div>
-
-        {/* Period picker */}
-        <div>
-          <p style={{ fontSize: "11px", fontWeight: 600, color: "#86868B", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-            Load dashboard with
-          </p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px" }}>
-            {PERIOD_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setPeriod(opt.value)}
-                style={{
-                  padding: "10px 4px",
-                  fontSize: "12px",
-                  fontWeight: period === opt.value ? 600 : 400,
-                  color: period === opt.value ? "white" : "#3A3A3C",
-                  background: period === opt.value ? "#1D1D1F" : "#F5F5F7",
-                  border: period === opt.value ? "1px solid #1D1D1F" : "1px solid rgba(0,0,0,0.06)",
-                  borderRadius: "10px",
-                  cursor: "pointer",
-                  transition: "all 0.2s",
-                }}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* Error banner */}
         {error && (
           <div
@@ -221,103 +122,38 @@ function LoginForm() {
           </div>
         )}
 
-        {/* Authenticator tab */}
-        {tab === "authenticator" && (
-          <form onSubmit={verifyCode} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            <p style={{ fontSize: "14px", color: "#86868B", margin: 0, lineHeight: 1.6 }}>
-              Enter the 6-digit code from your Google&nbsp;Authenticator app.
-            </p>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="\d{6}"
-              maxLength={6}
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-              placeholder="000 000"
-              autoFocus
-              required
-              autoComplete="one-time-code"
-              style={{
-                ...inputStyle,
-                fontSize: "28px",
-                fontWeight: 600,
-                letterSpacing: "0.3em",
-                textAlign: "center",
-                fontVariantNumeric: "tabular-nums",
-              }}
-            />
-            <button
-              type="submit"
-              disabled={codeStatus === "checking" || code.length !== 6}
-              style={buttonStyle(codeStatus === "checking" || code.length !== 6)}
-            >
-              {codeStatus === "checking" ? "Verifying\u2026" : "Sign in"}
-            </button>
-          </form>
-        )}
-
-        {/* Email tab */}
-        {tab === "email" && emailStatus === "sent" ? (
-          <>
-            <div
-              style={{
-                background: "#F0FFF4",
-                color: "#059669",
-                borderRadius: "14px",
-                padding: "18px",
-                fontSize: "14px",
-                lineHeight: 1.6,
-              }}
-            >
-              <strong>Check your inbox.</strong>
-              <br />
-              A sign-in link has been sent to <strong>{email}</strong>. Click
-              it within 15 minutes to access the dashboard.
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setEmailStatus("idle");
-                setError(null);
-              }}
-              style={{
-                background: "transparent",
-                border: "none",
-                color: "#0071E3",
-                fontSize: "14px",
-                fontWeight: 500,
-                cursor: "pointer",
-              }}
-            >
-              Use a different email
-            </button>
-          </>
-        ) : tab === "email" ? (
-          <form onSubmit={requestLink} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            <p style={{ fontSize: "14px", color: "#86868B", margin: 0, lineHeight: 1.6 }}>
-              Enter your <strong style={{ color: "#1D1D1F" }}>@agecare-bathrooms.co.uk</strong> email
-              address and we&rsquo;ll send you a one-time sign-in link.
-            </p>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@agecare-bathrooms.co.uk"
-              autoFocus
-              required
-              autoComplete="email"
-              style={inputStyle}
-            />
-            <button
-              type="submit"
-              disabled={emailStatus === "sending" || !email}
-              style={buttonStyle(emailStatus === "sending" || !email)}
-            >
-              {emailStatus === "sending" ? "Sending\u2026" : "Email me a sign-in link"}
-            </button>
-          </form>
-        ) : null}
+        <form onSubmit={verifyCode} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <p style={{ fontSize: "14px", color: "#86868B", margin: 0, lineHeight: 1.6 }}>
+            Enter the 6-digit code from your Google&nbsp;Authenticator app.
+          </p>
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="\d{6}"
+            maxLength={6}
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+            placeholder="000 000"
+            autoFocus
+            required
+            autoComplete="one-time-code"
+            style={{
+              ...inputStyle,
+              fontSize: "28px",
+              fontWeight: 600,
+              letterSpacing: "0.3em",
+              textAlign: "center",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          />
+          <button
+            type="submit"
+            disabled={codeStatus === "checking" || code.length !== 6}
+            style={buttonStyle(codeStatus === "checking" || code.length !== 6)}
+          >
+            {codeStatus === "checking" ? "Verifying\u2026" : "Sign in"}
+          </button>
+        </form>
       </div>
     </div>
   );
