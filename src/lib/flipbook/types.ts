@@ -47,6 +47,43 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   allowDownload: false,
 };
 
+export type LeadFieldType = "text" | "email" | "tel";
+
+export type LeadField = {
+  key: string;
+  label: string;
+  type: LeadFieldType;
+  required: boolean;
+  hubspotName?: string;
+};
+
+export type LeadGate = {
+  enabled: boolean;
+  atPage: number;
+  dismissible: boolean;
+  headline: string;
+  subhead: string;
+  buttonLabel: string;
+  fields: LeadField[];
+  hubspotPortalId: string;
+  hubspotFormGuid: string;
+};
+
+export const DEFAULT_LEAD_GATE: LeadGate = {
+  enabled: false,
+  atPage: 3,
+  dismissible: false,
+  headline: "Read on for the full guide",
+  subhead: "Pop your details in and we'll send a copy to your inbox.",
+  buttonLabel: "Continue reading",
+  fields: [
+    { key: "firstName", label: "First name", type: "text", required: true, hubspotName: "firstname" },
+    { key: "email", label: "Email", type: "email", required: true, hubspotName: "email" },
+  ],
+  hubspotPortalId: "",
+  hubspotFormGuid: "",
+};
+
 export type FlipbookManifest = {
   id: string;
   name: string;
@@ -58,4 +95,5 @@ export type FlipbookManifest = {
   pageUrls: string[];
   overlays: Overlay[];
   settings: ProjectSettings;
+  leadGate: LeadGate;
 };

@@ -5,10 +5,15 @@ import { db } from "@/db/client";
 import { flipbooks } from "@/db/schema";
 import {
   DEFAULT_SETTINGS,
+  type LeadGate,
   type Overlay,
   type ProjectSettings,
 } from "@/lib/flipbook/types";
-import { sanitiseOverlays, sanitiseSettings } from "@/lib/flipbook/sanitise";
+import {
+  sanitiseLeadGate,
+  sanitiseOverlays,
+  sanitiseSettings,
+} from "@/lib/flipbook/sanitise";
 import { requireUser } from "@/lib/workspace-auth";
 
 export const runtime = "nodejs";
@@ -35,7 +40,12 @@ export async function PATCH(
   }
 
   const body = (await request.json().catch(() => null)) as
-    | { name?: string; settings?: unknown; overlays?: unknown }
+    | {
+        name?: string;
+        settings?: unknown;
+        overlays?: unknown;
+        leadGate?: unknown;
+      }
     | null;
   if (!body) {
     return Response.json({ error: "Invalid body" }, { status: 400 });
@@ -45,6 +55,7 @@ export async function PATCH(
     name?: string;
     settings?: ProjectSettings;
     overlays?: Overlay[];
+    leadGate?: LeadGate;
   } = {};
 
   if (typeof body.name === "string") {
@@ -72,6 +83,14 @@ export async function PATCH(
       return Response.json({ error: "Invalid overlays" }, { status: 400 });
     }
     update.overlays = sanitised;
+  }
+
+  if (body.leadGate !== undefined) {
+    const sanitised = sanitiseLeadGate(body.leadGate);
+    if (sanitised === null) {
+      return Response.json({ error: "Invalid leadGate" }, { status: 400 });
+    }
+    update.leadGate = sanitised;
   }
 
   if (Object.keys(update).length === 0) {

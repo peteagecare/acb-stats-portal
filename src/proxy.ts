@@ -23,6 +23,8 @@ function isPublic(pathname: string): boolean {
   // from Vercel itself (signed via HMAC, no user cookie). The handler enforces
   // user auth for the initial token request.
   if (pathname === "/api/flipbooks/upload") return true;
+  // Lead capture submissions on the public flipbook viewer.
+  if (/^\/api\/flipbooks\/[A-Za-z0-9_-]+\/lead$/.test(pathname)) return true;
   return false;
 }
 

@@ -3,8 +3,10 @@ import { notFound } from "next/navigation";
 import { db } from "@/db/client";
 import { flipbooks } from "@/db/schema";
 import {
+  DEFAULT_LEAD_GATE,
   DEFAULT_SETTINGS,
   type FlipbookManifest,
+  type LeadGate,
   type Overlay,
   type ProjectSettings,
 } from "@/lib/flipbook/types";
@@ -38,6 +40,10 @@ export default async function FlipbookEditorPage({
     settings: {
       ...DEFAULT_SETTINGS,
       ...((row.settings as Partial<ProjectSettings>) ?? {}),
+    },
+    leadGate: {
+      ...DEFAULT_LEAD_GATE,
+      ...((row.leadGate as Partial<LeadGate>) ?? {}),
     },
   };
 

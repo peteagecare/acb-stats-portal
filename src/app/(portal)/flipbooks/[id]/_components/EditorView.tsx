@@ -25,6 +25,8 @@ export default function EditorView({
         sourcePdfUrl={manifest.sourcePdfUrl}
         settings={manifest.settings}
         overlays={manifest.overlays}
+        leadGate={manifest.leadGate}
+        gateUnlocked
         onOpenSettings={() => setOpen(true)}
       />
       <SettingsPanel
@@ -32,6 +34,8 @@ export default function EditorView({
         open={open}
         onClose={() => setOpen(false)}
         settings={manifest.settings}
+        leadGate={manifest.leadGate}
+        pageCount={manifest.pageCount}
       />
     </>
   );

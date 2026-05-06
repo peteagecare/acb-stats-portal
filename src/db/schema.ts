@@ -342,7 +342,23 @@ export const flipbooks = pgTable("flipbooks", {
   pageUrls: jsonb("page_urls").notNull(),
   settings: jsonb("settings").notNull(),
   overlays: jsonb("overlays").notNull().default([]),
+  leadGate: jsonb("lead_gate"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const flipbookLeads = pgTable("flipbook_leads", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  flipbookId: text("flipbook_id")
+    .notNull()
+    .references(() => flipbooks.id, { onDelete: "cascade" }),
+  cookieId: text("cookie_id").notNull(),
+  email: text("email"),
+  fields: jsonb("fields").notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  hubspotSubmittedAt: timestamp("hubspot_submitted_at", { withTimezone: true }),
+  hubspotError: text("hubspot_error"),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type Company = typeof companies.$inferSelect;

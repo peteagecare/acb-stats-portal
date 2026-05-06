@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { nanoid } from "nanoid";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
+  LeadGate,
   LinkTarget,
   Overlay,
   ProjectSettings,
@@ -13,6 +14,7 @@ import type { ParsedVideo } from "@/lib/flipbook/video";
 import AddGifModal from "./AddGifModal";
 import AddLinkModal from "./AddLinkModal";
 import AddVideoModal from "./AddVideoModal";
+import LeadGateModal from "./LeadGateModal";
 import OverlayLayer from "./OverlayLayer";
 
 type PageFlipInstance = {
@@ -43,6 +45,8 @@ type Props = {
   sourcePdfUrl: string;
   settings: ProjectSettings;
   overlays: Overlay[];
+  leadGate?: LeadGate;
+  gateUnlocked?: boolean;
   onOpenSettings?: () => void;
 };
 
@@ -57,6 +61,8 @@ export default function Flipbook({
   sourcePdfUrl,
   settings,
   overlays,
+  leadGate,
+  gateUnlocked: gateUnlockedProp,
   onOpenSettings,
 }: Props) {
   const router = useRouter();
@@ -70,6 +76,15 @@ export default function Flipbook({
   const [addLinkOpen, setAddLinkOpen] = useState(false);
   const [addGifOpen, setAddGifOpen] = useState(false);
   const [isFlipping, setIsFlipping] = useState(false);
+  const [gateUnlocked, setGateUnlocked] = useState(gateUnlockedProp ?? true);
+  const [gateOpen, setGateOpen] = useState(false);
+
+  const gateActive =
+    mode === "viewer" &&
+    !!leadGate &&
+    leadGate.enabled &&
+    !gateUnlocked &&
+    currentPage + 1 >= leadGate.atPage;
 
   const { displayMode, showCover, allowKeyboardNav, allowDownload } = settings;
   const overlaysEnabled = displayMode === "single";
@@ -138,12 +153,19 @@ export default function Flipbook({
       ) {
         return;
       }
+      if (gateActive) return;
       if (e.key === "ArrowLeft") flipRef.current?.flipPrev();
       else if (e.key === "ArrowRight") flipRef.current?.flipNext();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [allowKeyboardNav]);
+  }, [allowKeyboardNav, gateActive]);
+
+  // Open gate when reader hits the gate page; bounce them back to the page
+  // before if dismissible-gate is closed without submitting.
+  useEffect(() => {
+    if (gateActive) setGateOpen(true);
+  }, [gateActive]);
 
   const toggleFullscreen = useCallback(() => {
     const el = rootRef.current;
@@ -391,13 +413,32 @@ export default function Flipbook({
         <button
           type="button"
           onClick={() => flipRef.current?.flipNext()}
-          disabled={currentPage >= pageCount - 1}
+          disabled={currentPage >= pageCount - 1 || gateActive}
           className="absolute right-2 top-1/2 z-30 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 text-zinc-700 shadow-md backdrop-blur transition-opacity hover:bg-white disabled:pointer-events-none disabled:opacity-0 md:right-6"
           aria-label="Next page"
         >
           <ChevronIcon direction="right" />
         </button>
       </div>
+
+      {mode === "viewer" && leadGate && leadGate.enabled ? (
+        <LeadGateModal
+          flipbookId={flipbookId}
+          gate={leadGate}
+          open={gateOpen && !gateUnlocked}
+          onUnlock={() => {
+            setGateUnlocked(true);
+            setGateOpen(false);
+          }}
+          onDismiss={() => {
+            setGateOpen(false);
+            // Hard gate (non-dismissible): bounce back one page so they can't read past.
+            if (!leadGate.dismissible) {
+              flipRef.current?.flip(Math.max(0, leadGate.atPage - 2));
+            }
+          }}
+        />
+      ) : null}
 
       {mode === "editor" ? (
         <>
