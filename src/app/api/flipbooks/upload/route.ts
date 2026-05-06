@@ -4,15 +4,6 @@ import { requireUser } from "@/lib/workspace-auth";
 
 export const runtime = "nodejs";
 
-const ALLOWED_CONTENT_TYPES = [
-  "application/pdf",
-  "image/png",
-  "image/gif",
-  "image/webp",
-  "image/jpeg",
-  "image/apng",
-];
-
 const MAX_BYTES = 200 * 1024 * 1024;
 
 const PATHNAME_RE =
@@ -40,7 +31,6 @@ export async function POST(request: NextRequest): Promise<Response> {
           throw new Error("Invalid pathname");
         }
         return {
-          allowedContentTypes: ALLOWED_CONTENT_TYPES,
           maximumSizeInBytes: MAX_BYTES,
           addRandomSuffix: true,
         };
@@ -52,6 +42,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     return Response.json(jsonResponse);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Upload failed";
+    console.error("[flipbooks/upload]", err);
     return Response.json({ error: msg }, { status: 400 });
   }
 }
