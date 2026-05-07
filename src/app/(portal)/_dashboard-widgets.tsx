@@ -761,7 +761,8 @@ interface CalEntryWeek {
   title: string;
   liveDate: string;
   time?: string;
-  platform: string;
+  platform?: string;
+  platforms?: string[];
   status: string;
   assetLink?: string;
 }
@@ -826,7 +827,11 @@ export function ThisWeeksContent() {
                       ⚠ no asset
                     </span>
                   )}
-                  <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", whiteSpace: "nowrap" }}>{e.platform.split(" ")[0]}</span>
+                  <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", whiteSpace: "nowrap" }}>
+                    {Array.isArray(e.platforms) && e.platforms.length
+                      ? e.platforms[0].split(" ")[0]
+                      : (e.platform ?? "").split(" ")[0]}
+                  </span>
                 </div>
               );
             })}
