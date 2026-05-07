@@ -248,10 +248,16 @@ interface CalEntry {
   id: string;
   title: string;
   liveDate: string;
-  platform: string;
+  platform?: string;
+  platforms?: string[];
   needsFinanceApproval: boolean;
   status: string;
   submittedBy: string;
+}
+
+function calEntryPlatformLabel(c: CalEntry): string {
+  if (Array.isArray(c.platforms) && c.platforms.length) return c.platforms.join(", ");
+  return c.platform ?? "";
 }
 
 interface ApprovalsMap {
@@ -336,7 +342,7 @@ export function OutstandingApprovals() {
       pushRow(e.id, e.subject || e.name, "email", "/financial-approvals");
     }
     for (const c of content) pushRow(c.id, c.title, c.type, "/financial-approvals");
-    for (const cal of calendar) pushRow(cal.id, cal.title, cal.platform, "/content-calendar");
+    for (const cal of calendar) pushRow(cal.id, cal.title, calEntryPlatformLabel(cal), "/content-calendar");
 
     rows.sort((a, b) => Number(b.mine) - Number(a.mine));
     return rows.slice(0, 8);
@@ -411,7 +417,7 @@ export function ContentToCheck() {
             <div style={{ fontSize: 13, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {entry.title}
             </div>
-            <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 2 }}>{entry.platform}</div>
+            <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginTop: 2 }}>{calEntryPlatformLabel(entry)}</div>
           </div>
           <span style={{ fontSize: 11, fontWeight: 500, padding: "3px 8px", borderRadius: 999, background: "rgba(0,0,0,0.04)", color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
             {fmtDate(entry.liveDate)}

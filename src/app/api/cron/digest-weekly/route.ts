@@ -8,7 +8,11 @@ import { isAuthorisedCron } from "@/lib/cron-auth";
 import { sendWeeklyDigestEmail } from "@/lib/email";
 import { notify } from "@/lib/notify";
 
-interface CalendarEntry { id: string; title: string; liveDate: string; time?: string; platform: string; status: string; }
+interface CalendarEntry { id: string; title: string; liveDate: string; time?: string; platform?: string; platforms?: string[]; status: string; }
+function platformLabel(c: CalendarEntry): string {
+  if (Array.isArray(c.platforms) && c.platforms.length) return c.platforms.join(", ");
+  return c.platform ?? "";
+}
 
 const PROSPECT_ACTIONS = ["Brochure Download Form", "Flipbook Form", "VAT Exempt Checker", "Pricing Guide", "Physical Brochure Request", "Newsletter Sign Up"];
 const LEAD_ACTIONS = ["Brochure - Call Me", "Request A Callback Form", "Contact Form", "Free Home Design Form", "Phone Call", "Walk In Bath Form", "Direct Email", "Brochure - Home Visit", "Pricing Guide Home Visit"];
@@ -64,7 +68,7 @@ export async function GET(request: NextRequest) {
   const thisWeekContent = calendar
     .filter((c) => c.liveDate >= todayStr && c.liveDate <= isoDay(thisWeekEnd) && c.status !== "Cancelled")
     .sort((a, b) => a.liveDate.localeCompare(b.liveDate))
-    .map((c) => ({ title: c.title, platform: c.platform, status: c.status, liveDate: c.liveDate }));
+    .map((c) => ({ title: c.title, platform: platformLabel(c), status: c.status, liveDate: c.liveDate }));
 
   const users = await loadUsers();
   const sent: string[] = [];

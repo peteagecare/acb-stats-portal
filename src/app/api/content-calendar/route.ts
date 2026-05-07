@@ -8,12 +8,13 @@ import { sendCalendarStatusEmail } from "@/lib/email";
 import {
   CalendarEntry,
   CalendarStatus,
-  isAssetType,
-  isPlatform,
+  arePlatforms,
+  areTypes,
   isStatus,
   isValidIsoDate,
   isValidTime,
   isValidUrl,
+  migrateRawEntry,
 } from "@/lib/content-calendar";
 
 const KEY = "content-calendar.json";
@@ -66,7 +67,7 @@ async function notifyCalendarStatus(opts: {
       payload: {
         actorLabel,
         itemTitle: entry.title,
-        itemKind: entry.platform,
+        itemKind: entry.platforms.join(", "),
         itemUrl: "/content-calendar",
         newStatus: entry.status,
       },
@@ -79,7 +80,7 @@ async function notifyCalendarStatus(opts: {
       recipientLabel,
       actorLabel,
       title: entry.title,
-      platform: entry.platform,
+      platform: entry.platforms.join(", "),
       liveDate: entry.liveDate,
       newStatus: entry.status,
       notes,
@@ -135,7 +136,11 @@ function newId(): string {
 }
 
 async function read(): Promise<CalendarEntry[]> {
-  return loadJson<CalendarEntry[]>(KEY, FALLBACK, []);
+  const raw = await loadJson<unknown[]>(KEY, FALLBACK, []);
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(migrateRawEntry)
+    .filter((e): e is CalendarEntry => e !== null);
 }
 
 async function write(items: CalendarEntry[]): Promise<void> {
@@ -189,22 +194,22 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "liveDate must be YYYY-MM-DD" }, { status: 400 });
   }
 
-  if (!isPlatform(body.platform)) {
-    return Response.json({ error: "invalid platform" }, { status: 400 });
+  if (!arePlatforms(body.platforms)) {
+    return Response.json({ error: "platforms must be a non-empty array of valid platforms" }, { status: 400 });
   }
+  const platforms = Array.from(new Set(body.platforms));
 
   const time = trimOrUndef(body.time);
   if (time && !isValidTime(time)) {
     return Response.json({ error: "time must be HH:MM" }, { status: 400 });
   }
 
-  const assetType = body.assetType === undefined || body.assetType === ""
-    ? undefined
-    : isAssetType(body.assetType)
-      ? body.assetType
-      : null;
-  if (assetType === null) {
-    return Response.json({ error: "invalid assetType" }, { status: 400 });
+  let types: CalendarEntry["types"] = [];
+  if (body.types !== undefined) {
+    if (!areTypes(body.types)) {
+      return Response.json({ error: "types must be an array of valid types" }, { status: 400 });
+    }
+    types = Array.from(new Set(body.types));
   }
 
   const assetLink = trimOrUndef(body.assetLink);
@@ -228,8 +233,8 @@ export async function POST(request: NextRequest) {
     id: newId(),
     liveDate,
     time: time || undefined,
-    platform: body.platform,
-    assetType,
+    platforms,
+    types,
     status,
     title,
     notes: trimOrUndef(body.notes),
@@ -298,20 +303,17 @@ export async function PATCH(request: NextRequest) {
     }
     next.time = time;
   }
-  if (body.platform !== undefined) {
-    if (!isPlatform(body.platform)) {
-      return Response.json({ error: "invalid platform" }, { status: 400 });
+  if (body.platforms !== undefined) {
+    if (!arePlatforms(body.platforms)) {
+      return Response.json({ error: "platforms must be a non-empty array of valid platforms" }, { status: 400 });
     }
-    next.platform = body.platform;
+    next.platforms = Array.from(new Set(body.platforms));
   }
-  if (body.assetType !== undefined) {
-    if (body.assetType === null || body.assetType === "") {
-      next.assetType = undefined;
-    } else if (isAssetType(body.assetType)) {
-      next.assetType = body.assetType;
-    } else {
-      return Response.json({ error: "invalid assetType" }, { status: 400 });
+  if (body.types !== undefined) {
+    if (!areTypes(body.types)) {
+      return Response.json({ error: "types must be an array of valid types" }, { status: 400 });
     }
+    next.types = Array.from(new Set(body.types));
   }
   if (body.status !== undefined) {
     if (!isStatus(body.status)) {

@@ -4,19 +4,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { upload } from "@vercel/blob/client";
 import {
-  CALENDAR_ASSET_TYPES,
-  CALENDAR_PLATFORMS,
   CALENDAR_STATUSES,
-  CalendarAssetType,
   CalendarEntry,
   CalendarPlatform,
   CalendarStatus,
+  CalendarType,
   STATUS_COLOURS,
-  ASSET_TYPE_COLOURS,
   fmtIsoDate,
+  shortPlatformLabel,
   weekKey,
   weekLabel,
 } from "@/lib/content-calendar";
+import { PlatformPills, PlatformPillsDisplay, TypePills, TypePillsDisplay } from "./_platform-pills";
 import {
   APPROVAL_ROLES,
   AnyApprovalKey,
@@ -67,8 +66,8 @@ interface GhostRow {
   slotId: string;
   date: string;
   time?: string;
-  platform: CalendarPlatform;
-  assetType?: CalendarAssetType;
+  platforms: CalendarPlatform[];
+  types: CalendarType[];
   label: string;
 }
 
@@ -79,7 +78,7 @@ export default function ContentCalendarPage() {
   const [error, setError] = useState<string | null>(null);
   const [me, setMe] = useState<MeResp | null>(null);
   const [modal, setModal] = useState<ModalState>({ mode: "closed" });
-  const [filterPlatform, setFilterPlatform] = useState<CalendarPlatform | "all">("all");
+  const [filterPlatforms, setFilterPlatforms] = useState<CalendarPlatform[]>([]);
   const [filterStatus, setFilterStatus] = useState<CalendarStatus | "all">("all");
   const [search, setSearch] = useState("");
   const [savingApproval, setSavingApproval] = useState<string | null>(null);
@@ -124,24 +123,30 @@ export default function ContentCalendarPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    Promise.all([
-      fetch("/api/content-calendar", { cache: "no-store" }).then((r) => r.json()),
-      fetch("/api/approvals", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
-    ])
-      .then(([cal, app]: [
-        { items?: CalendarEntry[]; error?: string },
-        { approvals?: ApprovalsMap },
-      ]) => {
-        if (cancelled) return;
-        if (cal.error) setError(cal.error);
-        else setItems(cal.items ?? []);
-        setApprovals(app.approvals ?? {});
-      })
-      .catch((e) => !cancelled && setError(String(e)))
-      .finally(() => !cancelled && setLoading(false));
+    function load(showSpinner: boolean) {
+      if (showSpinner) setLoading(true);
+      Promise.all([
+        fetch("/api/content-calendar", { cache: "no-store" }).then((r) => r.json()),
+        fetch("/api/approvals", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
+      ])
+        .then(([cal, app]: [
+          { items?: CalendarEntry[]; error?: string },
+          { approvals?: ApprovalsMap },
+        ]) => {
+          if (cancelled) return;
+          if (cal.error) setError(cal.error);
+          else setItems(cal.items ?? []);
+          setApprovals(app.approvals ?? {});
+        })
+        .catch((e) => !cancelled && setError(String(e)))
+        .finally(() => !cancelled && showSpinner && setLoading(false));
+    }
+    load(true);
+    const onFocus = () => load(false);
+    window.addEventListener("focus", onFocus);
     return () => {
       cancelled = true;
+      window.removeEventListener("focus", onFocus);
     };
   }, []);
 
@@ -149,13 +154,14 @@ export default function ContentCalendarPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const filterSet = new Set(filterPlatforms);
     return items.filter((it) => {
-      if (filterPlatform !== "all" && it.platform !== filterPlatform) return false;
+      if (filterSet.size > 0 && !it.platforms.some((p) => filterSet.has(p))) return false;
       if (filterStatus !== "all" && it.status !== filterStatus) return false;
       if (q && !it.title.toLowerCase().includes(q) && !(it.notes ?? "").toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [items, filterPlatform, filterStatus, search]);
+  }, [items, filterPlatforms, filterStatus, search]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, CalendarEntry[]>();
@@ -187,7 +193,8 @@ export default function ContentCalendarPage() {
       });
 
       // Build ghost placeholder rows from the schedule template — only if
-      // there's no real entry at the same date+platform+time slot AND the
+      // there's no real entry at the same date that already covers any of the
+      // slot's platforms (and matching time, if the slot defines one) AND the
       // slot's weekday isn't disabled.
       const ghosts: GhostRow[] = [];
       const weekMonday = new Date(k + "T00:00:00");
@@ -197,16 +204,20 @@ export default function ContentCalendarPage() {
         const slotDate = new Date(weekMonday);
         slotDate.setDate(weekMonday.getDate() + offset);
         const iso = fmtIsoDate(slotDate);
+        const slotPlatforms = new Set(slot.platforms);
         const taken = rows.some(
-          (r) => r.liveDate === iso && r.platform === slot.platform && (slot.time ? r.time === slot.time : true),
+          (r) =>
+            r.liveDate === iso &&
+            r.platforms.some((p) => slotPlatforms.has(p)) &&
+            (slot.time ? r.time === slot.time : true),
         );
         if (taken) continue;
         ghosts.push({
           slotId: slot.id,
           date: iso,
           time: slot.time,
-          platform: slot.platform,
-          assetType: slot.assetType,
+          platforms: slot.platforms,
+          types: slot.types,
           label: slot.label,
         });
       }
@@ -252,7 +263,8 @@ export default function ContentCalendarPage() {
     try {
       await handleSave({
         liveDate: weekStart,
-        platform: "Facebook & Instagram",
+        platforms: ["Facebook", "Instagram"],
+        types: [],
         title: "New entry",
         status: "Not Started",
         needsFinanceApproval: false,
@@ -295,7 +307,7 @@ export default function ContentCalendarPage() {
           approved: true,
           label: me?.label ?? me?.email,
           itemTitle: entry.title,
-          itemKind: entry.platform,
+          itemKind: entry.platforms.join(", "),
           itemUrl: "/content-calendar",
         }),
       });
@@ -338,7 +350,7 @@ export default function ContentCalendarPage() {
           note,
           label: me?.label ?? me?.email,
           itemTitle: entry.title,
-          itemKind: entry.platform,
+          itemKind: entry.platforms.join(", "),
           itemUrl: "/content-calendar",
         }),
       });
@@ -397,36 +409,50 @@ export default function ContentCalendarPage() {
         </div>
       </header>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
-        <input
-          placeholder="Search title or notes…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={inputStyle({ minWidth: 240 })}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <input
+            placeholder="Search title or notes…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={inputStyle({ minWidth: 240 })}
+          />
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value as CalendarStatus | "all")}
+            style={inputStyle()}
+          >
+            <option value="all">All statuses</option>
+            {CALENDAR_STATUSES.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <span style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>
+            {filtered.length} of {items.length} entries
+          </span>
+          {filterPlatforms.length > 0 && (
+            <button
+              onClick={() => setFilterPlatforms([])}
+              style={{
+                background: "transparent",
+                border: "1px solid var(--color-border)",
+                color: "var(--color-text-secondary)",
+                padding: "4px 10px",
+                borderRadius: 999,
+                fontSize: 12,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              Clear platform filter
+            </button>
+          )}
+        </div>
+        <PlatformPills
+          value={filterPlatforms}
+          onChange={setFilterPlatforms}
+          ariaLabel="Filter by platforms"
         />
-        <select
-          value={filterPlatform}
-          onChange={(e) => setFilterPlatform(e.target.value as CalendarPlatform | "all")}
-          style={inputStyle()}
-        >
-          <option value="all">All platforms</option>
-          {CALENDAR_PLATFORMS.map((p) => (
-            <option key={p} value={p}>{p}</option>
-          ))}
-        </select>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value as CalendarStatus | "all")}
-          style={inputStyle()}
-        >
-          <option value="all">All statuses</option>
-          {CALENDAR_STATUSES.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-        <span style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>
-          {filtered.length} of {items.length} entries
-        </span>
       </div>
 
       {loading && <p style={{ color: "var(--color-text-secondary)" }}>Loading…</p>}
@@ -459,7 +485,7 @@ export default function ContentCalendarPage() {
               setModal({
                 mode: "create",
                 defaultDate: g.date,
-                prefill: { time: g.time, platform: g.platform, assetType: g.assetType, title: "" },
+                prefill: { time: g.time, platforms: g.platforms, types: g.types, title: "" },
               })
             }
           />
@@ -618,7 +644,7 @@ function WeekGroup({
               <table style={{ width: "100%", minWidth: 1400, borderCollapse: "collapse", fontSize: 12 }}>
                 <thead>
                   <tr>
-                    {["Date", "Time", "Status", "Platform", "Asset", "Title / Idea", "Responsible", "Notes", "Asset link", "Approval", ""].map((h) => (
+                    {["Date", "Time", "Status", "Platform", "Type", "Title / Idea", "Responsible", "Notes", "Asset link", "Approval", ""].map((h) => (
                       <th
                         key={h}
                         style={{
@@ -729,8 +755,12 @@ function GhostScheduleRow({ ghost, onClick }: { ghost: GhostRow; onClick: () => 
           Empty slot
         </span>
       </td>
-      <td style={{ padding: "8px 12px", color: "var(--color-text-secondary)" }}>{ghost.platform}</td>
-      <td style={{ padding: "8px 12px", color: "var(--color-text-tertiary)" }}>{ghost.assetType ?? "—"}</td>
+      <td style={{ padding: "8px 12px" }}>
+        <PlatformPillsDisplay value={ghost.platforms} />
+      </td>
+      <td style={{ padding: "8px 12px" }}>
+        <TypePillsDisplay value={ghost.types} />
+      </td>
       <td style={{ padding: "8px 12px", color: "var(--color-text-tertiary)", fontStyle: "italic" }}>
         {ghost.label} · click to fill
       </td>
@@ -763,7 +793,6 @@ function Row({
   onReject: (entry: CalendarEntry, role: AnyApprovalKey) => void;
 }) {
   const statusColour = STATUS_COLOURS[entry.status];
-  const assetColour = entry.assetType ? ASSET_TYPE_COLOURS[entry.assetType] : null;
   const dateObj = new Date(entry.liveDate + "T00:00:00");
   const day = dateObj.toLocaleString("en-GB", { weekday: "short" });
   const dayNum = dateObj.getDate();
@@ -783,13 +812,11 @@ function Row({
       <td style={cellStyle()}>
         <span style={pill(statusColour.bg, statusColour.fg)}>{entry.status}</span>
       </td>
-      <td style={cellStyle({ minWidth: 140 })}>
-        <div style={{ fontSize: 12, color: "#374151" }}>{entry.platform}</div>
+      <td style={cellStyle({ minWidth: 160 })}>
+        <PlatformPillsDisplay value={entry.platforms} />
       </td>
-      <td style={cellStyle()}>
-        {entry.assetType && assetColour ? (
-          <span style={pill(assetColour.bg, assetColour.fg)}>{entry.assetType}</span>
-        ) : <span style={{ color: "#94a3b8" }}>—</span>}
+      <td style={cellStyle({ minWidth: 120 })}>
+        <TypePillsDisplay value={entry.types} />
       </td>
       <td style={cellStyle({ minWidth: 240 })}>
         <Link
@@ -893,14 +920,17 @@ function EntryModal({
     liveDate: state.defaultDate,
     status: "Not Started",
     needsFinanceApproval: false,
-    platform: "Facebook & Instagram",
+    platforms: ["Facebook", "Instagram"],
+    types: [],
     ...state.prefill,
   };
 
   const [liveDate, setLiveDate] = useState(initial.liveDate ?? "");
   const [time, setTime] = useState(initial.time ?? "");
-  const [platform, setPlatform] = useState<CalendarPlatform>(initial.platform ?? "Facebook & Instagram");
-  const [assetType, setAssetType] = useState<CalendarAssetType | "">(initial.assetType ?? "");
+  const [platforms, setPlatforms] = useState<CalendarPlatform[]>(
+    initial.platforms && initial.platforms.length ? initial.platforms : ["Facebook", "Instagram"],
+  );
+  const [types, setTypes] = useState<CalendarType[]>(initial.types ?? []);
   const [status, setStatus] = useState<CalendarStatus>(initial.status ?? "Not Started");
   const [title, setTitle] = useState(initial.title ?? "");
   const [notes, setNotes] = useState(initial.notes ?? "");
@@ -919,11 +949,16 @@ function EntryModal({
         .split("\n")
         .map((l) => l.trim())
         .filter((l) => l.length);
+      if (platforms.length === 0) {
+        setErr("Pick at least one platform");
+        setBusy(false);
+        return;
+      }
       const payload: Partial<CalendarEntry> = {
         liveDate,
         time: time || undefined,
-        platform,
-        assetType: (assetType || undefined) as CalendarAssetType | undefined,
+        platforms,
+        types,
         status,
         title,
         notes: notes || undefined,
@@ -998,23 +1033,12 @@ function EntryModal({
 
         <div style={{ padding: "20px 24px", overflowY: "auto", flex: 1 }}>
           <SectionLabel>Schedule</SectionLabel>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 18 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
             <ModalField label="Live date" required>
               <input type="date" value={liveDate} onChange={(e) => setLiveDate(e.target.value)} style={modalInput} />
             </ModalField>
             <ModalField label="Time">
               <input type="time" value={time} onChange={(e) => setTime(e.target.value)} style={modalInput} />
-            </ModalField>
-            <ModalField label="Platform" required>
-              <select value={platform} onChange={(e) => setPlatform(e.target.value as CalendarPlatform)} style={modalInput}>
-                {CALENDAR_PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </ModalField>
-            <ModalField label="Asset type">
-              <select value={assetType} onChange={(e) => setAssetType(e.target.value as CalendarAssetType | "")} style={modalInput}>
-                <option value="">—</option>
-                {CALENDAR_ASSET_TYPES.map((a) => <option key={a} value={a}>{a}</option>)}
-              </select>
             </ModalField>
             <ModalField label="Status">
               <select value={status} onChange={(e) => setStatus(e.target.value as CalendarStatus)} style={modalInput}>
@@ -1035,6 +1059,13 @@ function EntryModal({
               </select>
             </ModalField>
           </div>
+          <ModalField label="Platforms" required hint={`${platforms.length} selected`}>
+            <PlatformPills value={platforms} onChange={setPlatforms} />
+          </ModalField>
+          <ModalField label="Type" hint={types.length ? `${types.length} selected` : "Optional"}>
+            <TypePills value={types} onChange={setTypes} />
+          </ModalField>
+          <div style={{ marginBottom: 6 }} />
 
           <SectionLabel>Content</SectionLabel>
           <ModalField label="Title / Content idea" required>
@@ -1107,14 +1138,14 @@ function EntryModal({
           </button>
           <button
             onClick={submit}
-            disabled={busy || !title || !liveDate}
+            disabled={busy || !title || !liveDate || platforms.length === 0}
             style={{
               display: "inline-flex", alignItems: "center", gap: 6,
               padding: "8px 18px", borderRadius: 999,
               background: "var(--color-accent)", border: "none",
               color: "white", fontSize: 13, fontWeight: 600,
-              cursor: busy || !title || !liveDate ? "not-allowed" : "pointer",
-              opacity: busy || !title || !liveDate ? 0.55 : 1,
+              cursor: busy || !title || !liveDate || platforms.length === 0 ? "not-allowed" : "pointer",
+              opacity: busy || !title || !liveDate || platforms.length === 0 ? 0.55 : 1,
               fontFamily: "inherit",
             }}
           >
@@ -1390,7 +1421,7 @@ interface ContentIdea {
   id: string;
   title: string;
   notes?: string;
-  platform?: CalendarPlatform;
+  platforms?: CalendarPlatform[];
   createdAt: string;
   createdBy: string;
 }
@@ -1398,8 +1429,8 @@ interface ScheduleSlot {
   id: string;
   weekday: number; // 0=Sun..6=Sat
   time?: string;
-  platform: CalendarPlatform;
-  assetType?: CalendarAssetType;
+  platforms: CalendarPlatform[];
+  types: CalendarType[];
   label: string;
 }
 
@@ -1421,7 +1452,7 @@ function IdeaLibraryModal({
   const [loading, setLoading] = useState(true);
   const [newIdea, setNewIdea] = useState("");
   const [newIdeaNotes, setNewIdeaNotes] = useState("");
-  const [newIdeaPlatform, setNewIdeaPlatform] = useState<CalendarPlatform | "">("");
+  const [newIdeaPlatforms, setNewIdeaPlatforms] = useState<CalendarPlatform[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -1454,7 +1485,7 @@ function IdeaLibraryModal({
       body: JSON.stringify({
         title,
         notes: newIdeaNotes.trim() || undefined,
-        platform: newIdeaPlatform || undefined,
+        platforms: newIdeaPlatforms.length ? newIdeaPlatforms : undefined,
       }),
     });
     if (res.ok) {
@@ -1462,7 +1493,7 @@ function IdeaLibraryModal({
       setIdeas((prev) => [idea, ...prev]);
       setNewIdea("");
       setNewIdeaNotes("");
-      setNewIdeaPlatform("");
+      setNewIdeaPlatforms([]);
     }
   }
 
@@ -1481,6 +1512,7 @@ function IdeaLibraryModal({
   }
 
   function findNextSlotDate(slot: ScheduleSlot, fromDate: Date): string {
+    const slotPlatforms = new Set(slot.platforms);
     // Walk forward day by day up to 12 weeks
     for (let i = 0; i < 84; i++) {
       const d = new Date(fromDate);
@@ -1490,7 +1522,7 @@ function IdeaLibraryModal({
       const conflict = existingEntries.some(
         (e) =>
           e.liveDate === iso &&
-          e.platform === slot.platform &&
+          e.platforms.some((p) => slotPlatforms.has(p)) &&
           (slot.time ? e.time === slot.time : true),
       );
       if (!conflict) return iso;
@@ -1498,13 +1530,15 @@ function IdeaLibraryModal({
     return fmtIsoDate(fromDate);
   }
 
-  /** Find the next available slot — optionally restricted to a platform. */
-  function nextAvailableSlot(platform?: CalendarPlatform): { slot: ScheduleSlot; date: string } | null {
+  /** Find the next available slot — optionally restricted to slots whose platform set overlaps the idea's preferred platforms. */
+  function nextAvailableSlot(preferred?: CalendarPlatform[]): { slot: ScheduleSlot; date: string } | null {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const candidates = (platform ? slots.filter((s) => s.platform === platform) : slots).filter(
-      (s) => !disabledDays.includes(s.weekday),
-    );
+    const preferredSet = preferred && preferred.length ? new Set(preferred) : null;
+    const candidates = (preferredSet
+      ? slots.filter((s) => s.platforms.some((p) => preferredSet.has(p)))
+      : slots
+    ).filter((s) => !disabledDays.includes(s.weekday));
     let best: { slot: ScheduleSlot; date: string } | null = null;
     for (const slot of candidates) {
       const date = findNextSlotDate(slot, today);
@@ -1516,22 +1550,22 @@ function IdeaLibraryModal({
   }
 
   async function addToNextSlot(idea: ContentIdea) {
-    const next = nextAvailableSlot(idea.platform);
+    const next = nextAvailableSlot(idea.platforms);
     if (!next) {
       setToast(
-        idea.platform
-          ? `No free ${shortPlatformLabel(idea.platform)} slots in your schedule.`
+        idea.platforms && idea.platforms.length
+          ? `No free slots matching ${idea.platforms.map(shortPlatformLabel).join(" / ")} in your schedule.`
           : "No slots in your schedule yet.",
       );
       return;
     }
     setBusyId(idea.id);
     try {
-      const payload: Partial<CalendarEntry> & { liveDate: string; platform: CalendarPlatform; status: CalendarStatus; title: string } = {
+      const payload: Partial<CalendarEntry> & { liveDate: string; platforms: CalendarPlatform[]; status: CalendarStatus; title: string } = {
         liveDate: next.date,
         time: next.slot.time,
-        platform: next.slot.platform,
-        assetType: next.slot.assetType,
+        platforms: next.slot.platforms,
+        types: next.slot.types,
         status: "Not Started",
         title: idea.title,
         notes: idea.notes,
@@ -1573,12 +1607,12 @@ function IdeaLibraryModal({
   function deleteSlot(id: string) {
     saveSchedule(slots.filter((s) => s.id !== id), disabledDays);
   }
-  function addSlot(weekday: number, platformDefault?: CalendarPlatform) {
+  function addSlot(weekday: number, platformsDefault?: CalendarPlatform[]) {
     const newSlot: ScheduleSlot = {
       id: crypto.randomUUID(),
       weekday,
-      platform: platformDefault ?? "Facebook & Instagram",
-      assetType: "IMAGE",
+      platforms: platformsDefault && platformsDefault.length ? platformsDefault : ["Facebook", "Instagram"],
+      types: ["Image"],
       label: "New slot",
     };
     saveSchedule([...slots, newSlot], disabledDays);
@@ -1655,19 +1689,21 @@ function IdeaLibraryModal({
                     placeholder="Notes (optional)"
                     style={{ width: "100%", padding: "6px 10px", borderRadius: 8, border: "1px solid var(--color-border)", fontSize: 12, fontFamily: "inherit", color: "var(--color-text-secondary)" }}
                   />
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <select
-                      value={newIdeaPlatform}
-                      onChange={(e) => setNewIdeaPlatform((e.target.value || "") as CalendarPlatform | "")}
-                      style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--color-border)", fontSize: 12, fontFamily: "inherit", background: "#fff", flex: 1 }}
-                    >
-                      <option value="">Any platform</option>
-                      {CALENDAR_PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
-                    </select>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      Preferred platforms (optional)
+                    </span>
+                    <PlatformPills
+                      value={newIdeaPlatforms}
+                      onChange={setNewIdeaPlatforms}
+                      size="sm"
+                      ariaLabel="Preferred platforms for new idea"
+                    />
                     <button
                       onClick={addIdea}
                       disabled={!newIdea.trim()}
                       style={{
+                        alignSelf: "flex-start",
                         padding: "6px 14px", borderRadius: 8, border: 0,
                         background: newIdea.trim() ? "var(--color-accent)" : "#E5E7EB",
                         color: newIdea.trim() ? "#fff" : "var(--color-text-tertiary)",
@@ -1684,52 +1720,51 @@ function IdeaLibraryModal({
                 <p style={{ color: "var(--color-text-tertiary)", fontStyle: "italic", fontSize: 13 }}>No ideas yet.</p>
               )}
               {ideas.map((idea) => (
-                <div key={idea.id} style={{ background: "#fff", border: "1px solid var(--color-border)", borderRadius: 10, padding: 12, display: "flex", alignItems: "center", gap: 10 }}>
-                  <Link
-                    href={`/content-calendar/idea/${idea.id}`}
-                    onClick={onClose}
-                    style={{ flex: 1, minWidth: 0, textDecoration: "none", color: "inherit" }}
-                  >
-                    <div style={{ fontWeight: 600, fontSize: 13, color: "var(--color-text-primary)" }}>{idea.title}</div>
-                    {idea.notes && <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 2 }}>{idea.notes}</div>}
-                    <div style={{ fontSize: 10, color: "var(--color-accent)", marginTop: 4 }}>Open full notes →</div>
-                  </Link>
-                  <select
-                    value={idea.platform ?? ""}
-                    onChange={(e) => patchIdea(idea.id, { platform: (e.target.value || undefined) as CalendarPlatform | undefined })}
-                    title="Preferred platform"
-                    style={{
-                      padding: "6px 10px", borderRadius: 8,
-                      border: "1px solid var(--color-border)",
-                      fontSize: 11, fontFamily: "inherit", background: "#fff",
-                      maxWidth: 200, color: idea.platform ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
-                    }}
-                  >
-                    <option value="">Any platform</option>
-                    {CALENDAR_PLATFORMS.map((p) => <option key={p} value={p}>{shortPlatformLabel(p)}</option>)}
-                  </select>
-                  <button
-                    onClick={() => addToNextSlot(idea)}
-                    disabled={busyId === idea.id}
-                    style={{
-                      background: "var(--color-accent)", color: "#fff", border: 0,
-                      padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 600,
-                      cursor: busyId === idea.id ? "wait" : "pointer", whiteSpace: "nowrap",
-                    }}
-                  >
-                    {busyId === idea.id ? "Adding…" : "Add to next slot"}
-                  </button>
-                  <button
-                    onClick={() => deleteIdea(idea.id)}
-                    title="Delete idea"
-                    style={{
-                      background: "transparent", border: "1px solid var(--color-border)",
-                      padding: "6px 10px", borderRadius: 8, fontSize: 11,
-                      color: "var(--color-text-secondary)", cursor: "pointer",
-                    }}
-                  >
-                    Delete
-                  </button>
+                <div key={idea.id} style={{ background: "#fff", border: "1px solid var(--color-border)", borderRadius: 10, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                    <Link
+                      href={`/content-calendar/idea/${idea.id}`}
+                      onClick={onClose}
+                      style={{ flex: 1, minWidth: 0, textDecoration: "none", color: "inherit" }}
+                    >
+                      <div style={{ fontWeight: 600, fontSize: 13, color: "var(--color-text-primary)" }}>{idea.title}</div>
+                      {idea.notes && <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 2 }}>{idea.notes}</div>}
+                      <div style={{ fontSize: 10, color: "var(--color-accent)", marginTop: 4 }}>Open full notes →</div>
+                    </Link>
+                    <button
+                      onClick={() => addToNextSlot(idea)}
+                      disabled={busyId === idea.id}
+                      style={{
+                        background: "var(--color-accent)", color: "#fff", border: 0,
+                        padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 600,
+                        cursor: busyId === idea.id ? "wait" : "pointer", whiteSpace: "nowrap",
+                      }}
+                    >
+                      {busyId === idea.id ? "Adding…" : "Add to next slot"}
+                    </button>
+                    <button
+                      onClick={() => deleteIdea(idea.id)}
+                      title="Delete idea"
+                      style={{
+                        background: "transparent", border: "1px solid var(--color-border)",
+                        padding: "6px 10px", borderRadius: 8, fontSize: 11,
+                        color: "var(--color-text-secondary)", cursor: "pointer",
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>
+                      Preferred platforms
+                    </div>
+                    <PlatformPills
+                      value={idea.platforms ?? []}
+                      onChange={(next) => patchIdea(idea.id, { platforms: next.length ? next : undefined })}
+                      size="sm"
+                      ariaLabel={`Preferred platforms for ${idea.title}`}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
@@ -1763,7 +1798,7 @@ function ScheduleEditor({
   disabledDays: number[];
   onUpdate: (id: string, patch: Partial<ScheduleSlot>) => void;
   onDelete: (id: string) => void;
-  onAdd: (weekday: number, platformDefault?: CalendarPlatform) => void;
+  onAdd: (weekday: number, platformsDefault?: CalendarPlatform[]) => void;
   onToggleDay: (weekday: number) => void;
 }) {
   const days = [1, 2, 3, 4, 5, 6, 0]; // Mon–Sun
@@ -1772,14 +1807,14 @@ function ScheduleEditor({
 
   const platformsInUse = useMemo(() => {
     const set = new Set<CalendarPlatform>();
-    for (const s of slots) set.add(s.platform);
+    for (const s of slots) for (const p of s.platforms) set.add(p);
     return Array.from(set).sort();
   }, [slots]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-secondary)" }}>
-        Edit your weekly posting skeleton. Each slot defines a day / time / platform combo and shows up as a placeholder row on the content calendar until you fill it.
+        Edit your weekly posting skeleton. Each slot defines a day / time / platforms combo and shows up as a placeholder row on the content calendar until you fill it.
       </p>
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -1793,7 +1828,7 @@ function ScheduleEditor({
           All platforms ({slots.length})
         </button>
         {platformsInUse.map((p) => {
-          const count = slots.filter((s) => s.platform === p).length;
+          const count = slots.filter((s) => s.platforms.includes(p)).length;
           return (
             <button
               key={p}
@@ -1819,7 +1854,7 @@ function ScheduleEditor({
           const offDay = disabledDays.includes(wd);
           const daySlots = slots
             .filter((s) => s.weekday === wd)
-            .filter((s) => platformFilter === "all" || s.platform === platformFilter)
+            .filter((s) => platformFilter === "all" || s.platforms.includes(platformFilter))
             .sort((a, b) => (a.time ?? "").localeCompare(b.time ?? ""));
           return (
             <div
@@ -1874,7 +1909,7 @@ function ScheduleEditor({
                   ))
                 )}
                 <button
-                  onClick={() => onAdd(wd, platformFilter === "all" ? undefined : platformFilter)}
+                  onClick={() => onAdd(wd, platformFilter === "all" ? undefined : [platformFilter])}
                   style={{
                     marginTop: "auto",
                     background: "transparent",
@@ -1909,25 +1944,6 @@ function chipStyle(active: boolean): React.CSSProperties {
     cursor: "pointer",
     fontFamily: "inherit",
   };
-}
-
-function shortPlatformLabel(p: CalendarPlatform): string {
-  switch (p) {
-    case "Stories / Reels - Facebook, Instagram, TikTok & YouTube Shorts":
-      return "Story / Reel";
-    case "Facebook & Instagram":
-      return "FB & IG";
-    case "Facebook, Linked In, TikTok & Instagram":
-      return "FB / LI / TT / IG";
-    case "Facebook, Instagram & TikTok":
-      return "FB / IG / TT";
-    case "LinkedIn - Business":
-      return "LinkedIn — Business";
-    case "LinkedIn - Sam":
-      return "LinkedIn — Sam";
-    default:
-      return p;
-  }
 }
 
 function DayToggle({ on, onChange }: { on: boolean; onChange: () => void }) {
@@ -2047,35 +2063,24 @@ function SlotCard({
           background: "#fff",
         }}
       />
-      <select
-        value={slot.platform}
-        onChange={(e) => onUpdate({ platform: e.target.value as CalendarPlatform })}
-        style={{
-          padding: "3px 6px",
-          borderRadius: 5,
-          border: "1px solid var(--color-border)",
-          fontSize: 11,
-          fontFamily: "inherit",
-          background: "#fff",
-        }}
-      >
-        {CALENDAR_PLATFORMS.map((p) => <option key={p} value={p}>{shortPlatformLabel(p)}</option>)}
-      </select>
-      <select
-        value={slot.assetType ?? ""}
-        onChange={(e) => onUpdate({ assetType: (e.target.value || undefined) as CalendarAssetType | undefined })}
-        style={{
-          padding: "3px 6px",
-          borderRadius: 5,
-          border: "1px solid var(--color-border)",
-          fontSize: 11,
-          fontFamily: "inherit",
-          background: "#fff",
-        }}
-      >
-        <option value="">No asset</option>
-        {CALENDAR_ASSET_TYPES.map((a) => <option key={a} value={a}>{a}</option>)}
-      </select>
+      <div style={{ fontSize: 9, fontWeight: 600, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: 0.4, marginTop: 2 }}>
+        Platforms
+      </div>
+      <PlatformPills
+        value={slot.platforms}
+        onChange={(next) => onUpdate({ platforms: next.length ? next : slot.platforms })}
+        size="sm"
+        ariaLabel={`Platforms for ${slot.label}`}
+      />
+      <div style={{ fontSize: 9, fontWeight: 600, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: 0.4, marginTop: 2 }}>
+        Type
+      </div>
+      <TypePills
+        value={slot.types}
+        onChange={(next) => onUpdate({ types: next })}
+        size="sm"
+        ariaLabel={`Types for ${slot.label}`}
+      />
     </div>
   );
 }

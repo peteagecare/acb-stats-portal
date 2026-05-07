@@ -28,7 +28,7 @@ type EntryApprovals = Partial<Record<AnyApprovalKey, ApprovalRecord>> & { reject
 type ApprovalsStore = Record<string, EntryApprovals>;
 
 interface ContentItem { id: string; title: string; type: string; }
-interface CalendarEntry { id: string; title: string; platform: string; needsFinanceApproval: boolean; }
+interface CalendarEntry { id: string; title: string; platform?: string; platforms?: string[]; needsFinanceApproval: boolean; }
 interface HubSpotEmail { id: string; subject?: string; name?: string; }
 
 const STALE_DAYS = 5;
@@ -93,7 +93,11 @@ export async function GET(request: NextRequest) {
     const ce = calendarItems.find((c) => c.id === id && c.needsFinanceApproval);
     const em = emails.find((e) => e.id === id);
     if (ci) { itemTitle = ci.title; itemKind = ci.type.charAt(0).toUpperCase() + ci.type.slice(1); }
-    else if (ce) { itemTitle = ce.title; itemKind = ce.platform; itemUrl = "/content-calendar"; }
+    else if (ce) {
+      itemTitle = ce.title;
+      itemKind = Array.isArray(ce.platforms) && ce.platforms.length ? ce.platforms.join(", ") : (ce.platform ?? "");
+      itemUrl = "/content-calendar";
+    }
     else if (em) { itemTitle = em.subject || em.name || "Email"; itemKind = "Email"; }
 
     // Find the role that's blocking and notify the actual humans for that role

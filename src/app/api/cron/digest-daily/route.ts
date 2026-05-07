@@ -8,7 +8,11 @@ import { isAuthorisedCron } from "@/lib/cron-auth";
 import { sendDailyDigestEmail } from "@/lib/email";
 import { notify } from "@/lib/notify";
 
-interface CalendarEntry { id: string; title: string; liveDate: string; time?: string; platform: string; status: string; assetLink?: string; }
+interface CalendarEntry { id: string; title: string; liveDate: string; time?: string; platform?: string; platforms?: string[]; status: string; assetLink?: string; }
+function platformLabel(c: CalendarEntry): string {
+  if (Array.isArray(c.platforms) && c.platforms.length) return c.platforms.join(", ");
+  return c.platform ?? "";
+}
 interface ChartNote { id: string; date: string; text: string; author: string; createdAt?: string; }
 
 function pad(n: number) { return n.toString().padStart(2, "0"); }
@@ -77,7 +81,7 @@ export async function GET(request: NextRequest) {
     .map((c) => ({
       id: c.id,
       title: c.title,
-      platform: c.platform,
+      platform: platformLabel(c),
       status: c.status,
       time: c.time ?? "",
       missingAsset: !c.assetLink,

@@ -2,14 +2,15 @@
 
 import { use, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { CALENDAR_PLATFORMS, type CalendarPlatform } from "@/lib/content-calendar";
+import type { CalendarPlatform } from "@/lib/content-calendar";
+import { PlatformPills } from "../../_platform-pills";
 import { RichNoteEditor } from "../../_note-editor";
 
 interface ContentIdea {
   id: string;
   title: string;
   notes?: string;
-  platform?: CalendarPlatform;
+  platforms?: CalendarPlatform[];
   content?: string;
   createdAt: string;
   createdBy: string;
@@ -22,6 +23,7 @@ export default function IdeaNotePage({ params }: { params: Promise<{ id: string 
   const [loading, setLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingPatch = useRef<Partial<ContentIdea>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -40,13 +42,16 @@ export default function IdeaNotePage({ params }: { params: Promise<{ id: string 
 
   function patch(patchBody: Partial<ContentIdea>) {
     setIdea((prev) => (prev ? { ...prev, ...patchBody } : prev));
+    pendingPatch.current = { ...pendingPatch.current, ...patchBody };
     setSaveStatus("saving");
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
+      const body = pendingPatch.current;
+      pendingPatch.current = {};
       await fetch("/api/content-ideas", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, ...patchBody }),
+        body: JSON.stringify({ id, ...body }),
       }).catch(() => null);
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 1200);
@@ -104,17 +109,15 @@ export default function IdeaNotePage({ params }: { params: Promise<{ id: string 
         aria-label="Idea title"
       />
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
-        <MetaChip label="Platform">
-          <select
-            value={idea.platform ?? ""}
-            onChange={(e) => patch({ platform: (e.target.value || undefined) as CalendarPlatform | undefined })}
-            style={inlineSelectStyle}
-          >
-            <option value="">Any platform</option>
-            {CALENDAR_PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-        </MetaChip>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>
+          Preferred platforms
+        </div>
+        <PlatformPills
+          value={idea.platforms ?? []}
+          onChange={(next) => patch({ platforms: next.length ? next : undefined })}
+          ariaLabel="Preferred platforms for this idea"
+        />
       </div>
 
       <textarea
@@ -147,35 +150,3 @@ export default function IdeaNotePage({ params }: { params: Promise<{ id: string 
   );
 }
 
-function MetaChip({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "4px 8px",
-        background: "rgba(0,0,0,0.04)",
-        borderRadius: 8,
-        fontSize: 11,
-        color: "var(--color-text-secondary)",
-      }}
-    >
-      <span style={{ fontWeight: 600, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: 0.4 }}>
-        {label}
-      </span>
-      {children}
-    </span>
-  );
-}
-
-const inlineSelectStyle: React.CSSProperties = {
-  background: "transparent",
-  border: "none",
-  fontSize: 12,
-  fontWeight: 600,
-  color: "var(--color-text-primary)",
-  fontFamily: "inherit",
-  cursor: "pointer",
-  outline: "none",
-};

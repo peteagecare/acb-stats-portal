@@ -3,15 +3,12 @@
 import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  CALENDAR_ASSET_TYPES,
-  CALENDAR_PLATFORMS,
   CALENDAR_STATUSES,
   STATUS_COLOURS,
   type CalendarEntry,
-  type CalendarAssetType,
-  type CalendarPlatform,
   type CalendarStatus,
 } from "@/lib/content-calendar";
+import { PlatformPills, TypePills } from "../../_platform-pills";
 import { RichNoteEditor } from "../../_note-editor";
 
 export default function EntryNotePage({ params }: { params: Promise<{ id: string }> }) {
@@ -21,6 +18,7 @@ export default function EntryNotePage({ params }: { params: Promise<{ id: string
   const [loading, setLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingPatch = useRef<Partial<CalendarEntry>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -39,13 +37,16 @@ export default function EntryNotePage({ params }: { params: Promise<{ id: string
 
   function patch(patchBody: Partial<CalendarEntry>) {
     setEntry((prev) => (prev ? { ...prev, ...patchBody } : prev));
+    pendingPatch.current = { ...pendingPatch.current, ...patchBody };
     setSaveStatus("saving");
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
+      const body = pendingPatch.current;
+      pendingPatch.current = {};
       await fetch("/api/content-calendar", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, ...patchBody }),
+        body: JSON.stringify({ id, ...body }),
       }).catch(() => null);
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 1200);
@@ -120,25 +121,6 @@ export default function EntryNotePage({ params }: { params: Promise<{ id: string
             style={inlineInputStyle}
           />
         </MetaChip>
-        <MetaChip label="Platform">
-          <select
-            value={entry.platform}
-            onChange={(e) => patch({ platform: e.target.value as CalendarPlatform })}
-            style={inlineInputStyle}
-          >
-            {CALENDAR_PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-        </MetaChip>
-        <MetaChip label="Asset">
-          <select
-            value={entry.assetType ?? ""}
-            onChange={(e) => patch({ assetType: (e.target.value || undefined) as CalendarAssetType | undefined })}
-            style={inlineInputStyle}
-          >
-            <option value="">—</option>
-            {CALENDAR_ASSET_TYPES.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </MetaChip>
         <span
           style={{
             display: "inline-flex",
@@ -177,6 +159,31 @@ export default function EntryNotePage({ params }: { params: Promise<{ id: string
             style={{ ...inlineInputStyle, width: 100 }}
           />
         </MetaChip>
+      </div>
+
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>
+          Platforms
+        </div>
+        <PlatformPills
+          value={entry.platforms}
+          onChange={(next) => {
+            if (next.length === 0) return;
+            patch({ platforms: next });
+          }}
+          ariaLabel="Platforms for this entry"
+        />
+      </div>
+
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>
+          Type
+        </div>
+        <TypePills
+          value={entry.types}
+          onChange={(next) => patch({ types: next })}
+          ariaLabel="Types for this entry"
+        />
       </div>
 
       <textarea
