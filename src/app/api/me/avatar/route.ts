@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
   const ext = file.type.split("/")[1].replace("jpeg", "jpg");
   const safeEmail = session.email.replace(/[^a-z0-9]/gi, "_");
   const blob = await put(`avatars/${safeEmail}-${Date.now()}.${ext}`, file, {
-    access: "private",
+    access: "public",
     addRandomSuffix: false,
     contentType: file.type,
   });
