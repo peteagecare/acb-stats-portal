@@ -5,6 +5,12 @@ import { loadUsers, saveUsers } from "@/lib/users";
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const ALLOWED = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+const PROXY_PREFIX = "/api/me/avatar/";
+
+function pathnameFromStored(stored: string): string {
+  if (stored.startsWith(PROXY_PREFIX)) return stored.slice(PROXY_PREFIX.length);
+  return stored;
+}
 
 export async function POST(request: NextRequest) {
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
@@ -26,7 +32,7 @@ export async function POST(request: NextRequest) {
   const ext = file.type.split("/")[1].replace("jpeg", "jpg");
   const safeEmail = session.email.replace(/[^a-z0-9]/gi, "_");
   const blob = await put(`avatars/${safeEmail}-${Date.now()}.${ext}`, file, {
-    access: "public",
+    access: "private",
     addRandomSuffix: false,
     contentType: file.type,
   });
@@ -35,16 +41,17 @@ export async function POST(request: NextRequest) {
   const idx = users.findIndex((u) => u.email.toLowerCase() === session.email.toLowerCase());
   if (idx === -1) return Response.json({ error: "User not found" }, { status: 404 });
 
+  // Serve via auth-checked proxy (matches the inline-images / notes pattern).
+  const avatarUrl = `${PROXY_PREFIX}${blob.pathname}`;
   const previous = users[idx].avatarUrl;
-  users[idx] = { ...users[idx], avatarUrl: blob.url };
+  users[idx] = { ...users[idx], avatarUrl };
   await saveUsers(users);
 
-  // Best-effort cleanup of the prior file so old avatars don't accumulate
-  if (previous && previous !== blob.url) {
-    del(previous).catch(() => {});
+  if (previous && previous !== avatarUrl) {
+    del(pathnameFromStored(previous)).catch(() => {});
   }
 
-  return Response.json({ avatarUrl: blob.url });
+  return Response.json({ avatarUrl });
 }
 
 export async function DELETE(request: NextRequest) {
@@ -62,6 +69,6 @@ export async function DELETE(request: NextRequest) {
   users[idx] = { ...users[idx], avatarUrl: undefined };
   await saveUsers(users);
 
-  del(previous).catch(() => {});
+  del(pathnameFromStored(previous)).catch(() => {});
   return Response.json({ ok: true });
 }
