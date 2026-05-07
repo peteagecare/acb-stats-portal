@@ -17,6 +17,13 @@ import {
 } from "@/lib/content-calendar";
 import { PlatformPills, PlatformPillsDisplay, TypePills, TypePillsDisplay } from "./_platform-pills";
 import {
+  InlinePlatforms,
+  InlineStatusSelect,
+  InlineText,
+  InlineTextarea,
+  InlineTypes,
+} from "./_inline-editors";
+import {
   APPROVAL_ROLES,
   AnyApprovalKey,
   ApprovalRole,
@@ -56,6 +63,13 @@ const KNOWN_PEOPLE = [
 interface MeResp {
   email: string;
   label?: string;
+}
+
+const DRAG_MIME = "application/x-cc-entry-id";
+
+function isInteractiveDragTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return !!target.closest("input, textarea, select, button, a");
 }
 
 type ModalState =
@@ -192,26 +206,31 @@ export default function ContentCalendarPage() {
         return (a.time ?? "").localeCompare(b.time ?? "");
       });
 
-      // Build ghost placeholder rows from the schedule template — only if
-      // there's no real entry at the same date that already covers any of the
-      // slot's platforms (and matching time, if the slot defines one) AND the
-      // slot's weekday isn't disabled.
+      // Build ghost placeholder rows from the schedule template. A slot is
+      // "filled" only when an unclaimed entry on the same date covers ALL of
+      // the slot's platforms (and matches the slot's time, if it has one).
+      // Each entry can claim at most one slot, so two identical slots stay
+      // visible until two entries fill them.
       const ghosts: GhostRow[] = [];
       const weekMonday = new Date(k + "T00:00:00");
+      const claimed = new Set<string>();
       for (const slot of scheduleSlots) {
         if (scheduleDisabledDays.includes(slot.weekday)) continue;
         const offset = (slot.weekday + 6) % 7; // Mon=1 → 0, Sun=0 → 6
         const slotDate = new Date(weekMonday);
         slotDate.setDate(weekMonday.getDate() + offset);
         const iso = fmtIsoDate(slotDate);
-        const slotPlatforms = new Set(slot.platforms);
-        const taken = rows.some(
-          (r) =>
-            r.liveDate === iso &&
-            r.platforms.some((p) => slotPlatforms.has(p)) &&
-            (slot.time ? r.time === slot.time : true),
-        );
-        if (taken) continue;
+        const filler = rows.find((r) => {
+          if (claimed.has(r.id)) return false;
+          if (r.liveDate !== iso) return false;
+          if (slot.time && r.time !== slot.time) return false;
+          const rPlat = new Set(r.platforms);
+          return slot.platforms.every((p) => rPlat.has(p));
+        });
+        if (filler) {
+          claimed.add(filler.id);
+          continue;
+        }
         ghosts.push({
           slotId: slot.id,
           date: iso,
@@ -481,6 +500,7 @@ export default function ContentCalendarPage() {
             onApprove={handleApprove}
             onReject={handleReject}
             onAddRow={handleAddRow}
+            onSave={handleSave}
             onFillGhost={(g) =>
               setModal({
                 mode: "create",
@@ -537,6 +557,7 @@ function WeekGroup({
   onReject,
   onAddRow,
   onFillGhost,
+  onSave,
 }: {
   weekStart: string;
   label: string;
@@ -552,6 +573,7 @@ function WeekGroup({
   onReject: (entry: CalendarEntry, role: AnyApprovalKey) => void;
   onAddRow: (weekStart: string) => Promise<void>;
   onFillGhost: (g: GhostRow) => void;
+  onSave: (payload: Partial<CalendarEntry> & { id?: string }) => Promise<void>;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const liveCount = rows.filter((r) => r.status !== "Cancelled").length;
@@ -676,12 +698,27 @@ function WeekGroup({
                         onQuickStatus={onQuickStatus}
                         onApprove={onApprove}
                         onReject={onReject}
+                        onSave={onSave}
                       />
                     ) : (
                       <GhostScheduleRow
                         key={`ghost-${m.g.slotId}-${m.g.date}`}
                         ghost={m.g}
                         onClick={() => onFillGhost(m.g)}
+                        onCreateFromGhost={(g, title) =>
+                          onSave({
+                            liveDate: g.date,
+                            time: g.time,
+                            platforms: g.platforms,
+                            types: g.types,
+                            title,
+                            status: "Not Started",
+                            needsFinanceApproval: false,
+                          })
+                        }
+                        onMoveExisting={(sourceId, date) =>
+                          onSave({ id: sourceId, liveDate: date })
+                        }
                       />
                     ),
                   )}
@@ -719,19 +756,53 @@ function WeekGroup({
 
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function GhostScheduleRow({ ghost, onClick }: { ghost: GhostRow; onClick: () => void }) {
+function GhostScheduleRow({
+  ghost,
+  onClick,
+  onCreateFromGhost,
+  onMoveExisting,
+}: {
+  ghost: GhostRow;
+  onClick: () => void;
+  onCreateFromGhost: (g: GhostRow, title: string) => Promise<void>;
+  onMoveExisting: (sourceId: string, date: string) => Promise<void>;
+}) {
   const dt = new Date(ghost.date + "T00:00:00");
+  const [draftTitle, setDraftTitle] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  async function commit() {
+    const t = draftTitle.trim();
+    if (!t) return;
+    setDraftTitle("");
+    await onCreateFromGhost(ghost, t);
+  }
+
   return (
     <tr
-      onClick={onClick}
-      style={{
-        cursor: "pointer",
-        background: "rgba(0,113,227,0.025)",
-        borderTop: "1px dashed var(--color-border)",
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(DRAG_MIME)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setDragOver(true);
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,113,227,0.07)")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(0,113,227,0.025)")}
-      title="Click to add an entry to this slot"
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        const sourceId = e.dataTransfer.getData(DRAG_MIME);
+        setDragOver(false);
+        if (!sourceId) return;
+        e.preventDefault();
+        void onMoveExisting(sourceId, ghost.date);
+      }}
+      style={{
+        background: dragOver ? "rgba(0,113,227,0.18)" : "rgba(0,113,227,0.025)",
+        borderTop: "1px dashed var(--color-border)",
+        outline: dragOver ? "2px solid var(--color-accent, #0071e3)" : "none",
+        outlineOffset: -2,
+      }}
+      onMouseEnter={(e) => { if (!dragOver) e.currentTarget.style.background = "rgba(0,113,227,0.07)"; }}
+      onMouseLeave={(e) => { if (!dragOver) e.currentTarget.style.background = "rgba(0,113,227,0.025)"; }}
     >
       <td style={{ padding: "8px 12px", color: "var(--color-text-tertiary)", fontWeight: 500 }}>
         {WEEKDAY_SHORT[dt.getDay()]} {dt.getDate()}
@@ -761,11 +832,46 @@ function GhostScheduleRow({ ghost, onClick }: { ghost: GhostRow; onClick: () => 
       <td style={{ padding: "8px 12px" }}>
         <TypePillsDisplay value={ghost.types} />
       </td>
-      <td style={{ padding: "8px 12px", color: "var(--color-text-tertiary)", fontStyle: "italic" }}>
-        {ghost.label} · click to fill
+      <td style={{ padding: "8px 12px" }}>
+        <input
+          ref={inputRef}
+          value={draftTitle}
+          onChange={(e) => setDraftTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); void commit(); }
+            if (e.key === "Escape") { e.preventDefault(); setDraftTitle(""); inputRef.current?.blur(); }
+          }}
+          onBlur={() => { void commit(); }}
+          placeholder={`${ghost.label} · type title + Enter`}
+          style={{
+            width: "100%",
+            padding: "4px 6px",
+            border: "1px dashed rgba(0,113,227,0.4)",
+            borderRadius: 6,
+            fontSize: 12,
+            fontFamily: "inherit",
+            background: "transparent",
+            color: "var(--color-text-primary)",
+          }}
+        />
       </td>
-      <td colSpan={5} style={{ padding: "8px 12px", color: "var(--color-text-tertiary)" }}>
-        <span style={{ color: "var(--color-accent)", fontSize: 11, fontWeight: 600 }}>+ Add</span>
+      <td colSpan={5} style={{ padding: "8px 12px" }}>
+        <button
+          onClick={onClick}
+          title="Open the new-entry modal pre-filled with this slot's defaults"
+          style={{
+            background: "transparent",
+            border: "none",
+            color: "var(--color-accent)",
+            fontSize: 11,
+            fontWeight: 600,
+            cursor: "pointer",
+            padding: 0,
+            fontFamily: "inherit",
+          }}
+        >
+          + Add
+        </button>
       </td>
     </tr>
   );
@@ -781,6 +887,7 @@ function Row({
   onQuickStatus,
   onApprove,
   onReject,
+  onSave,
 }: {
   entry: CalendarEntry;
   isPete: boolean;
@@ -791,6 +898,7 @@ function Row({
   onQuickStatus: (entry: CalendarEntry, status: CalendarStatus) => void;
   onApprove: (entry: CalendarEntry, role: AnyApprovalKey) => void;
   onReject: (entry: CalendarEntry, role: AnyApprovalKey) => void;
+  onSave: (payload: Partial<CalendarEntry> & { id?: string }) => Promise<void>;
 }) {
   const statusColour = STATUS_COLOURS[entry.status];
   const dateObj = new Date(entry.liveDate + "T00:00:00");
@@ -799,40 +907,104 @@ function Row({
   const isMine = entry.submittedBy.toLowerCase() === myEmail.toLowerCase();
   const canDelete = isPete || isMine;
   const notePath = `/content-calendar/entry/${entry.id}`;
+  const [dragOver, setDragOver] = useState(false);
 
   return (
-    <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
+    <tr
+      draggable
+      onDragStart={(e) => {
+        if (isInteractiveDragTarget(e.target)) { e.preventDefault(); return; }
+        e.dataTransfer.setData(DRAG_MIME, entry.id);
+        e.dataTransfer.effectAllowed = "move";
+      }}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(DRAG_MIME)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        const sourceId = e.dataTransfer.getData(DRAG_MIME);
+        setDragOver(false);
+        if (!sourceId || sourceId === entry.id) return;
+        e.preventDefault();
+        void onSave({ id: sourceId, liveDate: entry.liveDate });
+      }}
+      style={{
+        borderBottom: "1px solid var(--color-border)",
+        backgroundColor: statusColour.row,
+        cursor: "grab",
+        outline: dragOver ? "2px solid var(--color-accent, #0071e3)" : "none",
+        outlineOffset: -2,
+      }}
+    >
       <td style={cellStyle()}>
         <div style={{ fontWeight: 600 }}>{day}</div>
         <div style={{ color: "var(--color-text-secondary)" }}>{dayNum}</div>
       </td>
       <td style={cellStyle()}>
-        {entry.time || <span style={{ color: "#94a3b8" }}>—</span>}
+        <InlineText
+          value={entry.time ?? ""}
+          placeholder="—"
+          inputType="time"
+          onSave={(v) => onSave({ id: entry.id, time: v || undefined })}
+        />
       </td>
       <td style={cellStyle()}>
-        <span style={pill(statusColour.bg, statusColour.fg)}>{entry.status}</span>
+        <InlineStatusSelect
+          value={entry.status}
+          isPete={isPete}
+          onSave={(v) => onSave({ id: entry.id, status: v })}
+        />
       </td>
       <td style={cellStyle({ minWidth: 160 })}>
-        <PlatformPillsDisplay value={entry.platforms} />
+        <InlinePlatforms
+          value={entry.platforms}
+          display={<PlatformPillsDisplay value={entry.platforms} />}
+          onSave={(v) => onSave({ id: entry.id, platforms: v })}
+        />
       </td>
       <td style={cellStyle({ minWidth: 120 })}>
-        <TypePillsDisplay value={entry.types} />
+        <InlineTypes
+          value={entry.types}
+          display={<TypePillsDisplay value={entry.types} />}
+          onSave={(v) => onSave({ id: entry.id, types: v })}
+        />
       </td>
       <td style={cellStyle({ minWidth: 240 })}>
+        <InlineText
+          value={entry.title}
+          placeholder="Untitled"
+          trigger="click"
+          display={<span style={{ fontWeight: 600, color: "#0f172a" }}>{entry.title || <span style={{ color: "#94a3b8", fontWeight: 400 }}>Click to add title</span>}</span>}
+          onSave={(v) => onSave({ id: entry.id, title: v })}
+        />
         <Link
           href={notePath}
-          style={{ fontWeight: 600, color: "#0f172a", textDecoration: "none" }}
+          style={{ display: "inline-block", marginTop: 4, fontSize: 10, color: "var(--color-text-tertiary)", textDecoration: "none" }}
         >
-          {entry.title}
+          Open full editor →
         </Link>
       </td>
       <td style={cellStyle()}>
-        {entry.responsible || <span style={{ color: "#94a3b8" }}>—</span>}
+        <InlineText
+          value={entry.responsible ?? ""}
+          placeholder="—"
+          onSave={(v) => onSave({ id: entry.id, responsible: v || undefined })}
+        />
       </td>
       <td style={cellStyle({ maxWidth: 200 })}>
-        <div style={{ whiteSpace: "pre-wrap", fontSize: 11, color: "#475569" }}>
-          {entry.notes || <span style={{ color: "#94a3b8" }}>—</span>}
-        </div>
+        <InlineTextarea
+          value={entry.notes ?? ""}
+          placeholder="—"
+          display={
+            <div style={{ whiteSpace: "pre-wrap", fontSize: 11, color: "#475569" }}>
+              {entry.notes || <span style={{ color: "#94a3b8" }}>—</span>}
+            </div>
+          }
+          onSave={(v) => onSave({ id: entry.id, notes: v || undefined })}
+        />
         {entry.feedback && (
           <div style={{ marginTop: 6, padding: 6, background: "#fef3c7", borderRadius: 6, fontSize: 11, color: "#78350f" }}>
             <strong>Feedback: </strong>{entry.feedback}
@@ -840,11 +1012,26 @@ function Row({
         )}
       </td>
       <td style={cellStyle()}>
-        {entry.assetLink ? (
-          <a href={entry.assetLink} target="_blank" rel="noreferrer" style={{ color: "var(--color-accent, #0071e3)", textDecoration: "none" }}>
-            View
-          </a>
-        ) : <span style={{ color: "#94a3b8" }}>—</span>}
+        <InlineText
+          value={entry.assetLink ?? ""}
+          placeholder="—"
+          inputType="url"
+          display={
+            entry.assetLink ? (
+              <a
+                href={entry.assetLink}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                onDoubleClick={(e) => e.preventDefault()}
+                style={{ color: "var(--color-accent, #0071e3)", textDecoration: "none" }}
+              >
+                View
+              </a>
+            ) : <span style={{ color: "#94a3b8" }}>—</span>
+          }
+          onSave={(v) => onSave({ id: entry.id, assetLink: v || undefined })}
+        />
         {entry.supportedLinks?.map((l, i) => (
           <a key={i} href={l} target="_blank" rel="noreferrer" style={{ display: "block", fontSize: 11, color: "var(--color-accent, #0071e3)", textDecoration: "none", marginTop: 2 }}>
             Link {i + 1}
@@ -896,6 +1083,27 @@ function Row({
           >
             Open
           </Link>
+          <button
+            onClick={() =>
+              onSave({
+                liveDate: entry.liveDate,
+                time: entry.time,
+                platforms: entry.platforms,
+                types: entry.types,
+                status: entry.status,
+                title: `${entry.title} (copy)`,
+                notes: entry.notes,
+                responsible: entry.responsible,
+                assetLink: entry.assetLink,
+                supportedLinks: entry.supportedLinks,
+                needsFinanceApproval: entry.needsFinanceApproval,
+              })
+            }
+            title="Duplicate this entry"
+            style={btnStyle("#1e3a8a", "#dbeafe")}
+          >
+            Dup
+          </button>
           {canDelete && (
             <button onClick={() => onDelete(entry.id)} style={btnStyle("#7f1d1d", "#fee2e2")}>Del</button>
           )}

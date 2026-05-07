@@ -67,19 +67,19 @@ export interface CalendarEntry {
   updatedAt?: string;
 }
 
-export const STATUS_COLOURS: Record<CalendarStatus, { bg: string; fg: string }> = {
-  "Not Started": { bg: "#e5e7eb", fg: "#374151" },
-  "In Progress": { bg: "#dbeafe", fg: "#1e40af" },
-  "To Check - Pete": { bg: "#fef3c7", fg: "#92400e" },
-  "Suggested Changes": { bg: "#fde68a", fg: "#78350f" },
-  "Approved": { bg: "#d1fae5", fg: "#065f46" },
-  "Scheduled": { bg: "#e0e7ff", fg: "#3730a3" },
-  "Live": { bg: "#7c3aed", fg: "#ffffff" },
-  "Cancelled": { bg: "#374151", fg: "#ffffff" },
-  "Scheduled - Post On The Day": { bg: "#cffafe", fg: "#155e75" },
-  "Feedback": { bg: "#fce7f3", fg: "#9d174d" },
-  "Prep": { bg: "#f3e8ff", fg: "#6b21a8" },
-  "Awaiting Finance Approval": { bg: "#fee2e2", fg: "#991b1b" },
+export const STATUS_COLOURS: Record<CalendarStatus, { bg: string; fg: string; row: string }> = {
+  "Not Started": { bg: "#e5e7eb", fg: "#374151", row: "#f9fafb" },
+  "In Progress": { bg: "#dbeafe", fg: "#1e40af", row: "#eff6ff" },
+  "To Check - Pete": { bg: "#fef3c7", fg: "#92400e", row: "#fffbeb" },
+  "Suggested Changes": { bg: "#fde68a", fg: "#78350f", row: "#fef3c7" },
+  "Approved": { bg: "#d1fae5", fg: "#065f46", row: "#ecfdf5" },
+  "Scheduled": { bg: "#e0e7ff", fg: "#3730a3", row: "#eef2ff" },
+  "Live": { bg: "#7c3aed", fg: "#ffffff", row: "#ede9fe" },
+  "Cancelled": { bg: "#374151", fg: "#ffffff", row: "#f3f4f6" },
+  "Scheduled - Post On The Day": { bg: "#cffafe", fg: "#155e75", row: "#ecfeff" },
+  "Feedback": { bg: "#fce7f3", fg: "#9d174d", row: "#fdf2f8" },
+  "Prep": { bg: "#f3e8ff", fg: "#6b21a8", row: "#faf5ff" },
+  "Awaiting Finance Approval": { bg: "#fee2e2", fg: "#991b1b", row: "#fef2f2" },
 };
 
 export const PLATFORM_COLOURS: Record<CalendarPlatform, { bg: string; fg: string }> = {
